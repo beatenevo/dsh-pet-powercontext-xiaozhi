@@ -31,6 +31,14 @@ The top summary shows answer input reduction, input reduction including memory o
 
 In AI Vision, follow an answer's link to its `dsh_pet.comparison.answer` root, model call and optional recall stages. Preparation has a separate `dsh_pet.comparison.prepare` trace. Metadata adds a random experiment ID (`dsh_pet.comparison.id`), a strategy (`prepare`, `full`, `memory`, `short`) and a one-based question number (`dsh_pet.comparison.round`, zero for preparation). Prompts, answers, source records and credentials remain outside observability spans. Ingest acceptance still requires storage/UI readback before claiming end-to-end observation.
 
+## Before a live demonstration
+
+Validate ordinary pet chat, memory generation and recall separately before starting a comparison. A healthy Server can still have an unsupported generation protocol, unavailable model or incorrect embedding configuration. The chat provider and PowerContext inference provider are configured separately; an OpenAI-compatible address does not by itself establish support for both Chat Completions and Responses.
+
+For custom providers, declare the model's supported reasoning modes and message roles correctly in DSH. The comparison requests reasoning off only when the model advertises that capability. A model that continues reasoning can exhaust the 1,024-token output budget before finishing an answer. Correct the provider configuration, then start a fresh run; a truncated answer remains incomplete and must not be reported as a successful saving. Do not change the provider configuration while an experiment is running.
+
+Cold recall can exceed the configured `chatMemory.timeoutMs`. Check that setting and the Server's readiness before the run, and retain the same recall settings across strategies and reuse batches. Source synchronization, background processing and successful recall are separate checkpoints. Inspect the cumulative memory ledger after processing settles: preparation counters overlap with cumulative counters, and additional background work must not be omitted from the cost comparison.
+
 ## Limits and lifecycle
 
 Only one experiment runs per host. Each question batch has a 15-minute deadline; preparation is bounded to four minutes and each answer to two minutes with a 1,024-token output budget. Normal memory recall uses the configured recall timeout and byte/item budgets. Truncated, failed or cancelled generations are incomplete, even if some usage was reported. Stop cancels active requests and prevents further arms; it cannot undo provider charges or already accepted Source processing. There are no automatic retries.

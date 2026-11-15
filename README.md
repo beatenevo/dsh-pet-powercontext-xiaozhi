@@ -10,9 +10,34 @@ Built on [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet).
 
 Development preview: [Astra Pro 2.0 robot controls](docs/en/guides/robot.md) connect taught actions, robot speech and controller-state feedback to pet chat. Use a preview package marked `astra-pro-2.0-bundled`; the published npm `0.1.0-beta.1` does not include robot support. [Choose a download](docs/en/guides/robot-bundles.md#download-and-install) · [Follow the illustrated setup tutorial](docs/en/tutorials/astra-first-interaction.md).
 
-Development preview: [AI Vision observability](docs/en/guides/observability.md) adds optional, content-free traces and links to the platform’s existing memory views.
+Development preview: [AI Vision observability](docs/en/guides/observability.md) adds optional, content-free traces and links to the platform’s existing memory views. [Token comparison](docs/en/guides/token-comparison.md) compares answers and measured usage across three context strategies. These features are not included in the published npm `0.1.0-beta.1`.
 
 ## See it in use
+
+### DSH, the pet and its memories
+
+![The full DSH workspace with the pet and two generated PowerContext memories](docs/assets/screenshots/dsh-live-memory.zh.png)
+
+_The DSH agent session and pet panel share one workspace. PowerContext has generated two memories from pet dialogue: an equipment budget and the location of an offline fallback. The expanded memory list shows the facts and their source controls; delivery status alone is not proof of extraction or recall._
+
+### Compare answers and token usage
+
+![Live token comparison inside DSH, with complete-background and PowerContext answers side by side](docs/assets/screenshots/dsh-token-comparison.zh.png)
+
+_One synthetic scenario, real model calls: 13 questions reuse six generated memories. Compared with complete-background replay, answer input fell **80.5%** (61,387 → 11,944 tokens); including memory generation and embedding input, the reduction was **12.6%** (61,387 → 53,641). These are measured input counts, not a billing saving or a measurement of DSH's default task-agent policy._
+
+The [first six questions](docs/assets/screenshots/dsh-token-first-batch.zh.png) **increased** input including memory overhead by **65.4%**. Known output also increased, and embedding output was unreported. Inspect the [token breakdown](docs/assets/screenshots/dsh-token-details.zh.png) and [comparison guide](docs/en/guides/token-comparison.md) before interpreting the savings.
+
+### Follow a pet reply in AI Vision
+
+![A real pet-chat trace in AI Vision showing PowerContext recall and the answer-model call](docs/assets/screenshots/ai-vision-pet-trace.zh.png)
+
+_This separate, ordinary pet-chat trace follows recall into PowerContext and then the answer model. It contains 10 spans and two retrieved memories. Prompts and replies are intentionally absent; AI Vision reports a known token subtotal and keeps the complete total unknown where usage is missing. This trace is not the comparison experiment's aggregate._
+
+These unedited **1600 × 1000** screenshots were captured on **2026-11-15** in Linux Chromium, using **DSH 0.2.2-rc.1**, pet preview **`2e080f1`**, PowerContext **`1.5.2.dev148+gfa80ab6b2`** and a local AI Vision deployment. Demo facts are fictional; generation and embeddings use real services. Both READMEs preserve the original Chinese UI. [Capture details and limits](docs/assets/README.md#live-comparison-and-traces--对照与调用链实拍).
+
+<details>
+<summary>Watch the recorded chat and memory-recall GIFs</summary>
 
 ![Live conversation with the pet inside DeepSeek Harness](docs/assets/demos/dsh-chat.gif)
 
@@ -22,7 +47,9 @@ _The running DSH workspace, agent conversation and Pet chat panel together. Send
 
 _After background extraction, the pet recalls “Moonleaf” and “jasmine tea without sugar.” Recent chat is set to **0 rounds** for this demonstration: the model request contains recalled memories and the new question, with no past chat turns. Open **Remembered facts** to inspect the extracted facts._
 
-Captured from this branch in **DSH 0.2.2-rc.1**, with **PowerContext 1.5.0**, on Linux Chromium. These GIFs retain the actual UI, including currently mixed-language controls. [Full-size chat screenshot](docs/assets/screenshots/dsh-chat.en.png) · [Recall and memory list](docs/assets/screenshots/dsh-facts.en.png) · [Media sources](docs/assets/README.md).
+Recorded on **2026-11-11** in **DSH 0.2.2-rc.1**, with **PowerContext 1.5.0**, on Linux Chromium. These earlier GIFs retain the actual UI, including mixed-language controls. [Full-size chat screenshot](docs/assets/screenshots/dsh-chat.en.png) · [Recall and memory list](docs/assets/screenshots/dsh-facts.en.png) · [Media sources](docs/assets/README.md).
+
+</details>
 
 ## Start with one pet
 

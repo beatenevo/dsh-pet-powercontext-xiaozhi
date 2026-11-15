@@ -54,3 +54,5 @@ The panel retains the latest 30 root interactions in process memory and displays
 Prompts, replies, recalled memory text, audio, image content, credentials and raw exception messages are excluded. This implementation does not add a content-recording mode. Show opted-in demo content in the existing DSH/pet UI; do not enable content in PowerContext operational telemetry to populate a demo.
 
 The exporter uses a private OTel provider, a queue of at most 256 spans, batches of at most 64 and bounded export deadlines. It does not register a global provider or replace `observ-dsh`; that plugin continues to own DSH task/session observation. The npm package includes the JavaScript exporter dependencies, not AI Vision, SigNoz, Python or a second PowerContext Server.
+
+For side-by-side answers and measured usage, see [Token comparison in DSH](token-comparison.md).

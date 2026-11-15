@@ -19,6 +19,8 @@ export interface TraceReference {
 }
 
 export type PetOperation =
+  | 'comparison.prepare'
+  | 'comparison.answer'
   | 'chat'
   | 'whisper'
   | 'sleep_talk'

@@ -1,6 +1,7 @@
 /**
  * Dialog panel Portuguese copy; keyset must be consistent with zh.
  */
+import { comparisonEn } from '../../comparison/locales.ts';
 import type { Key } from './zh.ts';
 
 import { robotEn } from '../../robot/locales.ts';
@@ -9,6 +10,7 @@ import { dshMemoryEn } from '../../dsh-memory-status.ts';
 
 export const pt: Record<Key, string> = {
   ...dshMemoryEn,
+  ...comparisonEn,
   ...robotEn,
   factsSourceNumber: 'Fonte {n}',
   factsUser: 'Você',

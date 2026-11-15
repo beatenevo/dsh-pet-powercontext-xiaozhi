@@ -45,6 +45,9 @@ export function referenceContext(value: unknown): SpanContext | undefined {
 
 /** All metadata fields are explicitly owned here; callers cannot export arbitrary objects or errors. */
 export interface PetObservationFields {
+  'dsh_pet.comparison.id'?: string;
+  'dsh_pet.comparison.strategy'?: 'prepare' | 'full' | 'memory' | 'short';
+  'dsh_pet.comparison.round'?: number;
   'dsh_pet.memory.backend'?: 'native' | 'powercontext' | 'dsh-powercontext';
   'dsh_pet.memory.status'?: 'ready' | 'empty' | 'unavailable' | 'skipped' | 'accepted';
   'dsh_pet.memory.context_bytes'?: number;
@@ -183,12 +186,15 @@ export class PetObservability {
       const allowed: Record<string, readonly unknown[]> = {
         'dsh_pet.memory.backend': ['native', 'powercontext', 'dsh-powercontext'],
         'dsh_pet.memory.status': ['ready', 'empty', 'unavailable', 'skipped', 'accepted'],
+        'dsh_pet.comparison.strategy': ['prepare', 'full', 'memory', 'short'],
         'dsh_pet.robot.evidence': ['worker_result'],
       };
       for (const [key, value] of Object.entries(fields)) {
+        if (key === 'dsh_pet.comparison.id' && typeof value === 'string' && /^[a-f0-9-]{36}$/.test(value))
+          active.span.setAttribute(key, value);
         if (typeof value === 'string' && allowed[key]?.includes(value)) active.span.setAttribute(key, value);
         if (
-          key === 'dsh_pet.memory.context_bytes' &&
+          (key === 'dsh_pet.memory.context_bytes' || key === 'dsh_pet.comparison.round') &&
           typeof value === 'number' &&
           Number.isSafeInteger(value) &&
           value >= 0

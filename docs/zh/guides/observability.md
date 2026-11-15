@@ -54,3 +54,5 @@ OTEL_EXPORTER_OTLP_TRACES_HEADERS=Authorization=Basic%20BASE64_OF_AGENT_UUID_COL
 不采集提示词、回复、召回记忆正文、音频、图片内容、凭据或原始异常消息。本实现不增加正文采集模式。需要展示的演示内容在已有 DSH／桌宠界面中展示，不要为了演示而将正文写入 PowerContext 运行观测。
 
 导出器使用私有 OTel provider，队列最多 256 个 span，单批最多 64 个，并限制导出等待时间。它不注册全局 provider，也不替换 `observ-dsh`；后者继续负责 DSH 任务／会话观测。npm 包只包含 JavaScript 导出依赖，不包含 AI Vision、SigNoz、Python 或第二个 PowerContext Server。
+
+双栏回答与实际用量展示见 [DSH Token 对照](token-comparison.md)。

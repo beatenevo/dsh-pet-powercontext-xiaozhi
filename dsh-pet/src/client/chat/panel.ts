@@ -5,6 +5,7 @@
  * in ./panel-css. The react capability is injected by the host (see ./runtime ).
  * @module dsh-pet/src/client/chat/panel
  */
+import { makeComparisonPanel } from '../comparison/panel.ts';
 import { createPetChatState } from './state.ts';
 import { buildPanel } from './view.ts';
 import type { ChatPanelRuntime } from './runtime.ts';
@@ -22,6 +23,7 @@ export type { ChatPanelRuntime } from './runtime.ts';
 export function makePetChatPanel(rt: ChatPanelRuntime): () => unknown {
   const useChatState = createPetChatState(rt);
   const MemoryStatus = makeMemoryStatus(rt);
+  const ComparisonPanel = makeComparisonPanel(rt);
   const RobotPanel = makeRobotPanel(rt);
   return function PetChatPanel(): unknown {
     const state = useChatState();
@@ -33,6 +35,7 @@ export function makePetChatPanel(rt: ChatPanelRuntime): () => unknown {
         revision: state.messages[state.messages.length - 1]?.ts ?? 0,
       }),
       rt.h(RobotPanel, { petId: state.petId }),
+      rt.h(ComparisonPanel, {}),
     );
   };
 }

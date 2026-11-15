@@ -37,3 +37,5 @@
 - [图文来源](../assets/README.md)：截图对应版本及图表出处。
 
 代码采用 [MIT 许可](../../LICENSE)，角色素材遵循[单独的授权条款](../../dsh-pet/ASSET-LICENSE.md)。
+
+- [在 DSH 中对照回答与 Token 用量](guides/token-comparison.md)

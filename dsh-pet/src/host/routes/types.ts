@@ -71,6 +71,7 @@ export type RouteHandler = (deps: PetRouteDeps, input: RouteInput) => Promise<Ro
  * write sequence number and returns the new value.
  */
 export interface PetRouteDeps {
+  readonly comparison?: import('../comparison/service.ts').ComparisonService;
   readonly observability?: import('../observability/service.ts').PetObservability;
   /** Optional physical-robot controller; motion remains disabled until an operator enables it. */
   readonly robot?: import('../robot/service.ts').RobotService;

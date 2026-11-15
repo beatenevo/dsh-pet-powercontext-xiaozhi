@@ -166,6 +166,46 @@ export class PowerContextClient {
     return changeRememberedFact(this.request.bind(this), scope, change, AbortSignal.timeout(10_000));
   }
 
+  /** Experiments never write to the companion or a DSH project scope. */
+  async createComparisonScope(id: string, signal: AbortSignal): Promise<string> {
+    const value = await this.request(
+      '/v1/scopes',
+      {
+        title: 'Context strategy comparison',
+        summary: 'Isolated user-requested context strategy experiment.',
+        idempotency_key: 'dsh-pet-comparison:' + id,
+      },
+      signal,
+    );
+    if (typeof value.scope_id !== 'string' || !value.scope_id || value.scope_id.length > 256)
+      throw new MemoryServiceError('invalid_response');
+    return value.scope_id;
+  }
+
+  async captureComparison(scope: string, id: string, content: string, signal: AbortSignal): Promise<void> {
+    const value = await this.request(
+      '/v1/sources/content',
+      {
+        scope_id: scope,
+        source_id: 'dsh-pet-comparison:' + id,
+        content,
+        metadata: { origin: 'dsh-pet', event: 'context-strategy-comparison' },
+      },
+      signal,
+    );
+    if (value.status !== 'accepted') throw new MemoryServiceError('source_not_accepted');
+  }
+
+  async flushComparison(scope: string, signal: AbortSignal): Promise<void> {
+    const value = await this.request('/v1/memory/flush', { scope_id: scope }, signal);
+    if (value.remaining_work === true || (typeof value.held_count === 'number' && value.held_count > 0))
+      throw new MemoryServiceError('memory_not_ready');
+  }
+
+  async comparisonStats(scope: string, signal: AbortSignal): Promise<unknown> {
+    return this.request('/v1/stats', { selection: { mode: 'exact', scope_ids: [scope] }, period: '30d' }, signal);
+  }
+
   async ensureScope(state: MemorySyncState, signal: AbortSignal): Promise<string> {
     if (state.scopeId) return state.scopeId;
     const response = await this.request(
@@ -182,8 +222,11 @@ export class PowerContextClient {
     return (state.scopeId = response.scope_id);
   }
 
-  async prepare(state: MemorySyncState, query: string): Promise<string | undefined> {
-    const signal = AbortSignal.timeout(this.config.timeoutMs);
+  async prepare(state: MemorySyncState, query: string, callerSignal?: AbortSignal): Promise<string | undefined> {
+    const signal = AbortSignal.any([
+      AbortSignal.timeout(this.config.timeoutMs),
+      ...(callerSignal ? [callerSignal] : []),
+    ]);
     const scope = await this.ensureScope(state, signal);
     const response = await this.request(
       '/v1/context/prepare',

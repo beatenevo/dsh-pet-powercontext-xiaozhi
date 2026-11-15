@@ -37,3 +37,5 @@ Start with a working pet, then add the memory and controls you need.
 - [Media sources](../assets/README.md): screenshot versions and chart provenance.
 
 Code uses the [MIT license](../../LICENSE); character assets have [separate terms](../../dsh-pet/ASSET-LICENSE.md).
+
+- [Compare answers and token use in DSH](guides/token-comparison.md)

@@ -8,7 +8,7 @@
  * @module dsh-pet/src/client/voice-notify
  */
 import { petBridge } from './settings/bridge.ts';
-import { isPageActive } from './notify.ts';
+import { isNotifyWhenFocused, isPageActive, shouldRemind } from './notify.ts';
 import { isVoiceNotifyEnabled, speakNotice } from '../shared/voice.ts';
 import { WORK_STATUS_INDEX, type WorkStatusSnapshot, type WorkStatusState } from '../shared/work-status.ts';
 import type { Pet } from '../shared/types.ts';
@@ -58,7 +58,8 @@ export function speakWorkStatus(snap: WorkStatusSnapshot): void {
   lastSpoken = snap.state;
   if (line === undefined || !isVoiceNotifyEnabled()) return;
   // The same orientation as the system notification: the user does not read when looking at this page - the animation and overhead bubble have already given the information.
-  if (isPageActive()) return;
+  // 「前台聚焦时也提醒」打开后不再跳过，与通知共用同一个开关。
+  if (!shouldRemind(isNotifyWhenFocused(), isPageActive())) return;
   speakNotice(line);
 }
 

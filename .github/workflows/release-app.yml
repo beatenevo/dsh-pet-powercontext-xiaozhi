@@ -1,8 +1,8 @@
 # Build the Windows x64 desktop archive and attach it to an existing Release.
 # The main release workflow owns release notes; this workflow only uploads assets.
 # Manual runs check out the requested tag, including when rebuilding old versions.
-# Keep the archive name stable for release download links. Its inner folder includes
-# the package version. Only GITHUB_TOKEN with contents:write is required.
+# Downloads identify the version, desktop format, platform and runtime variant.
+# Only GITHUB_TOKEN with contents:write is required.
 
 name: release-app
 
@@ -92,11 +92,13 @@ jobs:
           DSH_PET_ALLOW_ELECTRON_DOWNLOAD: "1"
         run: npm run dist
 
-      - name: Create the archive with a stable filename
+      - name: Create the versioned desktop archive
         run: |
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $inner = "dsh-pet-$version-win-x64"
-          $zip = Join-Path $env:GITHUB_WORKSPACE 'dsh-pet-win-x64.zip'
+          $archive = "dsh-pet-powercontext-$version-desktop-windows-x64-standard.zip"
+          "DESKTOP_ARCHIVE=$archive" >> $env:GITHUB_ENV
+          $zip = Join-Path $env:GITHUB_WORKSPACE $archive
 
           New-Item -ItemType Directory -Path "stage/$inner" -Force | Out-Null
           Copy-Item -Path "dist-app/win-unpacked/*" -Destination "stage/$inner" -Recurse
@@ -117,8 +119,8 @@ jobs:
       - name: Upload the build artifact for diagnostics
         uses: actions/upload-artifact@v4
         with:
-          name: dsh-pet-win-x64
-          path: dsh-pet-win-x64.zip
+          name: dsh-pet-powercontext-desktop-windows-x64-standard
+          path: ${{ env.DESKTOP_ARCHIVE }}
           retention-days: 7
           if-no-files-found: error
 
@@ -142,7 +144,7 @@ jobs:
         run: |
           # The ZIP is in GITHUB_WORKSPACE while run steps default to dsh-pet/.
           # Use an absolute path so gh can find it from either directory.
-          $zip = Join-Path $env:GITHUB_WORKSPACE 'dsh-pet-win-x64.zip'
+          $zip = Join-Path $env:GITHUB_WORKSPACE $env:DESKTOP_ARCHIVE
           if (-not (Test-Path $zip)) { Write-Error "Archive to upload was not found: $zip"; exit 1 }
           "Uploading {0} ({1:N1} MB) to release {2}" -f $zip, ((Get-Item $zip).Length / 1MB), $env:TAG
           gh release upload $env:TAG $zip --clobber

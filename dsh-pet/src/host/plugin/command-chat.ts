@@ -33,7 +33,7 @@ export function registerChatCommand(deps: CommandChatInput): void {
         name: 'chat',
         description: '与桌宠对话：留空 = 碎碎念一句；输入消息 = 正常对话',
         input: { hint: '[消息]（留空 = 碎碎念）' },
-        handler: ({ rawInput }: { rawInput: string }) => {
+        handler: ({ rawInput, agent }: { rawInput: string; agent?: { session?: { header?: { id?: string } } } }) => {
           const petId = resolveActivePetId();
           if (!petId) return { kind: 'error', text: '没有可交互的桌宠' };
           // Sleep: The command is also "Manual Disturbance", which will reject the line instead of calling the model (save one call, and it is also consistent with the setting of not talking when sleeping)
@@ -46,7 +46,8 @@ export function registerChatCommand(deps: CommandChatInput): void {
             return { kind: 'success', text: '已让桌宠碎碎念一句' };
           }
           if (text.length > 2000) return { kind: 'error', text: '消息过长（限 2000 字）' };
-          void chatWithPet(petId, text)
+          const sessionId = agent?.session?.header?.id;
+          void (sessionId ? chatWithPet(petId, text, undefined, sessionId) : chatWithPet(petId, text))
             .then((r) => {
               if (!r.ok) {
                 log.warn('[dsh-pet] Chat failed reason=' + r.reason + (r.message ? ' ' + r.message : ''));

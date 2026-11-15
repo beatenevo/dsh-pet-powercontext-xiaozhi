@@ -76,7 +76,9 @@ export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
     const reload = async (petId: string): Promise<void> => {
       if (petId === '') return;
       try {
-        const snapshot = await fetchHistory(petId);
+        const sessionId = rt.readSessionId?.();
+        const snapshot = await fetchHistory(petId, sessionId);
+        if (rt.readSessionId?.() !== sessionId) return;
         setData((prev) => (prev.petId === petId ? { ...prev, ...snapshot } : prev));
       } catch (error) {
         fail(error);
@@ -84,8 +86,20 @@ export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
     };
 
     useChatEffects({ data, patch, fail, reload, listRef, draftRef, newestTs });
+    rt.useEffect(() => {
+      if (!rt.readSessionId || !data.petId) return;
+      let previous = rt.readSessionId();
+      const timer = setInterval(() => {
+        const next = rt.readSessionId?.();
+        if (next === previous) return;
+        previous = next;
+        patch({ messages: [], selected: [], contextRounds: 0 });
+        void reload(data.petId);
+      }, 500);
+      return () => clearInterval(timer);
+    }, [data.petId]);
 
-    const ports = { read: () => data, patch, fail, reload };
+    const ports = { read: () => data, patch, fail, reload, readSessionId: rt.readSessionId };
     const history = createHistoryActions(ports);
     const shell = createShellActions({ ports, history, listRef, pageRounds: PAGE_ROUNDS });
     const sendActions = createSendActions(ports);

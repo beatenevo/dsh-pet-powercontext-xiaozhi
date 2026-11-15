@@ -22,15 +22,15 @@ Use a new version/tag for later releases. The workflow checks the committed vers
 
 ## Automatic sequence
 
-| Stage                   | Work                                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------------ |
-| Validate                | Check package name, version and exact tag match                                      |
-| Build                   | Install locked dependencies; run unit tests and full `npm pack` prepack checks       |
-| Exercise                | Run Chromium UI/script tests; install the archive and check CLI `--help` / `--check` |
-| Preserve                | Generate SHA256SUMS and upload the tested package as an Actions artifact for 14 days |
-| Publish npm, if enabled | Verify checksum, publish the same archive with lifecycle scripts disabled            |
-| Create GitHub Release   | Generate notes and attach the archive and checksum                                   |
-| Build desktop           | Call the Windows workflow and attach `dsh-pet-win-x64.zip` to that release           |
+| Stage                   | Work                                                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Validate                | Check package name, version and exact tag match                                                                        |
+| Build                   | Install locked dependencies; run unit tests and full `npm pack` prepack checks                                         |
+| Exercise                | Run Chromium UI/script tests; install the archive and check CLI `--help` / `--check`                                   |
+| Preserve                | Generate SHA256SUMS and upload the tested package as an Actions artifact for 14 days                                   |
+| Publish npm, if enabled | Verify checksum, publish the same archive with lifecycle scripts disabled                                              |
+| Create GitHub Release   | Generate notes and attach the archive and checksum                                                                     |
+| Build desktop           | Call the Windows workflow and attach `dsh-pet-powercontext-<version>-desktop-windows-x64-standard.zip` to that release |
 
 Versions ending in `alpha.N`, `beta.N` or `rc.N` use that npm dist-tag and a GitHub prerelease. Stable versions use `latest`. PRs and **Run workflow**, even when selecting a tag, do not publish.
 

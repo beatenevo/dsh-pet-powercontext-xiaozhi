@@ -24,6 +24,12 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type * as ReactNS from 'react';
 import type { jsx } from 'react/jsx-runtime';
 import { ROUTE_PATH } from '../shared/constants.ts';
+import type { EnvState } from '../shared/state.ts';
+import { envBubbleView } from '../shared/env-view.ts';
+import type { EnvIconShape } from '../shared/env-icon.ts';
+
+/** 说话气泡被戳破后的消失时长（ms），与 `.is-popping` 的 keyframes 同值：到点才允许上层收起。 */
+const WHISPER_POP_MS = 420;
 
 /**
  * bubble inline style: white translucent round bubble with a small tail at the bottom, box size anchor font size `--f`
@@ -74,9 +80,19 @@ const bubbleCss = [
   '.dsh-pet-bubble .pet-bub-tier{font-weight:700}',
   '.dsh-pet-bubble .pet-bub-tier-peak{color:#e53935}',
   '.dsh-pet-bubble .pet-bub-tier-idle{color:#2e9e4f}',
-  // Expanded state: one line per window, the length of the progress bar is equal to the used percentage. The bubble
-  // does not block the host page by default, and only expandable balance bubbles are enabled.
+  // 展开态：每个窗口一行，进度条长度等于已用百分比。
+  // 气泡默认不挡宿主页面，只有可点的气泡（余额翻页、工作状态跳会话、说话气泡戳破）才开命中。
   '.dsh-pet-bubble.is-clickable{pointer-events:auto;cursor:pointer}',
+  // 戳破：鼓一下 → 缩成小泡泡 → 模糊散掉。transform 必须带上 translateX(-50%)，否则动画一覆盖
+  // 就把居中定位丢了，气泡会横向跳半个身位；时长与 WHISPER_POP_MS 保持一致。
+  '.dsh-pet-bubble.is-popping{pointer-events:none;animation:dsh-pet-bubble-pop-out ' +
+    WHISPER_POP_MS +
+    'ms cubic-bezier(.2,.72,.3,1) forwards}',
+  '@keyframes dsh-pet-bubble-pop-out{0%{transform:translateX(-50%) scale(1);opacity:1;filter:blur(0)}' +
+    '16%{transform:translateX(-50%) scale(1.07);opacity:1;filter:blur(0)}' +
+    '34%{transform:translateX(-50%) scale(1.16);opacity:.92;filter:blur(.3px)}' +
+    '62%{transform:translateX(-50%) scale(.9);opacity:.42;filter:blur(2px)}' +
+    '100%{transform:translateX(-50%) scale(.55);opacity:0;filter:blur(7px)}}',
   // The four columns of "window name + bar + percentage + reset" cannot be arranged in the collapsed state, and the expanded state is individually widened and reduced to 60% font size.
   '.dsh-pet-bubble.is-expanded{--f:calc(var(--f0)*0.6);width:min(calc(var(--f)*21),100%);max-width:100%}',
   // Fade out: Make it transparent before changing the content. After changing, remove this class and then fade in.
@@ -104,6 +120,17 @@ const bubbleCss = [
   '.dsh-pet-bubble .pet-bub-usage-bar{display:flex;height:calc(var(--f)*0.3);border-radius:calc(var(--f)*0.15);overflow:hidden;background:rgba(43,43,43,.1);margin:calc(var(--f)*0.05) 0}',
   '.dsh-pet-bubble .pet-bub-usage-bar-in{display:block;height:100%;background:#3f6ea8}',
   '.dsh-pet-bubble .pet-bub-usage-bar-out{display:block;height:100%;background:#b4703c}',
+  // 环境气泡：主区（图标 + 大字气温 + 中文短语）、三行键值、脚注。键值行复用余额的
+  // .pet-bub-row / .pet-bub-sub / .pet-bub-val，只补主区与脚注两种新排版。
+  '.dsh-pet-bubble .pet-env-main{display:flex;align-items:center;gap:calc(var(--f)*0.4)}',
+  '.dsh-pet-bubble .pet-env-icon{color:#5f7f9e;display:block}',
+  '.dsh-pet-bubble .pet-env-icon svg{width:calc(var(--f)*1.55);height:calc(var(--f)*1.55);display:block}',
+  '.dsh-pet-bubble .pet-env-temp{font-size:calc(var(--f)*1.75);line-height:1.1;font-weight:700;letter-spacing:-.02em;' +
+    'font-variant-numeric:tabular-nums;color:#1f1f1f}',
+  '.dsh-pet-bubble .pet-env-summary{font-size:calc(var(--f)*0.95);color:rgba(43,43,43,.68);' +
+    'align-self:flex-end;padding-bottom:calc(var(--f)*0.22)}',
+  '.dsh-pet-bubble .pet-env-foot{margin-top:calc(var(--f)*0.3);padding-top:calc(var(--f)*0.18);' +
+    'border-top:1px solid rgba(43,43,43,.1);font-size:calc(var(--f)*0.6);color:rgba(43,43,43,.45)}',
 ].join('\n');
 
 /** Inject bubble style only once per page. */
@@ -321,8 +348,14 @@ export function makeBalanceBubble(rt: {
  * the name in the pool (path based on asset root), and url is the complete address of the third party. The two are
  * mutually exclusive and guaranteed by the host decision layer. When there is a picture, it is rendered above the
  * text, and the picture style is taken from MEME_BUBBLE_CSS of shared.
+ *  可点有两个来源：工作状态气泡经 `onClick` 跳会话，说话气泡经 `onPop` 被戳破；两者不会同时给。
  */
-export function makeWhisperBubble(rt: { h: typeof jsx }): (props: {
+export function makeWhisperBubble(rt: {
+  h: typeof jsx;
+  useState: <T>(init: T) => [T, Dispatch<SetStateAction<T>>];
+  useEffect: (effect: ReactNS.EffectCallback, deps?: ReactNS.DependencyList) => void;
+  useRef: <T>(initial: T) => ReactNS.MutableRefObject<T>;
+}): (props: {
   text: string;
   image?: string;
   url?: string;
@@ -331,8 +364,10 @@ export function makeWhisperBubble(rt: { h: typeof jsx }): (props: {
   voiceState?: 'idle' | 'loading' | 'ready' | 'failed';
   /** The callback is clickable; the working state bubble uses it to jump to the session, and it is not clickable by default. */
   onClick?: (e: ReactNS.MouseEvent<HTMLDivElement>) => void;
+  /** 戳破回调：消失动画播完才调它；缺省即不可戳破。 */
+  onPop?: () => void;
 }) => ReactNode {
-  const { h } = rt;
+  const { h, useEffect, useRef, useState } = rt;
   injectBubbleCss();
   injectMemeBubbleCss();
 
@@ -344,6 +379,7 @@ export function makeWhisperBubble(rt: { h: typeof jsx }): (props: {
     on,
     voiceState = 'idle',
     onClick,
+    onPop,
   }: {
     text: string;
     image?: string;
@@ -352,7 +388,27 @@ export function makeWhisperBubble(rt: { h: typeof jsx }): (props: {
     on: boolean;
     voiceState?: 'idle' | 'loading' | 'ready' | 'failed';
     onClick?: (e: ReactNS.MouseEvent<HTMLDivElement>) => void;
+    onPop?: () => void;
   }) {
+    // 戳破中：内容仍挂着，只是正在播消失动画；动画走完才由 onPop 收掉气泡。
+    const [popping, setPopping] = useState(false);
+    const popTimerRef = useRef<number | null>(null);
+    // 换台词要撤销未到点的收起：上一条的计时不该收掉新台词。
+    useEffect(() => {
+      if (popTimerRef.current !== null) {
+        window.clearTimeout(popTimerRef.current);
+        popTimerRef.current = null;
+      }
+      setPopping(false);
+    }, [text]);
+    // 卸载时同理：卸载后再调 onPop 会对着已销毁的组件写状态。
+    useEffect(
+      () => () => {
+        if (popTimerRef.current !== null) window.clearTimeout(popTimerRef.current);
+      },
+      [],
+    );
+
     const rows = whisperBubbleView({ ok: true, text, ts: 0 });
     const key = String(image ?? '').trim();
     const href = String(url ?? '').trim();
@@ -370,30 +426,103 @@ export function makeWhisperBubble(rt: { h: typeof jsx }): (props: {
           rowsToNodes(h, rows),
         ]
       : rowsToNodes(h, rows);
+    // 两种可点语义共用命中样式：跳会话（工作气泡）与戳破（说话气泡）。
+    const interactive = onPop !== undefined || onClick !== undefined;
     return h('div', {
       className:
         'dsh-pet-bubble dsh-pet-whisper' +
         (src ? ' ' + MEME_BUBBLE_CLASS : '') +
         (on ? ' is-on' : '') +
-        (onClick ? ' is-clickable' : ''),
+        (interactive ? ' is-clickable' : '') +
+        (popping ? ' is-popping' : ''),
       // Clicking on the bubble cannot leak to the pet body below: there is the hit area for dragging and "touching".
-      onClick: onClick
-        ? (e: ReactNS.MouseEvent<HTMLDivElement>) => {
+      onClick: !interactive
+        ? undefined
+        : (e: ReactNS.MouseEvent<HTMLDivElement>) => {
             e.stopPropagation();
-            onClick(e);
-          }
-        : undefined,
+            if (popping) return; // 动画期间不重复触发
+            if (onPop === undefined) {
+              onClick?.(e);
+              return;
+            }
+            setPopping(true);
+            popTimerRef.current = window.setTimeout(() => {
+              popTimerRef.current = null;
+              onPop();
+            }, WHISPER_POP_MS);
+          },
       children: voiceState === 'idle' ? body : [body, voiceBadgeNode(h, voiceState)],
     });
   };
 }
 
-/**
- * Voice status corner mark: only appears on manually triggered broadcasts. The lower right corner is absolutely
- * positioned and does not participate in text layout. `failed` uses a silent speaker - "it should have a sound but it
- * didn't". It is not a system warning, so there is no warning symbol.
+/** 环境气泡：视图与文案来自 shared 的 envBubbleView，这里只把行映射成 React 节点。
+ *
+ *  主区是天气图标 + 大字气温 + 中文短语，下面三行键值（体感 / 湿度 / 风速），脚注给观测时刻；
+ *  没有天气数据时退化成一行「暂时查不到天气」——不画空数值，也不猜。
+ *  图标几何由 {@link envBubbleView} 带出，描边颜色跟气泡内的次级灰同色系。
  */
-function voiceBadgeNode(h: typeof jsx, state: 'loading' | 'ready' | 'failed'): ReactNode {
+export function makeEnvBubble(rt: { h: typeof jsx }): (props: { state: EnvState; on: boolean }) => ReactNode {
+  const { h } = rt;
+  injectBubbleCss();
+
+  /** 形状 → SVG 子节点。 */
+  const shapeNode = (shape: EnvIconShape, key: number): ReactNode => {
+    if (shape.kind === 'path') return h('path', { key, d: shape.d });
+    if (shape.kind === 'line') return h('line', { key, x1: shape.x1, y1: shape.y1, x2: shape.x2, y2: shape.y2 });
+    return h('circle', { key, cx: shape.cx, cy: shape.cy, r: shape.r });
+  };
+
+  return function EnvBubble({ state, on }: { state: EnvState; on: boolean }) {
+    const view = envBubbleView(state);
+    const body: ReactNode[] = [h('div', { key: 'title', className: 'pet-bub-title', children: view.title })];
+    if (view.emptyText !== undefined) {
+      body.push(h('div', { key: 'none', className: 'pet-bub-row', children: view.emptyText }));
+    } else {
+      body.push(
+        h('div', {
+          key: 'main',
+          className: 'pet-env-main',
+          children: [
+            h('span', {
+              key: 'icon',
+              className: 'pet-env-icon',
+              children: h('svg', {
+                viewBox: '0 0 24 24',
+                fill: 'none',
+                stroke: 'currentColor',
+                // SVG 属性必须驼峰：kebab-case 在 React 里会走 attribute 透传并告警
+                strokeWidth: 1.7,
+                strokeLinecap: 'round',
+                strokeLinejoin: 'round',
+                children: (view.icon ?? []).map((shape, i) => shapeNode(shape, i)),
+              }),
+            }),
+            h('span', { key: 'temp', className: 'pet-env-temp', children: view.temperature }),
+            h('span', { key: 'summary', className: 'pet-env-summary', children: view.summary }),
+          ],
+        }),
+        ...view.rows.map((row, i) =>
+          h('div', {
+            key: 'row' + i,
+            className: 'pet-bub-row',
+            children: [
+              h('span', { key: 'k', className: 'pet-bub-sub', children: row.label }),
+              h('span', { key: 'v', className: 'pet-bub-val', children: row.value }),
+            ],
+          }),
+        ),
+        view.footer === undefined ? null : h('div', { key: 'foot', className: 'pet-env-foot', children: view.footer }),
+      );
+    }
+    return h('div', { className: 'dsh-pet-bubble' + (on ? ' is-on' : ''), children: body });
+  };
+}
+/** 语音状态角标：只在手动触发的播报上出现，右下角绝对定位，不参与文字排版。
+ *  `failed` 用静音喇叭——「本该有声却没响」，不是系统告警，所以不上警告符号。 */ function voiceBadgeNode(
+  h: typeof jsx,
+  state: 'loading' | 'ready' | 'failed',
+): ReactNode {
   return h('span', {
     key: 'voice',
     className:

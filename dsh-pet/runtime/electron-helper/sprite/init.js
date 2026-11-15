@@ -78,10 +78,14 @@ Object.assign(PetSprite.prototype, {
     this.tipOn = false;
     this.tipCursor = null;
     this.balanceView = null;
-    this.balanceWrap = false; // true = The current balance bubble is unavailable "text description" (multiple lines, line wrapping variant required)
-    this.balanceState = null; // The latest balance reading (details and usage of the current calculation window in the expanded state; balanceView is only the row in the collapsed state)
-    this.balanceViewIndex = 0; // Current page: Click to cut the next page (windows is the collapse / window details / usage, the third page is only available when the amount is used; custom is the views.length page)
-    this.balanceFadeTimer = null; // Expand/collapse fade-out wait (change content after 250 ms to avoid hard cutting)
+    this.balanceWrap = false; // true = 当前余额气泡是不可用的「文字说明」（多行，需换行变体）
+    this.balanceState = null; // 最近一次余额读数（展开态按页现算窗口明细与用量；balanceView 只是收起态的行）
+    this.balanceViewIndex = 0; // 当前页：点一下切下一页（windows 是收起 / 窗口明细 / 用量，有用量才有第三页；custom 是 views.length 页）
+    this.balanceFadeTimer = null; // 展开/收起的淡出等待（250ms 后才换内容，避免硬切）
+    // 环境气泡（查询天气）：读数、显隐与自己的计时器（与余额共用 bubbleTimer 会互相清掉）
+    this.envState = null;
+    this.envOn = false;
+    this.envTimer = null;
     this.prevTick = 0;
     // Speaking (whisper/command bubble/conversation reply): Text and images are polled by the container / state and then sent in via showWhisper.
     this.whisperOn = false;
@@ -178,8 +182,14 @@ Object.assign(PetSprite.prototype, {
     this.hit.setAttribute('aria-label', this.pet.name);
     this.bubble = document.createElement('div');
     this.bubble.className = 'pet-bubble';
-    // Clicking on the bubble will be split according to the current slot: the working bubble will jump to the session, and the balance bubble will switch to the page. Swallow the events on the spot, don't fall to the body hit layer below.
+    // 气泡点击按当前槽位分流：说话气泡戳破、工作气泡跳会话、余额气泡切页。都就地吞掉事件，别落到下面的本体命中层。
     this.bubble.addEventListener('click', (e) => {
+      if (this.whisperClickable()) {
+        e.stopPropagation();
+        e.preventDefault();
+        this.popWhisper();
+        return;
+      }
       if (this.workClickable()) {
         e.stopPropagation();
         e.preventDefault();
@@ -276,6 +286,12 @@ Object.assign(PetSprite.prototype, {
       },
       { signal: ac.signal },
     );
+
+    // 主进程兜底：宠物自己走开、或窗口被别的窗口接走时页面收不到 mousemove，提示会一直亮着；
+    // 主进程按光标轮询判定「刚离开身体」后通知这里收起（setTip 幂等，与 mousemove 判定不冲突）。
+    if (window.petBridge && typeof window.petBridge.onPointerLeft === 'function') {
+      window.petBridge.onPointerLeft(() => this.setTip(false));
+    }
 
     this.subscribeCollision();
   },

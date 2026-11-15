@@ -7,6 +7,7 @@
  * @module dsh-pet/src/host/routes/chat
  */
 import { readAllConfig, sliceMemoryRounds } from '../config.ts';
+import { prepareDshMemory } from '../dsh-memory.ts';
 import { boundedHistory } from '../memory-context.ts';
 import { chatMemoryConfigValid, DEFAULT_CHAT_MEMORY } from '../../shared/chat-memory-config.ts';
 import { parseImageAttachment, type PetImageRef, type PetImageSink } from '../image-attachment.ts';
@@ -22,6 +23,8 @@ type ImageAdmission =
 export async function handleChatRoutes(deps: PetRouteDeps, input: RouteInput): Promise<RouteResult | undefined> {
   const { configPaths, log, memoryPath, memoryRounds, readMemory, requirePet } = deps;
   const { body, method, rest, url } = input;
+  const sessionId = url.searchParams.get('session') || undefined;
+  if (sessionId && sessionId.length > 256) return failResult('bad-request', 'Invalid DSH session ID');
 
   // The remaining history of the deleted pet: This pet is no longer in the configuration. GET /chat cannot read it,
   // so it cannot be cleared. GET lists (only the number and last time are given, but no text is given), DELETE is
@@ -46,7 +49,7 @@ export async function handleChatRoutes(deps: PetRouteDeps, input: RouteInput): P
     if (!who.ok) return who.res;
     try {
       if (method === 'POST') await deps.syncMemory(who.petId);
-      return okResult(await deps.memoryStatus(who.petId));
+      return okResult(await deps.memoryStatus(who.petId, sessionId));
     } catch {
       return failResult('generate-error', '记忆状态暂不可用');
     }
@@ -91,7 +94,7 @@ export async function handleChatRoutes(deps: PetRouteDeps, input: RouteInput): P
         // When the memory file is valid JSON but messages is not an array, slice() will throw slice is not a
         // function: Process as empty history and record a line of log, so that the entire history interface will not
         // report an error because of a piece of bad data.
-        const list = Array.isArray(rawMessages) ? rawMessages.filter((m) => m && typeof m.content === 'string') : [];
+        let list = Array.isArray(rawMessages) ? rawMessages.filter((m) => m && typeof m.content === 'string') : [];
         if (rawMessages !== undefined && !Array.isArray(rawMessages)) {
           log.error(
             `[dsh-pet] Invalid memory structure (messages is not an array) pet=${petId}; treating history as empty: ${memoryPath}`,
@@ -100,16 +103,26 @@ export async function handleChatRoutes(deps: PetRouteDeps, input: RouteInput): P
         // Passed ? rounds = Just use the passed one (including 0 = empty history). If not passed, fallback to the configuration.
         const rounds = roundsOverride ?? memoryRounds(who.conf);
         // Same semantics as chatWithPet: rounds = 0 → empty history (slice (-0) will return the entire array, see above)
-        const messages = sliceMemoryRounds(list, rounds);
         const memory = chatMemoryConfigValid(who.conf.chatMemory) ? who.conf.chatMemory : DEFAULT_CHAT_MEMORY;
-        const context =
-          memory.maxHistoryBytes > 0
+        let scoped = true;
+        if (memory.backend === 'dsh-powercontext') {
+          const binding = await prepareDshMemory(deps.optionalService, memory, sessionId);
+          scoped = binding.status !== 'unavailable';
+          const id = binding.status === 'unavailable' ? 'unresolved:' + (sessionId ?? '') : binding.bindingId;
+          list = list.filter((message) => message.memoryBinding === id);
+        } else {
+          list = list.filter((message) => message.memoryBinding === undefined);
+        }
+        const messages = sliceMemoryRounds(list, rounds);
+        const context = !scoped
+          ? []
+          : memory.maxHistoryBytes > 0
             ? boundedHistory(list, memoryRounds(who.conf), memory.maxHistoryBytes)
             : sliceMemoryRounds(list, memoryRounds(who.conf));
         return okResult({ ok: true, messages, rounds, contextRounds: Math.floor(context.length / 2) });
       }
       if (method === 'DELETE') return okResult(await deps.deleteHistory(petId, tsList));
-      return await postChat(deps, petId, body);
+      return await postChat(deps, petId, body, sessionId);
     } catch (e) {
       // Configuration guaranteed correct by readAllConfig (no more config-error branch); rest ( IO/LLM ) → generate-error
       return failResult('generate-error', e instanceof Error ? e.message : String(e));
@@ -146,7 +159,12 @@ function parseTsList(raws: readonly string[]): number[] | null {
  * @returns has the same shape as before adding the picture: Successfully only brings `text` (there is also `image` in
  * the picture).
  */
-async function postChat(deps: PetRouteDeps, petId: string, body: string | undefined): Promise<RouteResult> {
+async function postChat(
+  deps: PetRouteDeps,
+  petId: string,
+  body: string | undefined,
+  sessionId?: string,
+): Promise<RouteResult> {
   let parsed: Record<string, unknown>;
   try {
     parsed = (JSON.parse(body ?? 'null') as Record<string, unknown> | null) ?? {};
@@ -159,7 +177,11 @@ async function postChat(deps: PetRouteDeps, petId: string, body: string | undefi
   // By default, the picture directly returns an empty conclusion. The following call is the same as before adding the picture (this is the key point of the regression test)
   const admitted = await admitImage(deps, parsed.attachment);
   if (!admitted.ok) return admitted.res;
-  return okResult(await deps.chatWithPet(petId, text, admitted.ref));
+  return okResult(
+    await (sessionId
+      ? deps.chatWithPet(petId, text, admitted.ref, sessionId)
+      : deps.chatWithPet(petId, text, admitted.ref)),
+  );
 }
 
 /**

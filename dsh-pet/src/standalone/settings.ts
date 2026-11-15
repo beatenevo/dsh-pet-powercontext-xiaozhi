@@ -46,11 +46,28 @@ const settingsSchema = z
   .object({
     protocol: z.enum(['openai-compatible', 'anthropic']).optional(),
     baseUrl: endpoint.optional(),
-    model: z.string().max(200).optional(),
     /** Length only; the value enumeration is checked by the persistence verification of ai-config.ts to avoid writing a list in two places. */
-    balanceProvider: z.string().max(40).optional(),
-    apiKey: z.string().max(8192).optional(),
-    clearApiKey: z.boolean().optional(),
+    service: z.string().max(40).optional(),
+    /** 按服务商分开的密钥；键名同样由 ai-config.ts 把关。 */
+    keys: z.record(z.string(), z.string().max(8192)).optional(),
+    /** 按服务商分开的协议、地址与模型；取值细节由 ai-config.ts 把关。 */
+    profiles: z
+      .record(
+        z.string(),
+        z
+          .object({
+            protocol: z.string().max(40),
+            baseUrl: endpoint,
+            model: z.string().max(200),
+          })
+          .strict(),
+      )
+      .optional(),
+    /** 清空当前服务商那一栏密钥。 */
+    clearKey: z.boolean().optional(),
+    /** 仅语音用；与对话密钥同一套长度上限，取值细节交给 ai-config.ts 的持久化校验。 */
+    deepseekApiKey: z.string().max(4096).optional(),
+    clearDeepseekKey: z.boolean().optional(),
     automaticWhispers: z.boolean().optional(),
     whisperIntervalSec: z.number().int().min(60).max(86400).optional(),
     maxTokens: z.number().int().min(128).max(4096).optional(),
@@ -72,13 +89,17 @@ export function validateSettings(input: unknown): z.infer<typeof settingsSchema>
 const publicNames = [
   'protocol',
   'baseUrl',
+  'service',
   'model',
-  'balanceProvider',
+  'profiles',
+  'services',
+  'savedKeys',
   'automaticWhispers',
   'whisperIntervalSec',
   'maxTokens',
   'timeoutMs',
   'hasKey',
+  'hasDeepseekKey',
 ] as const;
 /** Filter out public setting fields. */
 export function publicSettings(input: unknown): Record<string, unknown> {

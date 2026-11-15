@@ -31,6 +31,8 @@ const OWN = 'PETPACK-OWN-ASSET';
 const MAIN = 'MAIN-POOL-ASSET';
 /** Pictures in the user meme directory (sharing chain) */
 const SHARED_PIC = 'SHARED-MEME-BYTES';
+/** 用户 pic 目录里的图：覆盖包内同名通知图标的标记内容 */
+const USER_PIC = 'USER-PIC-OVERRIDE';
 /** pet pack Exclusive pictures in the meme directory */
 const OWN_PIC = 'PETPACK-OWN-MEME';
 /** Chinese name pet pack (The warehouse clearly supports Chinese names, and the ASCII whitelist cannot be used for identifier verification) */
@@ -81,11 +83,16 @@ before(() => {
   writeFileSync(join(userRoot, 'memes', '共用图.png'), SHARED_PIC);
   mkdirSync(join(userRoot, 'pet', `${CN_PET}-memes`), { recursive: true });
   writeFileSync(join(userRoot, 'pet', `${CN_PET}-memes`, '自家图.png'), OWN_PIC);
+  // 用户 pic 目录：覆盖包内通知图标（升级重装不会碰用户目录）
+  mkdirSync(join(userRoot, 'pic'), { recursive: true });
+  writeFileSync(join(userRoot, 'pic', 'notify-done.png'), USER_PIC);
   // Bait outside user root: directory name ending in - animation / - memes, exactly what the old vulnerability could read
   mkdirSync(join(dir, 'outside-animation'), { recursive: true });
   writeFileSync(join(dir, 'outside-animation', 'leak.webm'), SECRET);
   mkdirSync(join(dir, 'outside-memes'), { recursive: true });
   writeFileSync(join(dir, 'outside-memes', 'leak.png'), SECRET);
+  mkdirSync(join(dir, 'outside-pic'), { recursive: true });
+  writeFileSync(join(dir, 'outside-pic', 'leak.png'), SECRET);
 
   savedHome = process.env.DSH_HOME;
   savedElectron = process.env.DSH_PET_ELECTRON_PATH;
@@ -220,6 +227,7 @@ describe('/ state + / balance —— polling unified status and balance action e
     assert.deepEqual(Object.keys(body.sections).sort(), [
       'balance',
       'config',
+      'env',
       'focusSession',
       'menu',
       'notify',
@@ -628,9 +636,23 @@ describe('pic/memes route —— Emoticon asset ownership (same semantics as thu
     assert.equal((await call('/dsh-pet-7340/pic/memes/main/nope.png')).status, 404);
   });
 
-  test('The notification icon (/pic/<name>.png) is not affected: it is still only taken from the package assets/pic', async () => {
-    // assets in the package in source code form is unreachable → 404 (the key is not to be swallowed by the memes branch)
+  test('通知图标（/pic/<名>.png）不被 memes 分支吞掉：两层都没有 → 404', async () => {
+    // 源码形态下包内 assets 不可达、用户 pic 目录里也没有 logo.png → 404
     assert.equal((await call('/dsh-pet-7340/pic/logo.png')).status, 404);
+  });
+});
+
+describe('pic 路由 —— 静态图的用户层覆盖（插件升级不冲掉自定义图标）', () => {
+  test('用户 pic 目录有同名文件：优先于包内，返回用户那份', async () => {
+    const r = await call('/dsh-pet-7340/pic/notify-done.png');
+    assert.equal(r.status, 200);
+    assert.equal(r.body, USER_PIC);
+  });
+
+  test('用户层同样不可穿越：反斜杠 ../ 不越出用户根', async () => {
+    const r = await call('/dsh-pet-7340/pic/..%5C..%5Coutside-pic%5Cleak.png');
+    assert.equal(r.status, 404);
+    assert.equal(r.body.includes(SECRET), false, 'Unrooted content must not appear in the response body');
   });
 });
 

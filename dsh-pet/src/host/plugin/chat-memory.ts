@@ -12,6 +12,7 @@ import { generateChat, type ChatMemoryMessage } from '../chat.ts';
 import { chatActionNames } from '../chat-action.ts';
 import { mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { currentEnvironment, type EnvironmentFacts } from '../environment.ts';
 import { composeSystemPrompt, petPersona } from '../persona.ts';
 import { findPetInstance, readAllConfig, removeRoundsByTs, sliceMemoryRounds } from '../config.ts';
 import type { PetImageRef } from '../image-attachment.ts';
@@ -25,6 +26,7 @@ import { pickVoiceSurface, type VoiceTarget } from '../surface.ts';
 import type { HostSetup } from './setup.ts';
 import type { HostContext } from './context.ts';
 import { DEFAULT_CHAT_MEMORY, chatMemoryConfigValid, type ChatMemoryConfig } from '../../shared/chat-memory-config.ts';
+import { prepareDshMemory, type DshMemoryResult } from '../dsh-memory.ts';
 import { boundedHistory, memoryRecallQuery } from '../memory-context.ts';
 import {
   PowerContextClient,
@@ -71,6 +73,8 @@ function voiceTargetFor(pet: Record<string, unknown>): VoiceTarget | undefined {
 export type ChatMemoryInput = {
   /** host context (the one apply received). */
   ctx: HostContext;
+  /** Optional environment lookup; tests provide local facts instead of calling public weather services. */
+  environment?: () => Promise<EnvironmentFacts>;
 } & Pick<HostSetup, 'configPaths'> &
   Pick<HostSetup, 'log'> &
   Pick<HostSetup, 'memeDirsFor'> &
@@ -83,8 +87,27 @@ export type ChatMemoryInput = {
  */
 export function createChatMemory(deps: ChatMemoryInput) {
   const { ctx, configPaths, log, memeDirsFor, playback, state, userRoot } = deps;
+  /** Weather enriches replies but must not delay offline chat. Late results may still populate the shared cache. */
+  const environmentForPrompt = async (): Promise<EnvironmentFacts> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        Promise.resolve().then(() => (deps.environment ?? currentEnvironment)()),
+        new Promise<EnvironmentFacts>((resolve) => {
+          timer = setTimeout(() => resolve({}), 1000);
+        }),
+      ]);
+    } catch {
+      return {};
+    } finally {
+      clearTimeout(timer);
+    }
+  };
   // Command "current desktop pet" (/pet selected, /chat used): global single value regardless of session; in-process memory, restart back to the default first pet
   let activePetId = '';
+  const sharedRecall = new Map<string, { bindingId?: string; sessionId?: string; status: string; error?: string }>();
+  const dshMemory = (config: ChatMemoryConfig, sessionId?: string, query?: string) =>
+    prepareDshMemory((name) => ctx.get?.(name), config, sessionId, query);
 
   // The "last spawn time" of whisper periodic scheduling (according to pet): the scheduling time is determined based
   // on this. The generated result is directly written as S. Sharing the same sentence among multiple terminals is
@@ -227,10 +250,38 @@ export function createChatMemory(deps: ChatMemoryInput) {
       };
     });
 
-  const memoryStatus = async (petId: string) => {
+  const memoryStatus = async (petId: string, sessionId?: string) => {
     const found = findPetInstance(readAllConfig(configPaths), petId);
     if (!found) return { ok: false as const, reason: 'unknown-pet' as const };
     const config = memoryConfig(found.conf);
+    if (config.backend === 'dsh-powercontext') {
+      const result = await dshMemory(config, sessionId);
+      const last = sharedRecall.get(petId);
+      return {
+        ok: true,
+        backend: config.backend,
+        pending: 0,
+        captured: 0,
+        skipped: 0,
+        scopeId: result.status === 'unavailable' ? null : result.scopeId,
+        workspace: result.status === 'unavailable' ? null : result.workspace,
+        recall:
+          result.status === 'unavailable'
+            ? 'unavailable'
+            : last && last.sessionId === sessionId && last.status === 'unavailable'
+              ? 'unavailable'
+              : last?.bindingId === result.bindingId
+                ? last.status
+                : 'not_run',
+        error:
+          result.status === 'unavailable'
+            ? result.reason
+            : last && last.sessionId === sessionId && last.status === 'unavailable'
+              ? (last.error ?? null)
+              : null,
+        processing: 'Read-only project recall; pet conversations stay local.',
+      };
+    }
     const mem = await readMemory();
     const sync = mem[found.entry]?.[petId]?.powercontext?.[memoryTarget(config)];
     return {
@@ -251,12 +302,13 @@ export function createChatMemory(deps: ChatMemoryInput) {
    * is written to the share of the corresponding entry. assemble in ./persona (pure function): persona text + name
    * declaration + one line of time background, time is calculated each time; the conversation path is passed to
    * `{ historyTimes: true }` , and the [history] description is appended. Whisper has no history and is not passed.
+   * City and weather are shared by chat, whispers and sleep talk through the optional env field.
    * Collect the hit result of `findPetInstance` instead of (petId, cfg): The caller has been parsed, and if you check
    * again, there will only be one more unreachable branch of "fallback main if not found".
    */
   const petSystemPrompt = (
     found: { conf: Record<string, unknown>; pet: Record<string, unknown> },
-    options: { historyTimes?: boolean } = {},
+    options: { historyTimes?: boolean; env?: EnvironmentFacts } = {},
   ): string =>
     composeSystemPrompt({
       prompt: petPersona(found.conf, found.pet),
@@ -264,6 +316,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       id: String(found.pet.id ?? ''),
       now: new Date(),
       ...(options.historyTimes === true ? { historyTimes: true } : {}),
+      ...(options.env !== undefined ? { env: options.env } : {}),
     });
 
   /**
@@ -295,7 +348,6 @@ export function createChatMemory(deps: ChatMemoryInput) {
     try {
       const timeout = new Promise<undefined>((resolve) => {
         timer = setTimeout(() => resolve(undefined), RECALL_TIMEOUT_MS);
-        timer.unref?.();
       });
       const result = await Promise.race([Promise.resolve(recall.call(provider, { petId, ...content })), timeout]);
       if (!result || typeof result !== 'object') return undefined;
@@ -382,7 +434,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     const manualVoiceOn = cfg.main?.voiceEnabled === true;
     const voiceOff = kind === 'whisper' ? !whisperVoiceOn : !manualVoiceOn;
     const target = voiceOff ? undefined : (voiceTo ?? voiceTargetFor(found.pet));
-    const system = petSystemPrompt(found);
+    const system = petSystemPrompt(found, { env: await environmentForPrompt() });
     // The pool is only counted once: the named picture and the randomly drawn picture share the same one (including file existence determination).
     const pool = readMemePool(found.conf.memes, memeDirsFor(found.entry));
     // I called the name but missed = the configuration was wrongly written or the picture has been deleted: the clear failed, do not silently change to another one (if you click A but see B, you will think it is broken).
@@ -435,7 +487,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     const cfg = readAllConfig(configPaths);
     const found = findPetInstance(cfg, petId);
     if (!found) return false;
-    const system = petSystemPrompt(found);
+    const system = petSystemPrompt(found, { env: await environmentForPrompt() });
     const result = await generateWhisper(ctx, {
       system,
       preferred: configuredModel(found.conf, 'whisperModel'),
@@ -465,11 +517,14 @@ export function createChatMemory(deps: ChatMemoryInput) {
     petId: string,
     text: string,
     image?: PetImageRef,
+    sessionId?: string,
   ): Promise<
     | { ok: true; text: string; image?: string }
     | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
-  > =>
-    withMemoryLock(async () => {
+  > => {
+    // Query optional weather outside the journal lock so it does not block other conversations.
+    const env = await environmentForPrompt();
+    return withMemoryLock(async () => {
       const cfg = readAllConfig(configPaths);
       const found = findPetInstance(cfg, petId);
       // The pet was deleted between the "verification reading" and here - this function also needs to queue the serial
@@ -509,11 +564,30 @@ export function createChatMemory(deps: ChatMemoryInput) {
       // question 1 answer). Cannot write slice (- rounds * 2): -0 In JS === 0, slice (-0) returns the entire array
       // instead of empty.
       const config = memoryConfig(found.conf);
+      const shared: DshMemoryResult | undefined =
+        config.backend === 'dsh-powercontext' ? await dshMemory(config, sessionId, text) : undefined;
+      const binding = shared && shared.status !== 'unavailable' ? shared.bindingId : undefined;
+      // Unresolved scopes use no prior history. This avoids guessing which project owns old replies.
+      const history =
+        config.backend === 'dsh-powercontext'
+          ? binding
+            ? entry.messages.filter((message) => message.memoryBinding === binding)
+            : []
+          : entry.messages.filter((message) => message.memoryBinding === undefined);
       const list =
         config.maxHistoryBytes > 0
-          ? boundedHistory(entry.messages, rounds, config.maxHistoryBytes)
-          : sliceMemoryRounds(entry.messages, rounds);
-      let recalledContext: string | undefined;
+          ? boundedHistory(history, rounds, config.maxHistoryBytes)
+          : sliceMemoryRounds(history, rounds);
+      let recalledContext = shared?.status === 'ready' ? shared.content : undefined;
+      if (shared) {
+        if (sharedRecall.size >= 100) sharedRecall.clear();
+        sharedRecall.set(
+          petId,
+          shared.status === 'unavailable'
+            ? { sessionId, status: shared.status, error: shared.reason }
+            : { sessionId, bindingId: shared.bindingId, status: shared.status },
+        );
+      }
       if (config.backend === 'powercontext') {
         const sync = memoryState(entry, config);
         // Persist the scope idempotency key before the first external call.
@@ -530,7 +604,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       // persona: instance level whisperPrompt takes priority, and the entry of fallback is not written (the same
       // assemble as whisper). Only add the [History] paragraph when there is history: When there is no history, that
       // paragraph is describing a prefix that does not exist, which will only mislead the model.
-      const system = petSystemPrompt(found, { historyTimes: list.length > 0 });
+      const system = petSystemPrompt(found, { historyTimes: list.length > 0, env });
       // Only the size and number of bytes of the image are recorded (base64 is not recorded): When the model does not support image reading, dsh-llm will project it into a placeholder text, and rely on this line of logs to locate it.
       if (image !== undefined) {
         log.info(
@@ -540,7 +614,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       }
       // Third-party memory: Modify content before dialogue; fail or time out and downgrade to original content (see recallPatch).
       const patch =
-        config.backend === 'powercontext'
+        config.backend !== 'native'
           ? undefined
           : await recallPatch(petId, {
               system,
@@ -565,11 +639,14 @@ export function createChatMemory(deps: ChatMemoryInput) {
       // "pictures brought in this round" (chat record archive), but the picture itself is not resent to the model; the
       // picture with AI only backfills the name tag (see chat.ts's historyMarkersOf), and also does not have the
       // picture itself.
-      entry.messages.push({ role: 'user', content: text, ts: now, ...(image ? { image } : {}) });
+      const partition =
+        config.backend === 'dsh-powercontext' ? { memoryBinding: binding ?? 'unresolved:' + (sessionId ?? '') } : {};
+      entry.messages.push({ role: 'user', content: text, ts: now, ...partition, ...(image ? { image } : {}) });
       entry.messages.push({
         role: 'assistant',
         content: generated.text,
         ts: now,
+        ...partition,
         ...(generated.image ? { meme: generated.image } : {}),
         // The action name is the same as the picture name: persist to disk only saves the name, and when replaying the
         // history, chat.ts will backfill it with [action: name] - otherwise the model cannot remember what it has
@@ -581,7 +658,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       if (config.backend === 'powercontext') {
         // The synchronization is queued after the current persist to disk lock, and the reply does not wait for remote collection.
         void syncMemory(petId).catch(() => log.warn('dsh-pet: memory sync persistence unavailable'));
-      } else {
+      } else if (config.backend === 'native') {
         // Exclusive memory link when PowerContext is explicitly selected to avoid repeated collection by third-party backends.
         captureTurn(petId, {
           userText: text,
@@ -614,6 +691,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       // The same text is brought out with the return value (the leaves are written as written, not one of the two)
       return { ok: true as const, text: generated.text, ...(generated.image ? { image: generated.image } : {}) };
     });
+  };
 
   /**
    * Delete the dialogue memory of a certain pet: `ts` default = clear all, given ts = only delete the hit round (two

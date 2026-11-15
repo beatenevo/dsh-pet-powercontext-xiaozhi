@@ -16,13 +16,14 @@ import {
   type BubbleHoldState,
 } from '../../../shared/bubble-hold.ts';
 import { subscribeVoiceState, subscribeVoiceUtterance, type VoiceState } from '../../../shared/voice.ts';
+import type { EnvState } from '../../../shared/state.ts';
 import { BUBBLE_DURATION_MS } from '../timings.ts';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type * as ReactNS from 'react';
 import type { jsx } from 'react/jsx-runtime';
 
 /** Which bubble should be hung currently; `none` means that neither condition is true. */
-export type BubbleSlot = 'todo' | 'work-terminal' | 'whisper' | 'balance' | 'work' | 'none';
+export type BubbleSlot = 'todo' | 'work-terminal' | 'whisper' | 'balance' | 'env' | 'work' | 'none';
 
 /** The input of the priority determination: all are fait accompli during the rendering period, and the determination itself does not produce side effects. */
 export interface BubbleSlotInput {
@@ -48,6 +49,10 @@ export interface BubbleSlotInput {
   balanceEnabled: boolean;
   /** Whether this balance is manually requested; manual requests are not subject to switch gating. */
   balanceManual: boolean;
+  /** 环境气泡是否点亮。 */
+  envOn: boolean;
+  /** 环境数据是否已到达；null 表示还没有可用数据。 */
+  envAvailable: boolean;
 }
 
 /**
@@ -56,8 +61,8 @@ export interface BubbleSlotInput {
  * The final state task only lives 10 s, so it does not give way; if it is not in the final state, there is no loss in
  * giving up 10 s.
  *
- * @param input - The visibility and switching of three bubbles.
- * The slot hit by @returns; when neither is true, it is `none` .
+ * @param input - 各气泡的显隐与开关。
+ * @returns 命中的槽位；都不成立时为 `none`。
  */
 export function decideBubbleSlot(input: BubbleSlotInput): BubbleSlot {
   // The panel is a window that the user actively opens: when it occupies the slot, all other bubbles will give way, and it will be restored according to the original rules after it is closed.
@@ -65,6 +70,8 @@ export function decideBubbleSlot(input: BubbleSlotInput): BubbleSlot {
   if (input.workTerminal && input.workOn && input.workText && input.workStatusEnabled) return 'work-terminal';
   if (input.whisperOn && input.whisperText) return 'whisper';
   if (input.balanceOn && input.balanceAvailable && (input.balanceEnabled || input.balanceManual)) return 'balance';
+  // 环境排在余额之后：它是用户主动查的一次性结果，但不如余额那种「实时花销」紧迫
+  if (input.envOn && input.envAvailable) return 'env';
   if (input.workOn && input.workText && input.workStatusEnabled) return 'work';
   return 'none';
 }
@@ -99,6 +106,8 @@ export type WhisperBubbleComponent = (props: {
   on: boolean;
   /** The callback is clickable; the work bubble uses it to jump to the session, and it is not clickable by default. */
   onClick?: (e: ReactNS.MouseEvent<HTMLDivElement>) => void;
+  /** 戳破回调；只有说话气泡给，工作状态气泡给的是 onClick。 */
+  onPop?: () => void;
 }) => ReactNode;
 
 /** Injected react capability. */
@@ -116,10 +125,15 @@ export interface BubbleSlotsRuntime {
 /** To-do panel bubble component; props is consistent with TodoBubble of `client/todo-bubble.ts`. */
 export type TodoBubbleComponent = (props: { on: boolean; onClose: () => void }) => ReactNode;
 
-/** Three bubble components. */
+/** 环境气泡组件；props 与 `client/bubble.ts` 的 EnvBubble 一致。 */
+export type EnvBubbleComponent = (props: { state: EnvState; on: boolean }) => ReactNode;
+
+/** 四种气泡组件。 */
 export interface BubbleComponents {
   /** Balance bubble. */
   balanceBubble: BalanceBubbleComponent;
+  /** 环境气泡。 */
+  envBubble: EnvBubbleComponent;
   /** To-do panel bubble. */
   todoBubble: TodoBubbleComponent;
   /** Talk bubble. */
@@ -144,12 +158,16 @@ export interface BubbleSlotsInput {
   onFocusSession?: (sessionId: string) => void;
   /** The asset root of the speech bubble image. */
   assetRoot?: string;
+  /** 最近一次环境结果；只有 petId 与本宠物相符时容器才会传。 */
+  env: EnvState | null;
 }
 
 /** Bubble is the external reading and writing surface of a single slot. */
 export interface BubbleSlots {
   /** Light up the balance bubble and return to the first page to reset the dwell timer. */
   showBalance(): void;
+  /** 点亮环境气泡，重置停留计时。 */
+  showEnv(): void;
   /** Click the balance bubble to turn the page and reset the dwell time. */
   cycleBalance(): void;
   /** Light up the speech bubble; when duration is 0, the current bubble will not be changed, and undefined uses the default duration. */
@@ -185,6 +203,7 @@ export interface BubbleSlots {
 export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComponents) {
   const { h, useState, useRef, useEffect } = rt;
   const BalanceBubble = components.balanceBubble;
+  const EnvBubble = components.envBubble;
   const TodoBubble = components.todoBubble;
   const WhisperBubble = components.whisperBubble;
 
@@ -193,6 +212,9 @@ export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComp
     const [balanceOn, setBalanceOn] = useState(false);
     const [balancePage, setBalancePage] = useState(0);
     const balanceTimerRef = useRef<number | null>(null);
+    // 环境气泡：只有显隐，没有翻页（一屏放得下）。
+    const [envOn, setEnvOn] = useState(false);
+    const envTimerRef = useRef<number | null>(null);
     // Speech bubble: visible, hidden, text and pictures (choose one of the name in the pool and the complete address).
     // The closing time is bubbleHoldRef: the timing is suspended during speech synthesis, and a short tail is left
     // after playing (see shared/bubble-hold).
@@ -215,10 +237,11 @@ export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComp
     // subscribe is a module-level singleton: you must unsubscribe when unmounting, otherwise the old card will be re-rendered by subsequent status push
     useEffect(() => subscribeVoiceState(setVoiceState), []);
 
-    // No more setState after unmount: All three timers are cleared here.
+    // 卸载后不再 setState：四个计时器都在这里清。
     useEffect(
       () => () => {
         if (balanceTimerRef.current !== null) window.clearTimeout(balanceTimerRef.current);
+        if (envTimerRef.current !== null) window.clearTimeout(envTimerRef.current);
         if (whisperTimerRef.current !== null) window.clearTimeout(whisperTimerRef.current);
         if (workTimerRef.current !== null) window.clearTimeout(workTimerRef.current);
       },
@@ -242,6 +265,16 @@ export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComp
       setBalancePage((page) => (page + 1) % pages);
       // Retiming: There are only 2 seconds left after clicking on the 8th second, and the next page cannot be seen clearly.
       armBalanceTimeout();
+    };
+
+    /** 环境气泡：点一次亮一次，停留时长与余额相同；重复触发先清旧定时器。 */
+    const showEnv = () => {
+      setEnvOn(true);
+      if (envTimerRef.current !== null) window.clearTimeout(envTimerRef.current);
+      envTimerRef.current = window.setTimeout(() => {
+        envTimerRef.current = null;
+        setEnvOn(false);
+      }, BUBBLE_DURATION_MS);
     };
 
     /** Advance the speech bubble collapse plan and reset the timer according to the new plan. */
@@ -323,8 +356,13 @@ export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComp
         balanceAvailable: input.balance !== null,
         balanceEnabled: input.balanceEnabled,
         balanceManual: input.balanceManual,
+        envOn,
+        envAvailable: input.env !== null,
       });
       if (slot === 'todo') return h(TodoBubble, { on: todoOn, onClose: hideTodo });
+      if (slot === 'env') {
+        return input.env === null ? null : h(EnvBubble, { state: input.env, on: envOn });
+      }
       if (slot === 'balance') {
         return input.balance === null
           ? null
@@ -340,6 +378,8 @@ export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComp
               assetRoot: input.assetRoot,
               on: whisperOn,
               voiceState,
+              // 戳破：动画播完由组件回调收起，只动气泡，不碰动画与另三种气泡。
+              onPop: clearWhisper,
             });
       }
       // The final state and the non-final state share the same component, the only difference is the duration and priority.
@@ -367,6 +407,7 @@ export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComp
       node,
       resetWork,
       showBalance,
+      showEnv,
       showTodo,
       showWhisper,
       toggleTodo,

@@ -10,6 +10,7 @@
  */
 import type { ChatMemoryMessage } from '../chat.ts';
 import type { ConfigPaths } from '../config.ts';
+import type { EnvironmentFacts } from '../environment.ts';
 import type { RouteResult } from '../http.ts';
 import type { PetImageRef } from '../image-attachment.ts';
 import type { LockStore } from '../lock.ts';
@@ -70,10 +71,12 @@ export type RouteHandler = (deps: PetRouteDeps, input: RouteInput) => Promise<Ro
  * write sequence number and returns the new value.
  */
 export interface PetRouteDeps {
+  /** Optional physical-robot controller; motion remains disabled until an operator enables it. */
+  readonly robot?: import('../robot/service.ts').RobotService;
   /** Managed by the DSH plugin lifecycle; standalone mode uses its own preparation entry point. */
   readonly memorySetup?: import('../../standalone/setup.ts').SetupService;
   /** Optional for older embedding hosts; the shipped host provides both. */
-  readonly memoryStatus?: (petId: string) => Promise<unknown>;
+  readonly memoryStatus?: (petId: string, sessionId?: string) => Promise<unknown>;
   readonly syncMemory?: (petId: string) => Promise<void>;
   readonly listMemories?: (
     petId: string,
@@ -147,8 +150,10 @@ export interface PetRouteDeps {
   readonly thumbUserRoot: string;
   /** User meme directory. */
   readonly memesUserRoot: string;
-  /** Refresh balance (manual indicates user active trigger). */
-  readonly refreshBalance: (manual?: boolean) => Promise<void>;
+  /** 刷新余额（manual 表示用户主动触发；petId 表示这次只让该宠物显示，缺省不写归属）。 */
+  readonly refreshBalance: (manual?: boolean, petId?: string) => Promise<void>;
+  /** 查此刻的环境（城市 + 天气）；fresh 为真时跳过缓存强制重查。 */
+  readonly environment: (opts?: { fresh?: boolean; city?: string }) => Promise<EnvironmentFacts>;
   /**
    * Generate a whisper using an explicit pool image when supplied; otherwise choose randomly or use text only
    * according to configuration.
@@ -167,7 +172,12 @@ export interface PetRouteDeps {
   /** The number of rounds reserved for a single conversation. */
   readonly memoryRounds: (conf: Record<string, unknown>) => number;
   /** Chat with a local pet. Omitting image keeps the original text-only data path. */
-  readonly chatWithPet: (petId: string, text: string, image?: PetImageRef) => Promise<GeneratedReply>;
+  readonly chatWithPet: (
+    petId: string,
+    text: string,
+    image?: PetImageRef,
+    sessionId?: string,
+  ) => Promise<GeneratedReply>;
   /** Delete pet chat history: omit ts to clear all rounds, or delete only the matching user/assistant pair. */
   readonly deleteHistory: (
     petId: string,

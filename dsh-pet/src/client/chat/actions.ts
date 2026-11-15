@@ -20,6 +20,7 @@ import type { ConfirmKind, PanelData } from './types.ts';
 
 /** The minimum port required for the action. */
 export interface ActionPorts {
+  readonly readSessionId?: () => string | undefined;
   /** Read and write the current state snapshot (each time rendering and reconstruction, the latest value is obtained). */
   readonly read: () => PanelData;
   /** Merge status patch once. */
@@ -81,7 +82,7 @@ export function createSendActions(ports: ActionPorts): {
             data.attachment === undefined
               ? undefined
               : { mediaType: data.attachment.mediaType, data: data.attachment.base64 };
-          const result = await sendMessage(data.petId, text, attachment);
+          const result = await sendMessage(data.petId, text, attachment, ports.readSessionId?.());
           if (!result.ok) {
             ports.fail(result.message);
             return;

@@ -7,14 +7,28 @@ import { test } from 'node:test';
 import type { PetRouteDeps } from './types.ts';
 import { handleVoiceRoutes } from './voice.ts';
 
-const VOICES = [{ id: 'zh-CN-XiaoxiaoNeural', name: '晓晓', tag: '女 · 通用', default: true }];
+const CATALOG = {
+  providers: [
+    {
+      id: 'edge',
+      name: 'Edge',
+      voices: [{ id: 'edge/zh-CN-XiaoxiaoNeural', name: '晓晓', tag: '女 · 通用' }],
+    },
+  ],
+};
+
+/** 识别实现的目录；`/voice/hear-providers` 与 `list()` 同源。 */
+const SPEECH_CATALOG = { providers: [{ id: 'dsh', name: 'DSH 语音插件' }] };
 
 /** Provide only voice and speech; this route does not access other dependencies. */
 function makeDeps(
   speak: (raw: unknown) => Promise<unknown>,
   hear: (raw: unknown, signal?: AbortSignal) => Promise<unknown> = async () => ({ ok: true, text: '你好' }),
 ): PetRouteDeps {
-  return { voice: { listVoices: () => VOICES, speak }, speech: { hear } } as unknown as PetRouteDeps;
+  return {
+    voice: { list: () => CATALOG, speak },
+    speech: { hear, list: () => SPEECH_CATALOG },
+  } as unknown as PetRouteDeps;
 }
 
 /** Create a route input. */
@@ -22,23 +36,42 @@ function input(rest: string, method: string, body?: string) {
   return { url: new URL(`http://127.0.0.1:1/dsh-pet-7340/${rest}`), rest, method, body };
 }
 
-test('GET /voice/voices: Return to the tone list', async () => {
+test('GET /voice/hear-providers：返回识别实现目录', async () => {
   const result = await handleVoiceRoutes(
-    makeDeps(async () => ({ ok: true, file: '/x.mp3' })),
+    makeDeps(async () => ({ ok: true, file: '/x.mp3', contentType: 'audio/mpeg' })),
+    input('voice/hear-providers', 'GET'),
+  );
+  assert.equal(result?.kind, 'json');
+  if (result?.kind !== 'json') return;
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.obj, { ok: true, ...SPEECH_CATALOG });
+});
+
+test('GET /voice/voices：按 provider 分组返回音色目录', async () => {
+  const result = await handleVoiceRoutes(
+    makeDeps(async () => ({ ok: true, file: '/x.mp3', contentType: 'audio/mpeg' })),
     input('voice/voices', 'GET'),
   );
   assert.equal(result?.kind, 'json');
   if (result?.kind !== 'json') return;
   assert.equal(result.status, 200);
-  assert.deepEqual((result.obj as { voices: unknown }).voices, VOICES);
+  assert.deepEqual(result.obj, { ok: true, ...CATALOG });
 });
 
-test('POST /voice/speak Success: Return the mp3 file', async () => {
+test('POST /voice/speak 成功：交回音频文件与实现声明的 MIME', async () => {
   const result = await handleVoiceRoutes(
-    makeDeps(async () => ({ ok: true, file: '/cache/a.mp3' })),
+    makeDeps(async () => ({ ok: true, file: '/cache/a.mp3', contentType: 'audio/mpeg' })),
     input('voice/speak', 'POST', '{"text":"hi"}'),
   );
   assert.deepEqual(result, { kind: 'file', file: '/cache/a.mp3', contentType: 'audio/mpeg' });
+});
+
+test('POST /voice/speak 成功：WAV 实现的 MIME 原样透传，不在路由里写死', async () => {
+  const result = await handleVoiceRoutes(
+    makeDeps(async () => ({ ok: true, file: '/cache/a.wav', contentType: 'audio/wav' })),
+    input('voice/speak', 'POST', '{"text":"hi"}'),
+  );
+  assert.deepEqual(result, { kind: 'file', file: '/cache/a.wav', contentType: 'audio/wav' });
 });
 
 test('POST /voice/speak business failure: 200 + failed entity (not made into 4 xx)', async () => {
@@ -114,7 +147,7 @@ test('POST /voice/hear hand over the disconnect signal to the identification ser
   assert.equal(received, abort.signal, 'Recognition should be aborted when the caller is disconnected');
 });
 
-test('Wrong method: all three endpoints are 405', async () => {
+test('方法不对：四个端点都是 405', async () => {
   const speak = await handleVoiceRoutes(
     makeDeps(async () => ({ ok: true, file: '/x' })),
     input('voice/speak', 'GET'),
@@ -125,6 +158,11 @@ test('Wrong method: all three endpoints are 405', async () => {
     input('voice/voices', 'POST'),
   );
   assert.equal(voices?.kind === 'json' ? voices.status : 0, 405);
+  const providers = await handleVoiceRoutes(
+    makeDeps(async () => ({ ok: true, file: '/x' })),
+    input('voice/hear-providers', 'POST'),
+  );
+  assert.equal(providers?.kind === 'json' ? providers.status : 0, 405);
   const hear = await handleVoiceRoutes(
     makeDeps(async () => ({ ok: true, file: '/x' })),
     input('voice/hear', 'GET'),

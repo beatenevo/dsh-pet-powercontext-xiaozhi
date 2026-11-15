@@ -1,75 +1,70 @@
 /**
- * The register table of third-party voice implementation: single slot, the one registered later overwrites the one
- * registered first.
+ * 语音实现注册表：多槽，每个 provider id 一份，互不覆盖。
  *
- * Different from the balance register table, voice does not have a "match by service provider name" key - just say one
- * sentence and it is done. There is no semantics for multiple implementations to coexist, so here is a slot instead of
- * Map. Module singleton: register returns disposer; test with {@link resetVoiceProviders} to reset. Only registration
- * and search, no synthesis, no caching, no configuration reading.
+ * 插入顺序即注册顺序，目录按它输出；注销只删自己那条，迟到的注销不会顶掉后来者。
+ * 只登记与查找：不合成、不缓存、不读配置。内置的 edge 也走这里注册，没有特权路径。
  * @module dsh-pet/src/host/voice/registry
  */
+import {
+  limitedVoiceId,
+  splitVoiceId,
+  validateVoiceProvider,
+  type ResolvedVoice,
+  type VoiceCatalog,
+  type VoiceProvider,
+} from './types.ts';
 
-/** The name of the built-in implementation; it is used for caching keys and troubleshooting, and cannot be used by third parties. */
-export const BUILTIN_VOICE_ID = 'edge';
-
-/** Third-party voice implementation: given a text, mp3 bytes are returned. */
-export interface VoiceProvider {
-  /** Unique identifier; participates in the cache key, and the implementation will not hit the old audio. */
-  readonly id: string;
-  /** Display name, only used for troubleshooting. */
-  readonly name: string;
-  /**
-   * Synthesize a piece of text into mp3.
-   *
-   * Failure must throw an error - the host will be normalized to `generate-error` and recorded in the log; swallowing
-   * it yourself will make the upper layer think it is successful. Do not accept voices: `voiceName` is a whitelist
-   * implemented by the built-in, and third-party voices are determined by itself.
-   */
-  synthesize(input: { readonly text: string; readonly rate: string }): Promise<Uint8Array>;
-}
-
-/** Currently effective third-party implementation; `null` = no register, synthesis uses built-in implementation. */
-let current: VoiceProvider | null = null;
+/** 已注册的实现：provider id → 定义；Map 的插入顺序就是对外顺序。 */
+const providers = new Map<string, VoiceProvider>();
 
 /**
- * Register a third-party speech implementation, overriding the one currently in effect.
+ * 注册一个语音实现。
  *
- * @param def - implementation defined; `id` cannot have the same name as a built-in implementation (that would bump
- * cache keys together).
- * @returns logout function; it is only cleared when "this is still the current share". Late logout will not overthrow
- * latecomers.
- * When @throws { TypeError } is invalidly defined, `synthesize` is not a function or id has the same name as a
- * built-in.
+ * @param def - 实现定义；`id` 已被占用时拒绝，不做覆盖。
+ * @returns 注销函数；只在「当前仍是这一份」时才清空自己那条。
+ * @throws {TypeError} 定义不合法或 `id` 已被注册时。
  */
 export function registerVoiceProvider(def: VoiceProvider): () => void {
-  if (!def || typeof def !== 'object') throw new TypeError('Voice provider definition must be an object');
-  if (typeof def.id !== 'string' || def.id.length === 0) throw new TypeError('id must be a nonempty string');
-  if (def.id === BUILTIN_VOICE_ID)
-    throw new TypeError('Cannot reuse a built-in implementation name: ' + BUILTIN_VOICE_ID);
-  if (typeof def.synthesize !== 'function') throw new TypeError('synthesize must be a function');
-
-  current = def;
+  validateVoiceProvider(def);
+  if (providers.has(def.id)) throw new TypeError(`provider id 已被注册: ${def.id}`);
+  providers.set(def.id, def);
   return () => {
-    if (current === def) current = null;
+    if (providers.get(def.id) === def) providers.delete(def.id);
   };
 }
 
 /**
- * Which third-party implementation should be used currently.
- * The implementation of @returns has been registered; when it is not registered, it returns `null` , and the caller
- * falls back to the built-in implementation accordingly.
+ * 按限定 id 查找实现与音色。
+ *
+ * @param limitedId - `providerId/voiceId` 形态的音色 id。
+ * @returns 命中时给出实现、音色与原始限定 id；provider 或音色任一缺失时返回 `undefined`。
  */
-export function activeVoiceProvider(): VoiceProvider | null {
-  return current;
+export function resolveVoice(limitedId: string): ResolvedVoice | undefined {
+  const parts = splitVoiceId(limitedId);
+  if (!parts) return undefined;
+  const provider = providers.get(parts.providerId);
+  if (!provider) return undefined;
+  const voice = provider.voices.find((item) => item.id === parts.voiceId);
+  if (!voice) return undefined;
+  return { provider, voice, limitedId };
 }
 
 /**
- * List the available implementations for troubleshooting "Why didn't I register the one?"
- * @returns `builtin` is always a built-in implementation; `external` is the currently effective third-party id (if
- * not, it is an empty array).
+ * 当前可用的完整音色目录；Cordis `list()` 与 `GET /voice/voices` 共用这一份。
+ * @returns 按注册顺序分组的目录；没有注册时 `providers` 为空数组。
  */
-export function listVoiceProviders(): { builtin: string[]; external: string[] } {
-  return { builtin: [BUILTIN_VOICE_ID], external: current ? [current.id] : [] };
+export function listCatalog(): VoiceCatalog {
+  return {
+    providers: [...providers.values()].map((provider) => ({
+      id: provider.id,
+      name: provider.name,
+      voices: provider.voices.map((voice) => ({
+        id: limitedVoiceId(provider.id, voice.id),
+        name: voice.name,
+        ...(voice.tag === undefined ? {} : { tag: voice.tag }),
+      })),
+    })),
+  };
 }
 
 /**
@@ -77,5 +72,5 @@ export function listVoiceProviders(): { builtin: string[]; external: string[] } 
  * @internal
  */
 export function resetVoiceProviders(): void {
-  current = null;
+  providers.clear();
 }

@@ -1,6 +1,6 @@
 /** Shared, non-secret settings for the optional long-term memory backend. */
 export interface ChatMemoryConfig {
-  backend: 'native' | 'powercontext';
+  backend: 'native' | 'powercontext' | 'dsh-powercontext';
   /** UTF-8 bytes of recent message bodies; zero retains the existing round-only limit. */
   maxHistoryBytes: number;
   serverUrl: string;
@@ -44,7 +44,7 @@ export function chatMemoryConfigValid(value: unknown): value is ChatMemoryConfig
     typeof config[key] === 'number' && Number.isInteger(config[key]) && config[key] >= min && config[key] <= max;
   return (
     Object.keys(config).every((key) => Object.prototype.hasOwnProperty.call(DEFAULT_CHAT_MEMORY, key)) &&
-    (config.backend === 'native' || config.backend === 'powercontext') &&
+    ['native', 'powercontext', 'dsh-powercontext'].includes(String(config.backend)) &&
     memoryServerUrlValid(config.serverUrl) &&
     integer('maxHistoryBytes', 0, 131072) &&
     integer('maxRecallBytes', 512, 32768) &&

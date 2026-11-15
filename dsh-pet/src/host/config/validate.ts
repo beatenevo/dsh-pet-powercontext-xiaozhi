@@ -7,12 +7,15 @@
  * @module dsh-pet/src/host/config/validate
  */
 import { FONT_SIZE_MAX, FONT_SIZE_MIN } from '../../shared/fonts.ts';
-import { isKnownVoice } from '../voice/voices.ts';
+import { VOICE_ID_PATTERN } from '../voice/types.ts';
 import { FONT_FAMILY_SET } from './constants.ts';
 import { chatMemoryConfigValid } from '../../shared/chat-memory-config.ts';
 
 /** The number of slots for the built-in gameplay animation: `animations.baifan` must be exactly this many (the order is the gameplay contract, see shared/types’s Animations). */
 const ACTIVITY_SLOTS = 5;
+
+/** 天气城市覆盖的最大长度：再长不可能是个地名。 */
+const ENVIRONMENT_CITY_MAX_LENGTH = 32;
 
 /** animations segment integrity check (same set of rules as the old assertAnimationsHost; not throw, invalid return false) */
 function animationsValid(a: unknown): boolean {
@@ -194,6 +197,9 @@ export function topFieldValid(key: string, value: unknown): boolean {
     }
     case 'notificationsEnabled':
       return typeof value === 'boolean';
+    case 'notifyWhenFocused':
+      // 前台聚焦时也提醒（全局布尔，只读 main 条目）：只在 main 顶层生效，缺键按 false 处理
+      return typeof value === 'boolean';
     case 'clickSoundEnabled':
       // Click sound effect switch (global Boolean, read-only main entry): same set of verification as notificationsEnabled
       return typeof value === 'boolean';
@@ -203,8 +209,9 @@ export function topFieldValid(key: string, value: unknown): boolean {
       // Voice broadcast switch (global Boolean): only determines whether to read or not, does not affect bubbles and memory
       return typeof value === 'boolean';
     case 'voiceName':
-      // The voice must be id in the whitelist; if written incorrectly, it is invalid. The reading side will fallback to the default voice and an warning will be issued.
-      return typeof value === 'string' && isKnownVoice(value);
+      // 音色必须是「provider/音色」形态；存在性交给语音服务解析时判——配置校验拿不到运行时注册表，
+      // 把注册表状态塞进这里会让同一份配置在不同启动顺序下合法与否不一致。
+      return typeof value === 'string' && VOICE_ID_PATTERN.test(value);
     case 'voiceVolume':
       // Playback volume coefficient: a finite number of 0–1, the same dimension as Audio.volume; out of bounds is invalid (no clamping, read side fallback default)
       return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
@@ -217,6 +224,13 @@ export function topFieldValid(key: string, value: unknown): boolean {
     case 'voiceNotifyEnabled':
       // Working status broadcast switch (global Boolean): only determines whether to read the three levels of completion / error / waiting for confirmation, and does not affect the system notification pop-up window
       return typeof value === 'boolean';
+    case 'speechProvider':
+      // 识别实现 id；只验形态，存在性由 hear 解析时判——配置校验拿不到运行时注册表
+      return typeof value === 'string' && value.trim().length > 0;
+    case 'environmentCity':
+      // 天气城市覆盖：空串合法（= 跟随 IP 自动定位），所以不判非空；
+      // 只限长度——再长不可能是个地名，而地名能不能查到是上游的事，不该在这里预判
+      return typeof value === 'string' && value.trim().length <= ENVIRONMENT_CITY_MAX_LENGTH;
     case 'chatImageEnabled':
       return typeof value === 'boolean';
     case 'chatAnimationEnabled':

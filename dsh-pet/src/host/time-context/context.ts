@@ -2,8 +2,8 @@
  * Text assembly: spell the hit festivals, solar terms and time periods into one sentence, and also provide the
  * time prefix for historical news.
  *
- * Do not read clock, do not touch IO; candidate provided by ./lunar. This must always be true: multiple calls on the
- * same date will produce consistent results, regardless of the order of calls.
+ * 不读时钟、不碰 IO；候选由 ./lunar 提供，城市与天气由调用方查好后经 env 传入。
+ * 必须始终成立：同一日期多次调用结果一致，不依赖调用顺序；不传 env 时输出与加入环境前逐字相同。
  * @module dsh-pet/src/host/time-context/context
  */
 import { MAX_AHEAD, MAX_LOOKBACK, SEASON_ENTRIES } from './entries.ts';
@@ -21,6 +21,30 @@ import {
   timeSlotOf,
 } from './constants.ts';
 import { dayOfYear, dayOfYearOf, entriesAt } from './lunar.ts';
+
+/** 时间行里附带的环境事实（城市与天气）。 */
+export interface TimeContextEnv {
+  /** 省 / 州（如“江西省”）；缺省 = 不知道省份，地点只写城市。 */
+  readonly region?: string;
+  /** 市（如“南昌市”）；缺省 = 不知道在哪，连“你在……”一起省掉。 */
+  readonly city?: string;
+  /** 此刻天气；缺省 = 没有可用天气，只写一句“这次没查到”的交代，防止模型自己编。 */
+  readonly weather?: WeatherFacts;
+}
+
+/** 天气事实：只用于拼一句口语，不承诺展示格式。 */
+export interface WeatherFacts {
+  /** 天气短语（如“阴”）。 */
+  readonly summary: string;
+  /** 气温（°C）。 */
+  readonly temperatureC: number;
+  /** 体感温度（°C）。 */
+  readonly apparentC: number;
+  /** 相对湿度（%）。 */
+  readonly humidityPercent: number;
+  /** 风速（km/h）。 */
+  readonly windKph: number;
+}
 
 /**
  * Phase → clause wording.
@@ -106,21 +130,69 @@ function holidayClauseOf(date: Date): string {
   return best ? best.clause : '';
 }
 
+/** 数值转口语：整数不带小数点，非整数留一位。 */
+function numText(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
 /**
- * Generate time context (one line) injected at the end of system.
- * @param date - Current time (production caller passes new Date(); test passes fixed date).
- * @returns shaped like
- * `【当下】现在是2026年10月8日星期四 21:32，晚上，工作日，国庆节刚过完。这只是背景，不必刻意报时，也别句句都提节日。` The middle paragraph is omitted when there is no
- * holiday; invalid Date → empty string (caller does not add this line accordingly).
+ * 地点短语：省 + 市。
+ *
+ * 省市互相包含时只留一个（“北京市 / 北京”不该写成“北京市北京”），拉丁文地名之间补空格。
+ * 拼装留给提示词这一层：宿主的 /environment 只给两段原始数据。
+ *
+ * @param region - 省 / 州；空串或缺省表示没有这一段。
+ * @param city - 市；空串或缺省表示不知道在哪。
+ * @returns 展示用地点；城市未知时 undefined。
  */
-export function timeContextOf(date: Date): string {
+function placeTextOf(region: string | undefined, city: string | undefined): string | undefined {
+  if (city === undefined || city === '') return undefined;
+  if (region === undefined || region === '' || region === city) return city;
+  if (region.includes(city)) return region;
+  if (city.includes(region)) return city;
+  return /[\u4e00-\u9fa5]$/u.test(region) ? region + city : region + ' ' + city;
+}
+
+/** 天气从句：有数据时拼一句口语，没有时给出“别编”的交代。 */
+function weatherClauseOf(weather: WeatherFacts | undefined): string {
+  if (weather === undefined) return '外面的天气这次没查到，主人问起就说不知道、别编';
+  return (
+    '外面' +
+    weather.summary +
+    '，气温 ' +
+    numText(weather.temperatureC) +
+    '°C，体感 ' +
+    numText(weather.apparentC) +
+    '°C，湿度 ' +
+    numText(weather.humidityPercent) +
+    '%，风速 ' +
+    numText(weather.windKph) +
+    ' km/h'
+  );
+}
+
+/**
+ * 生成注入 system 末尾的时间背景（一行）。
+ * @param date - 当前时刻（生产调用方传 new Date()；测试传固定日期）。
+ * @param env - 可选的环境事实：传了就多写地点与天气，不传则与加入环境前逐字一致。
+ * @returns 形如
+ *   `【当下】你在江西省南昌市（按网络粗估，不一定准），现在是2026年10月8日星期四 21:32，晚上，工作日，外面阴，气温 13.1°C，体感 12.9°C，湿度 84%，风速 2 km/h。这只是背景，……`
+ *   无节日时中间那一段省略；非法 Date → 空串（调用方据此不加这一行）。
+ */
+export function timeContextOf(date: Date, env?: TimeContextEnv): string {
   // getFullYear()/ getDay() of invalid Date both return NaN, and direct combination will produce "NaN year NaN month" - explicitly blocked
   if (Number.isNaN(date.getTime())) return '';
   const day = date.getDay();
   const hour = date.getHours();
   const holiday = holidayClauseOf(date);
+  // 地点带“粗估”括号：城市来自 IP 而不是主人亲口说的，不说明的话模型会当成事实报出来
+  const placeName = placeTextOf(env?.region, env?.city);
+  const place = placeName === undefined ? '' : '你在' + placeName + '（按网络粗估，不一定准），';
+  const weather = env === undefined ? '' : '，' + weatherClauseOf(env.weather);
   return (
-    '【当下】现在是' +
+    '【当下】' +
+    place +
+    '现在是' +
     date.getFullYear() +
     '年' +
     (date.getMonth() + 1) +
@@ -137,7 +209,10 @@ export function timeContextOf(date: Date): string {
     '，' +
     dayKindOf(day) +
     (holiday ? '，' + holiday : '') +
-    '。这只是背景，不必刻意报时，也别句句都提节日——多数时候正常说话就好，真贴切时才顺口带一句。'
+    weather +
+    '。这只是背景，不必刻意报时，也别句句都提节日' +
+    (env === undefined ? '' : '或天气') +
+    '——多数时候正常说话就好，真贴切时才顺口带一句。'
   );
 }
 

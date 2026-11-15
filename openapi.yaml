@@ -13,7 +13,9 @@ info:
 
     In DSH, `{port}` is `ctx.webServer.port`; use the address printed by `dsh web`.
     The plugin does not choose DSH's bind address or bypass DSH authentication. Use the host's
-    authenticated session. Do not assume a loopback address makes a request unauthenticated.
+    authenticated session. DSH pet HTTP routes enforce the host connection authentication for reads and writes;
+    unauthenticated requests return 401 and rejected origins return 403 before reaching pet handlers.
+    The desktop helper uses its existing host IPC bridge. Do not assume a loopback address makes a request unauthenticated.
 
     Standalone binds to loopback, checks request origins and requires its local capability
     credential for protected operations. Its setup URL is a credential: do not publish or log it.
@@ -75,7 +77,58 @@ tags:
   - name: Voice
     description: Speech synthesis with host-side validation, queuing and caching; returns MP3 on success
 
+  - name: Robot
+    description: Optional Astra Pro 2.0 operator controls and status
+
 paths:
+  /dsh-pet-7340/robot:
+    get:
+      tags:
+        - Robot
+      operationId: getRobot
+      summary: Read cached Astra Pro 2.0 state and receipts
+      description: >-
+        Requires the standalone session token/cookie or DSH host access. Does not send RPCs. Connection
+        freshness expires after 15 seconds.
+      responses:
+        "200":
+          description: Current state or business failure. Inspect ok; command acceptance is not physical completion.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/RobotSnapshot"
+                  - $ref: "#/components/schemas/FailureResponse"
+    post:
+      tags:
+        - Robot
+      operationId: controlRobot
+      summary: Configure, check, authorize or explicitly operate the robot
+      description: >-
+        JSON and same-site browser requests only. The DSH host access policy applies; standalone requires its
+        session token/cookie. Modes are never automatically resumed. A changed configuration starts a new
+        session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RobotRequest"
+      responses:
+        "200":
+          description: Current state or business failure. Inspect ok; command acceptance is not physical completion.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/RobotSnapshot"
+                  - $ref: "#/components/schemas/FailureResponse"
+        "400":
+          description: Invalid URL or JSON syntax
+        "403":
+          description: Standalone authentication or cross-site request rejected
+        "415":
+          description: JSON required or cross-site browser request rejected
   /dsh-pet-7340/state:
     get:
       tags: [State]
@@ -251,13 +304,26 @@ paths:
         Use the **service provider you are currently talking to** (`ctx.agentDefaultModel.currentSelection()`) to check your balance.
         And write the result into `sections.balance`. This is the `POST` action endpoint, which does not return balance data.
 
-        - When the balance is unavailable (the service provider does not support it/the credentials are missing/the capture failed), S is also written,
-          Expressed in the form of `{ ok: false, reason, message }`; at this time, this endpoint still returns `ok: true` **,
-          Because the "refresh action itself" is completed. To distinguish, read `sections.balance.data.ok`.
-        - The `manual: true` mark will be added when writing (only when this refresh is actively triggered by the user),
-           Based on this, the consumer decides whether to have to display a text explanation when the balance is unavailable.
-        - Regular periodic refresh is completed by the host **own timer** (the period comes from the configuration
-           `eventsRefreshSec.balance`, default 1800 seconds), the front end does not need to poll it.
+        - Unavailable balances also update state with `{ ok: false, reason, message }`.
+          This endpoint still returns `ok: true` when the refresh completes; inspect `sections.balance.data.ok` for availability.
+        - User-triggered refreshes include `manual: true` so clients can display unavailable-balance explanations.
+        - With `?pet=`, the state leaf includes `petId` and only that pet displays the bubble and animation.
+          Without it, all pets with balance display enabled receive the update.
+        - Scheduled refreshes use the host timer and `eventsRefreshSec.balance` (default 1800 seconds).
+      parameters:
+        - name: pet
+          in: query
+          required: false
+          description: Target pet ID. When supplied, the pet must exist and pass surface, lock and sleep checks.
+          schema:
+            type: string
+        - name: surface
+          in: query
+          required: false
+          description: Required with pet; missing or invalid values return bad-request. Ignored without pet.
+          schema:
+            type: string
+            enum: [web, desktop, both, any]
       responses:
         "200":
           description: The refresh action has been completed (does not mean the balance is available)
@@ -265,6 +331,68 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+  /dsh-pet-7340/environment:
+    post:
+      tags: [Action]
+      operationId: queryEnvironment
+      summary: Query the current city and weather
+      description: |
+        Return the configured city or approximate IP location and current weather.
+        Queries prefer UAPI, falling back to IP location and Open-Meteo without requiring a user API key.
+
+        - Without `pet`, this is a query only and does not update state.
+        - With `pet`, validate identity, surface, lock and sleep state, then update `sections.env`.
+          Its `petId` selects the pet that displays the weather bubble.
+        - `fresh=1` bypasses caches. UAPI results normally last 10 minutes; fallback city, coordinates and
+          weather caches last 6 hours, 7 days and 1 hour respectively.
+        - `ip=1` ignores `environmentCity` and detects the current IP location, as used by the settings detection action.
+        - Unavailable region, city or weather fields are omitted from an otherwise successful result.
+      parameters:
+        - name: pet
+          in: query
+          required: false
+          description: |
+            Target pet ID. Omit for a query without state updates; supplied IDs must exist and pass admission checks.
+          schema:
+            type: string
+        - name: fresh
+          in: query
+          required: false
+          description: |
+            `1` bypasses caches, as used by the weather menu action. Omitted or other values use cached results.
+          schema:
+            type: string
+            enum: ["0", "1"]
+        - name: ip
+          in: query
+          required: false
+          description: |
+            `1` ignores environmentCity and uses IP location. Otherwise, the configured city takes precedence.
+          schema:
+            type: string
+            enum: ["0", "1"]
+        - name: surface
+          in: query
+          required: false
+          description: |
+            Display surface, required with pet. Missing or invalid values return bad-request. Ignored without pet.
+          schema:
+            type: string
+            enum: [web, desktop, both, any]
+      responses:
+        "200":
+          description: |
+            Business results use HTTP 200 and express failure with ok=false. Reasons are unknown-pet,
+            pet-not-displayed, locked, sleeping (with a refusal message), or generate-error (configuration read failure).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/EnvironmentResponse"
+                  - $ref: "#/components/schemas/FailureResponse"
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
 
@@ -1514,10 +1642,16 @@ paths:
         Return the pet's most recent rounds of dialogue (**one-time reading, not polling**) for backfilling the history when the dialogue pop-up window is opened.
 
         The only reader and writer of the memory is the host (persist to disk at `memory.json`). Both the browser and the desktop are just clients.
-        Therefore, both ends of the same DSH instance naturally share the same memory. Keep all files and do not delete them.
+        Both ends share the same local archive. Shared DSH mode returns only the resolved connection/workspace/Scope partition.
+        If unresolved, it returns only local fallback messages for that session and contextRounds is zero.
+        Native and independent PowerContext modes exclude shared project messages; changing mode preserves all archived data.
         Just press `chatMemoryRounds` (default 5 rounds, 1 round = 1 question 1 answer) when responding to intercept the tail;
         If `?rounds=` is passed, it will be intercepted according to the incoming value (only affects this reading and does not change the number of context rounds of subsequent conversations).
       parameters:
+        - name: session
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 256 }
+          description: Visible DSH session ID. The host resolves its workspace and Scope; no client-supplied Scope or URL is accepted. Optional outside shared DSH memory mode.
         - $ref: "#/components/parameters/PetIdQuery"
         - name: rounds
           in: query
@@ -1591,6 +1725,10 @@ paths:
           When the model write-only tag has no text, it only performs actions and does not play bubbles. Independent from the map switch: both can take effect at the same time,
           You can also open just one.
       parameters:
+        - name: session
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 256 }
+          description: Visible DSH session ID. The host resolves its workspace and Scope; no client-supplied Scope or URL is accepted. Optional outside shared DSH memory mode.
         - $ref: "#/components/parameters/PetIdQuery"
         - $ref: "#/components/parameters/SurfaceQuery"
       requestBody:
@@ -1768,7 +1906,12 @@ paths:
       description: |
         Return synchronization and recall counts/status for the selected pet, without conversation text.
         A captured exchange means PowerContext accepted its Source; extraction and later recall are separate steps.
+        In dsh-powercontext mode, report read-only project recall and safe recovery codes; capture counters are zero.
       parameters:
+        - name: session
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 256 }
+          description: Visible DSH session ID. The host resolves its workspace and Scope; no client-supplied Scope or URL is accepted. Optional outside shared DSH memory mode.
         - name: pet
           in: query
           required: true
@@ -1788,6 +1931,7 @@ paths:
       summary: Retry pending pet memory synchronization
       description: |
         Retry up to two pending exchanges using their persisted Source IDs, then return the current status.
+        Shared DSH mode never uploads pet conversations; this is a no-op for synchronization.
         This operation does not directly trigger model extraction. A 409 identity conflict stops automatic
         retries and requires an administrator to resolve the conflicting identity.
       parameters:
@@ -2010,10 +2154,10 @@ paths:
 
         - **Only whitelist fields will be retained**: `pets[]` / `id` / `name` / `size` / `sizePercent` / `balanceEnabled` /
            `whisperEnabled` / `workStatusEnabled` / `fixedEnabled` / `display` / `position`, and the top layer
-           `notificationsEnabled` / `clickSoundEnabled` / `whisperImageEnabled` / `chatImageEnabled` /
-           `chatAnimationEnabled` / `confineToScreen` / `trayEnabled` / `voiceEnabled` / `voiceName` / `voiceWhisperEnabled` /
+           `notificationsEnabled` / `notifyWhenFocused` / `clickSoundEnabled` / `whisperImageEnabled` / `chatImageEnabled` /
+           `chatAnimationEnabled` / `confineToScreen` / `trayEnabled` / `voiceEnabled` / `voiceName` / `speechProvider` / `voiceWhisperEnabled` /
            `voiceTodoEnabled`/`voiceNotifyEnabled`/`physics`/`font`/`whisperModel`/`chatModel`/`chatMemoryRounds`/
-           `chatImageLimit`/`chatMemory`.
+           `chatImageLimit`/`chatMemory`/`environmentCity`.
           The remaining fields will use the original values in the user file on disk (retained through transparent transmission), so the settings page is saved
           **Won’t erase** your handwritten fine-tuning configuration (`whisperPrompt` / `memes` / `eventsRefreshSec`, etc.).
           The whitelist field is only considered whitelisted when the request body is actually passed: if it is not passed, it will be passed through and will not be erased to the default value.
@@ -2056,6 +2200,7 @@ paths:
                         marginX: 24
                         marginY: 24
                   notificationsEnabled: true
+                  notifyWhenFocused: false
                   whisperImageEnabled: true
                   chatImageEnabled: true
       responses:
@@ -2501,13 +2646,18 @@ paths:
       description: |
         The inverse of `/voice/speak`: audio in, text out.
 
-        Recognition comes from the host speech service. If the voice-input plugin is not enabled, return `unsupported`, not a recognition failure.
+        Multiple recognizers can coexist through `petApi7340.speech.register`.
+        Discover registered implementations through `/voice/hear-providers`.
+        When omitted, `provider` uses `main.speechProvider`; an unknown selection returns `bad-request` without switching providers.
 
-        Supply base64-encoded 16 kHz mono PCM16 WAV in `audio`. Other containers (MP3/WebM/OGG) and sample rates are rejected by the host recognizer; format failures return `generate-error` with its explanation.
+        Supply base64-encoded 16 kHz mono PCM16 WAV in `audio`. The selected implementation validates the format;
+        unsupported containers or sample rates return `generate-error`. Language is detected by the implementation.
+        Decoded audio is limited to 7 MiB (about 200 seconds), within the 10 MiB request-body limit after base64 encoding.
+        Recognition processes the complete recording without streaming.
 
-        Decoded audio must be at most 768 KiB, about 24 seconds. Base64 expands it by roughly one third against the 1 MiB request-body limit. Recognition processes the full clip without streaming.
-
-        Invalid parameters return `bad-request`, unavailable capability returns `unsupported`, and recognizer errors return `generate-error`. These are HTTP 200 with `{ ok: false, reason, message }`; invalid JSON returns 400 and unsupported methods return 405.
+        Invalid parameters return `bad-request`, missing capabilities or credentials return `unsupported`,
+        and recognition failures return `generate-error`. These use HTTP 200 with `{ ok: false, reason, message }`.
+        Invalid JSON returns 400; unsupported methods return 405.
       requestBody:
         required: true
         content:
@@ -2519,16 +2669,16 @@ paths:
               properties:
                 audio:
                   type: string
-                  description: 16 kHz/mono/PCM16 WAV of base64; decoded upper limit 768 KiB.
-                language:
+                  description: Base64-encoded 16 kHz mono PCM16 WAV; decoded limit 7 MiB (about 200 seconds).
+                provider:
                   type: string
-                  description: Language prompt, such as `zh` / `en`; the default is determined by the host identifier.
+                  description: Recognizer ID from /voice/hear-providers; defaults to main.speechProvider.
       responses:
         "200":
           description: |
-            `{ ok: true, text }` when successful; `{ ok: false, reason, message }` when failed.
-             reason value `bad-request` (invalid parameter)/`unsupported` (no recognizer available for host)/
-             `generate-error` (Recognizer failed or timed out).
+            `{ ok: true, text }` on success; `{ ok: false, reason, message }` on failure.
+            Reasons are `bad-request` (invalid parameters), `unsupported` (missing plugin, key or ready model),
+            and `generate-error` (recognition failed or timed out).
           content:
             application/json:
               schema:
@@ -2551,25 +2701,56 @@ paths:
         "405":
           description: Method is not POST.
 
+  /dsh-pet-7340/voice/hear-providers:
+    get:
+      tags: [Voice]
+      operationId: getHearProviders
+      summary: List available speech recognizers
+      description: Use this catalog for the /voice/hear provider selector instead of hardcoding IDs.
+      responses:
+        "200":
+          description: Recognizer catalog in registration order.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, providers]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+                  providers:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name]
+                      properties:
+                        id:
+                          type: string
+                          description: Provider ID, such as dsh, saved in main.speechProvider.
+                        name:
+                          type: string
+                          description: Display name for the recognizer.
+        "405":
+          description: Method is not GET.
+
   /dsh-pet-7340/voice/speak:
     post:
       tags: [Voice]
       operationId: synthesizeVoice
       summary: synthesize a piece of speech
       description: |
-        Synthesize a Chinese text into mp3, and return the file body directly when successful.
+        Synthesize text into mp3 or wav and return the audio bytes on success.
 
-        - ** The synthesis source can be overwritten by third parties**: The host plugin can be served by Cordis via `petApi7340.voice.register`
-           Register your own implementation; after registering, this endpoint will use this implementation, and if not registering, it will use the built-in implementation. Both sides return mp3,
-           There is no need to distinguish caller.
-        - During the overwriting period, the `voice` parameters do not take effect (the timbre is determined by the third-party implementation), but the verification conventions remain unchanged:
-          Invalid values are still rejected as `bad-request`.
-        - The third-party implementation must return mp3 bytes; browsers that return other formats cannot play them, and empty bytes are processed as `generate-error`.
-        - The same "source + timbre + speaking speed + text" will only be synthesized once, and it will no longer be connected to the Internet when it hits the cache; the source is the built-in implementation
-          or third party id , so old audio won't be hit after switching implementations.
-        - Synthesis is executed serially, with up to 3 queued at the same time; if exceeded, `voice-busy` is returned, and the caller can try again later.
-        - Parameter problems, queue fullness, and upstream failure are all business failures: HTTP 200 + `{ ok: false, reason, message }`.
-        Only if the request body is not valid JSON, it will be 400, and if the method is incorrect, it will be 405.
+        - Providers coexist through `petApi7340.voice.register`; each declares its voices.
+          `/voice/voices` groups the catalog by provider.
+        - Voice IDs use `provider/voice`. An omitted `voice` uses `main.voiceName`.
+          Unknown or missing selections return `bad-request` without substituting a different voice.
+        - The provider declares mp3 or wav output; the response Content-Type matches that format.
+        - Qualified voice ID, rate and text form the cache key. Cached audio does not invoke the provider again.
+        - Synthesis is serial with at most three queued requests; overflow returns `voice-busy`.
+        - Invalid parameters, a full queue and provider failures return HTTP 200 with `{ ok: false, reason, message }`.
+          Invalid JSON returns 400; unsupported methods return 405.
       requestBody:
         required: true
         content:
@@ -2587,7 +2768,9 @@ paths:
                   maxLength: 500
                 voice:
                   type: string
-                  description: Tone id must come from `/voice/voices`; the default is `zh-CN-XiaoxiaoNeural`.
+                  description: |
+                    Qualified voice ID (`provider/voice`) from /voice/voices. Defaults to main.voiceName.
+                    Missing or unknown selections return bad-request.
                 rate:
                   type: string
                   description:
@@ -2597,10 +2780,14 @@ paths:
       responses:
         "200":
           description: |
-            mp3 audio on success; JSON `{ ok: false, reason, message }` on failure,
-             The value of reason is `bad-request` (invalid parameter)/`voice-busy` (queue is full)/`generate-error` (upstream failure or timeout).
+            mp3 or wav audio on success, as declared by the provider; JSON `{ ok: false, reason, message }` on failure.
+            Reasons are `bad-request` (invalid parameters), `voice-busy` (full queue), and `generate-error` (provider failure or timeout).
           content:
             audio/mpeg:
+              schema:
+                type: string
+                format: binary
+            audio/wav:
               schema:
                 type: string
                 format: binary
@@ -2625,36 +2812,47 @@ paths:
     get:
       tags: [Voice]
       operationId: getVoices
-      summary: List available sounds
-      description:
-        Same origin as the whitelist of `/voice/speak`; the front end renders the tone selector accordingly,
-        do not hardcode id.
+      summary: List available voices
+      description: |
+        Group registered voices by provider. Use each qualified ID in the voice selector and main.voiceName.
       responses:
         "200":
-          description: Voice list.
+          description: Voice catalog in provider registration order.
           content:
             application/json:
               schema:
                 type: object
-                required: [ok, voices]
+                required: [ok, providers]
                 properties:
                   ok:
                     type: boolean
                     const: true
-                  voices:
+                  providers:
                     type: array
                     items:
                       type: object
-                      required: [id, name, tag, default]
+                      required: [id, name, voices]
                       properties:
                         id:
                           type: string
+                          description: Provider ID, such as edge.
                         name:
                           type: string
-                        tag:
-                          type: string
-                        default:
-                          type: boolean
+                          description: Display name used as the settings group heading.
+                        voices:
+                          type: array
+                          items:
+                            type: object
+                            required: [id, name]
+                            properties:
+                              id:
+                                type: string
+                                description: Qualified ID, such as edge/zh-CN-XiaoyiNeural.
+                              name:
+                                type: string
+                              tag:
+                                type: string
+                                description: Optional subtitle describing the voice.
         "405":
           description: Method is not GET.
 
@@ -2793,7 +2991,7 @@ paths:
 
         - **Only belongs to pet pack **: `root=main` (built-in entry) is directly rejected - `pet/` directory does not accept built-in avatars.
           The built-in plugin always defaults to logo.
-        - **Upper limit 768 KiB (after decoding)**: The upper limit of the request body is 1 MiB, base64 expands by 4/3, so the original image is capped at about 750 KB;
+        - **Upper limit 768 KiB (after decoding)**: this limit is independent of the request-body limit.
           The settings page will first shrink the image to the long side 512 before uploading.
         - **Only verify "file avatar image + within budget"**: no cropping, no re-encoding, size and quality guaranteed by caller.
         - **Take effect immediately** after persisting to disk: It is not a configuration field, does not require `PUT /config`, and does not restart the desktop Helper.
@@ -2911,7 +3109,8 @@ paths:
       description: |
         Static image, two forms:
 
-        - `/dsh-pet-7340/pic/<name>.png` → **In package** `assets/pic/` (square png, used for system notification icon).
+        - `/dsh-pet-7340/pic/<name>.png` serves static images (including subdirectories).
+          `$DSH_HOME/dsh-pet/pic/` overrides bundled `assets/pic/` file by file, so upgrades preserve user images.
         - `/dsh-pet-7340/pic/memes/<asset-root>/<name>.png` → Meme image (whisper/picture for conversation pictures),
           Determine **asset ownership** according to the asset root, which has the same semantics as animation (`/thumb`):
           1. `pet/<asset-root>-memes/` exists (the category comes with its own meme): **Only check this directory**, if not found, `404` will report an explicit error.
@@ -3419,6 +3618,312 @@ components:
             $ref: "#/components/schemas/FailureResponse"
 
   schemas:
+    RobotAction:
+      type: object
+      additionalProperties: false
+      required:
+        - key
+        - name
+        - actionIds
+        - petAnimation
+      properties:
+        key:
+          type: string
+          pattern: ^[a-zA-Z0-9_-]{1,64}$
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        actionIds:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items:
+            type: integer
+            minimum: 0
+            maximum: 2147483647
+        petAnimation:
+          type: string
+          maxLength: 128
+    RobotConfig:
+      type: object
+      additionalProperties: false
+      required:
+        - enabled
+        - address
+        - python
+        - timeoutSeconds
+        - petId
+        - actions
+      properties:
+        enabled:
+          type: boolean
+        address:
+          type: string
+          maxLength: 255
+          description: Empty only when disabled; hostname or IPv4 followed by a port from 1 to 65535. IPv6 is not supported.
+        python:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          description: >-
+            Use bundled (default) for the private packaged runtime, or an explicit Python executable path
+            ending in python, python3, python3.11 or another numeric Python version, optionally .exe.
+            Missing bundled runtimes never fall back to system Python. No shell commands.
+        timeoutSeconds:
+          type: integer
+          minimum: 3
+          maximum: 120
+        petId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        actions:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/RobotAction"
+          description: Unique action keys; only manufacturer-verified taught IDs.
+    RobotTelemetry:
+      type: object
+      required:
+        - actionCode
+        - description
+        - modes
+      properties:
+        actionCode:
+          type: integer
+        description:
+          type: string
+          maxLength: 500
+        modes:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items:
+            type: integer
+          description: Body, left arm, right arm. Automatic mode is 1; idle action code is 520000.
+    RobotResult:
+      type: object
+      required:
+        - ok
+        - code
+        - message
+      properties:
+        ok:
+          type: boolean
+        code:
+          type: string
+          maxLength: 80
+        message:
+          type: string
+          maxLength: 1000
+        telemetry:
+          $ref: "#/components/schemas/RobotTelemetry"
+        stops:
+          type: object
+          additionalProperties:
+            type: object
+            required:
+              - ok
+              - message
+            properties:
+              ok:
+                type: boolean
+              message:
+                type: string
+                maxLength: 500
+          description: Individual planner, upperBody and agv acknowledgements; no physical standstill guarantee.
+    RobotCommand:
+      type: object
+      required:
+        - id
+        - kind
+        - key
+        - petId
+        - state
+        - startedAt
+        - message
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+            - execute
+            - speak
+        key:
+          type: string
+          maxLength: 80
+        petId:
+          type: string
+          maxLength: 128
+        state:
+          type: string
+          enum:
+            - running
+            - reported-success
+            - failed
+            - unknown
+        startedAt:
+          type: integer
+        finishedAt:
+          type: integer
+        message:
+          type: string
+          maxLength: 1000
+    RobotSnapshot:
+      type: object
+      required:
+        - ok
+        - session
+        - config
+        - armed
+        - busy
+        - checking
+        - stopping
+        - connected
+        - checkedAt
+        - error
+        - commands
+      properties:
+        ok:
+          const: true
+        session:
+          type: string
+          format: uuid
+        config:
+          $ref: "#/components/schemas/RobotConfig"
+        armed:
+          type: boolean
+        busy:
+          type: boolean
+        checking:
+          type: boolean
+        stopping:
+          type: boolean
+        connected:
+          type: boolean
+        checkedAt:
+          type: integer
+        telemetry:
+          $ref: "#/components/schemas/RobotTelemetry"
+        error:
+          type: string
+        stopResult:
+          $ref: "#/components/schemas/RobotResult"
+        commands:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/RobotCommand"
+    RobotRequest:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - action
+            - config
+          properties:
+            action:
+              const: configure
+            config:
+              $ref: "#/components/schemas/RobotConfig"
+        - type: object
+          additionalProperties: false
+          required:
+            - action
+          properties:
+            action:
+              const: check
+        - type: object
+          additionalProperties: false
+          required:
+            - action
+          properties:
+            action:
+              const: disarm
+        - type: object
+          additionalProperties: false
+          required:
+            - action
+          properties:
+            action:
+              const: stop
+        - type: object
+          additionalProperties: false
+          required:
+            - action
+            - session
+            - confirmed
+          properties:
+            action:
+              const: arm
+            session:
+              type: string
+              format: uuid
+            confirmed:
+              const: true
+        - type: object
+          additionalProperties: false
+          required:
+            - action
+            - session
+            - id
+            - key
+            - petId
+            - confirmed
+          properties:
+            action:
+              const: execute
+            session:
+              type: string
+              format: uuid
+            id:
+              type: string
+              format: uuid
+            key:
+              type: string
+              pattern: ^[a-zA-Z0-9_-]{1,64}$
+            petId:
+              type: string
+              minLength: 1
+              maxLength: 128
+            confirmed:
+              const: true
+        - type: object
+          additionalProperties: false
+          required:
+            - action
+            - session
+            - id
+            - text
+            - petId
+            - confirmed
+          properties:
+            action:
+              const: speak
+            session:
+              type: string
+              format: uuid
+            id:
+              type: string
+              format: uuid
+            text:
+              type: string
+              minLength: 1
+              maxLength: 500
+            petId:
+              type: string
+              minLength: 1
+              maxLength: 128
+            confirmed:
+              const: true
+      description: >-
+        No automatic retries. execute consumes one-shot motion authorization. Old sessions and conflicting
+        duplicate IDs are rejected. stop is independent of the movement worker and does not require enabled
+        monitoring or authorization.
     PetMemoryPage:
       type: object
       required: [ok, items, nextCursor]
@@ -3506,6 +4011,68 @@ components:
       description: |
         Generated successfully. The text is still written to `pets.<id>.say` - other consumers (web pages, desktops, third-party monitors)
         Continue reading from `/state`; the return value only saves the initiating party a round trip and does not change any existing display links.
+
+    EnvironmentWeather:
+      type: object
+      required:
+        [
+          city,
+          summary,
+          temperatureC,
+          apparentC,
+          humidityPercent,
+          windKph,
+          code,
+          observedAt,
+        ]
+      properties:
+        city:
+          type: string
+          description: Weather location name; spelling may differ from the IP location.
+        summary:
+          type: string
+          description: Short weather description, such as overcast.
+        temperatureC:
+          type: number
+          description: Air temperature in degrees Celsius.
+        apparentC:
+          type: number
+          description: Apparent temperature in degrees Celsius.
+        humidityPercent:
+          type: number
+          description: Relative humidity in percent.
+        windKph:
+          type: number
+          description: Wind speed in kilometers per hour.
+        code:
+          type: integer
+          description: WMO weather code used to select an icon.
+        observedAt:
+          type: string
+          description: Observation time as an ISO string in local station time without a timezone suffix.
+      description: Current weather snapshot matching the host WeatherSnapshot fields.
+
+    EnvironmentResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          const: true
+        region:
+          type: string
+          description: Province or state; omitted when unavailable.
+        city:
+          type: string
+          description: City; omitted when location is unavailable.
+        weather:
+          $ref: "#/components/schemas/EnvironmentWeather"
+        petId:
+          type: string
+          description: |
+            Present only with pet; the result has been written to sections.env for this pet to display.
+      description: |
+        Region and city are separate fields for clients to format. Unavailable fields are omitted rather than null.
 
     FailureResponse:
       type: object
@@ -4583,7 +5150,12 @@ components:
           timeoutMs,
         ]
       properties:
-        backend: { type: string, enum: [native, powercontext], default: native }
+        backend:
+          {
+            type: string,
+            enum: [native, powercontext, dsh-powercontext],
+            default: native,
+          }
         maxHistoryBytes:
           type: integer
           minimum: 0
@@ -4620,10 +5192,16 @@ components:
         ]
       properties:
         ok: { type: boolean, const: true }
-        backend: { type: string, enum: [native, powercontext] }
+        backend:
+          { type: string, enum: [native, powercontext, dsh-powercontext] }
         pending: { type: integer, minimum: 0 }
         captured: { type: integer, minimum: 0 }
         skipped: { type: integer, minimum: 0 }
+        workspace:
+          {
+            type: [string, "null"],
+            description: Display name of the current DSH workspace in shared mode.,
+          }
         scopeId: { type: [string, "null"] }
         recall: { type: string, enum: [not_run, empty, ready, unavailable] }
         error: { type: [string, "null"] }
@@ -4637,6 +5215,9 @@ components:
       type: object
       required: [role, content, ts]
       properties:
+        memoryBinding:
+          type: string
+          description: Opaque local context partition for shared DSH project messages. Missing on native messages.
         role:
           type: string
           enum: [user, assistant]
@@ -4795,6 +5376,11 @@ components:
             $ref: "#/components/schemas/PetEntry"
         notificationsEnabled:
           type: boolean
+        notifyWhenFocused:
+          type: boolean
+          description: |
+            When true, also show notifications and speak work status while the page is visible and focused.
+            Defaults to false, preserving existing behavior.
         whisperImageEnabled:
           type: boolean
         chatImageEnabled:
@@ -4815,8 +5401,16 @@ components:
         voiceName:
           type: string
           description: |
-            Tone id, the whitelist is one of the four Chinese timbres in `/voice/voices`; if it is written incorrectly or left blank, it means a configuration error.
-            Alert and fallback to `zh-CN-XiaoyiNeural`. It is written in the tone drop-down of the "Voice Broadcast" card on the settings page.
+            Qualified voice ID (`provider/voice`) from /voice/voices.
+            Empty or unknown selections fail synthesis with bad-request; no other voice is substituted.
+        environmentCity:
+          type: string
+          description: Weather city override, at most 32 characters after trimming. Empty uses IP location.
+        speechProvider:
+          type: string
+          description: |
+            Recognizer ID (such as dsh) from /voice/hear-providers.
+            Empty or unknown selections fail recognition with bad-request; no other provider is substituted.
         voiceVolume:
           type: number
           minimum: 0
@@ -4840,7 +5434,7 @@ components:
           type: boolean
           description: |
             Do you want to read out the working status report (global default): task completed / error / wait for you to confirm the state configuration.
-            Work status copy; same orientation as system notification, only read when the user is not on this page. Only read the configured lines, not `task`.
+            Work status copy; same orientation as system notification, read while focused only when notifyWhenFocused is enabled. Only read the configured lines, not `task`.
             This is what the "Notification Broadcast" switch in the "Voice Broadcast" card on the settings page says. Missing default `false`.
         chatMemoryRounds:
           type: integer

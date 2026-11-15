@@ -3,7 +3,13 @@
  */
 import type { Key } from './zh.ts';
 
+import { robotEn } from '../../robot/locales.ts';
+
+import { dshMemoryEn } from '../../dsh-memory-status.ts';
+
 export const ja: Record<Key, string> = {
+  ...dshMemoryEn,
+  ...robotEn,
   factsSourceNumber: '出典 {n}',
   factsUser: 'あなた',
   factsPet: 'ペット',

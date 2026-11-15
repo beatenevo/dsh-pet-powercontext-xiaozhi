@@ -12,7 +12,7 @@ import { postAction } from '../../../shared/state.ts';
 import { ROUTE_PATH } from '../../../shared/constants.ts';
 import { resolveFontPx } from '../../../shared/fonts.ts';
 import { resolvePetSizePx } from '../../../shared/pet-size.ts';
-import { makeBalanceBubble, makeWhisperBubble } from '../../bubble.ts';
+import { makeBalanceBubble, makeEnvBubble, makeWhisperBubble } from '../../bubble.ts';
 import { makeTodoBubble } from '../../todo-bubble.ts';
 import { petBridge } from '../../settings.ts';
 import { playClickSound } from '../click-sound.ts';
@@ -45,14 +45,16 @@ export function createCardRuntime(rt: PetRuntime) {
   const { h, useEffect, useRef, useState } = rt;
   /** Balance bubble: Data and display are passed in from the assembly root. */
   const BalanceBubble = makeBalanceBubble({ h, useState, useEffect });
-  /** whisper bubble: Text and visibility are passed in from the assembly root. */
-  const WhisperBubble = makeWhisperBubble({ h });
+  /** 环境气泡：按天气码画图标，数据与显隐由装配根传入。 */
+  const EnvBubble = makeEnvBubble({ h });
+  /** 碎碎念气泡：文本与显隐由装配根传入，戳破状态在组件内部。 */
+  const WhisperBubble = makeWhisperBubble({ h, useState, useEffect, useRef });
   /** To-do bubble: The panel body hangs on itself, and the close button callback assembly root. */
   const TodoBubble = makeTodoBubble({ h, useEffect, useRef });
   /** The single slots for the four bubbles: visibility, dwell time and priority are all here. */
   const useBubbleSlots = createBubbleSlots(
     { h, useState, useEffect, useRef },
-    { balanceBubble: BalanceBubble, todoBubble: TodoBubble, whisperBubble: WhisperBubble },
+    { balanceBubble: BalanceBubble, envBubble: EnvBubble, todoBubble: TodoBubble, whisperBubble: WhisperBubble },
   );
   const useCardState = createCardState({ useState, useRef });
   const useLockFreeze = createLockFreeze({ useEffect, useRef });
@@ -64,7 +66,8 @@ export function createCardRuntime(rt: PetRuntime) {
   const useCardEntry = createCardEntry({ useEffect, useRef });
 
   return function useCardRuntime(props: PetCardProps): CardViewProps {
-    const { arena, balance, balanceManual, cfg, lock, lockTick, menuItemsRef, sleep, sleepTick, workStatus } = props;
+    const { arena, balance, balanceManual, cfg, env, lock, lockTick, menuItemsRef, sleep, sleepTick, workStatus } =
+      props;
     const { onFocusSession } = props;
 
     // The actual rendering width: the percentage is only parsed once according to the current viewport width when
@@ -132,6 +135,7 @@ export function createCardRuntime(rt: PetRuntime) {
       balance,
       balanceEnabled: cfg.balanceEnabled,
       balanceManual,
+      env: env ?? null,
       workStatusEnabled: cfg.workStatusEnabled,
       workTerminal: workStatus?.state === 'success' || workStatus?.state === 'error',
       workSessionId: workStatus?.sessionId ?? null,

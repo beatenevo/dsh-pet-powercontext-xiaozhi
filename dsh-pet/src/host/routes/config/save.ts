@@ -15,6 +15,7 @@ import {
   userConfigUnparsable,
 } from '../../config.ts';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { resetUapiCache } from '../../uapi.ts';
 import { type RouteResult } from '../../http.ts';
 import type { PetRouteDeps, RouteInput } from '../types.ts';
 import { failResult, invalidJson, methodNotAllowed, okResult } from '../result.ts';
@@ -51,7 +52,7 @@ async function saveUserLayer(deps: PetRouteDeps, input: RouteInput): Promise<Rou
     if (!clean) {
       return failResult(
         'bad-request',
-        'invalid pet config: expected { pets:[{name?,id,size,sizePercent?,balanceEnabled,display,position:{corner,marginX,marginY}}] }（id 为非空字符串且去除首尾空白后唯一；sizePercent 可选，不小于 1 的数字；display 为 web/desktop/both/none 之一；可选顶层 notificationsEnabled / whisperImageEnabled / chatImageEnabled / chatAnimationEnabled / trayEnabled 布尔；可选宠物布尔 whisperEnabled / workStatusEnabled / fixedEnabled）',
+        'invalid pet config: expected { pets:[{name?,id,size,sizePercent?,balanceEnabled,display,position:{corner,marginX,marginY}}] }（id 为非空字符串且去除首尾空白后唯一；sizePercent 可选，不小于 1 的数字；display 为 web/desktop/both/none 之一；可选顶层 notificationsEnabled / notifyWhenFocused / whisperImageEnabled / chatImageEnabled / chatAnimationEnabled / trayEnabled 布尔；可选宠物布尔 whisperEnabled / workStatusEnabled / fixedEnabled）',
       );
     }
     // Damage pre-check: The user layer exists but even JSONC cannot be parsed (really damaged) → do not write to the
@@ -66,6 +67,8 @@ async function saveUserLayer(deps: PetRouteDeps, input: RouteInput): Promise<Rou
     }
     await mkdir(userRoot, { recursive: true });
     await writeFile(userConfigPath, JSON.stringify(clean, null, 2), 'utf8');
+    // Invalidate cached weather so the selected city takes effect on the next query.
+    resetUapiCache();
     void requestRestart(); // display/size and other possible changes: re-parse the desktop pet and restart Helper (asynchronous, not blocking the
     // save response) response body = saved resolved configuration (same as GET /config, the fields are filled): the
     // settings page is directly handed over to flattenConfigPets for flat rendering, and only this entry-level field of

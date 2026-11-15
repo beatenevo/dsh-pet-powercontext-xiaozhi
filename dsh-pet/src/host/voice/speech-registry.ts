@@ -1,75 +1,48 @@
 /**
- * Register table for third-party speech recognition: single slot, the one registered later overwrites the one
- * registered first.
+ * 语音识别注册表：多槽，每个 provider id 一份，互不覆盖。
  *
- * There is only one difference from the synthesis register table: the built-in source is `speechToText` of the host
- * (which may not exist at all), and is not an implementation built into the package, so the reserved name is `dsh`
- * instead of `edge` . Module singleton: register returns disposer; test with {@link resetSpeechProviders} to reset.
- * Only registration and search: no recognition, no queuing, no timeout (those belong to hear.ts).
+ * 插入顺序即注册顺序，目录按它输出；注销只删自己那条，迟到的注销不会顶掉后来者。
+ * 只登记与查找：不识别、不排队、不设超时（那些归 hear.ts）。
  * @module dsh-pet/src/host/voice/speech-registry
  */
+import { validateSpeechProvider, type SpeechCatalog, type SpeechProvider } from './speech-types.ts';
 
-/** The name of the built-in source: The host’s own identification capability cannot be used by third parties. */
-export const BUILTIN_SPEECH_ID = 'dsh';
-
-/** Third-party recognition implementation: given a segment of WAV, text is returned. */
-export interface SpeechProvider {
-  /** Unique identifier; involved in troubleshooting output, cannot have the same name as the built-in source. */
-  readonly id: string;
-  /** Display name, only used for troubleshooting. */
-  readonly name: string;
-  /**
-   * Recognize a paragraph WAV as text.
-   *
-   * Failure must throw an error - the host will be normalized to `generate-error` and recorded in the log; swallowing
-   * it yourself will make the upper layer think that the recognition is successful. Returning an empty string means
-   * "no one is talking in this paragraph", which is a valid result and does not constitute a failure. `signal` is the
-   * caller's abort signal: it can be ignored, but the host will stop waiting immediately.
-   */
-  transcribe(input: { readonly audio: Uint8Array; readonly language?: string }, signal?: AbortSignal): Promise<string>;
-}
-
-/** The currently effective third-party implementation; `null` = no register, and the host’s own capabilities are used for identification. */
-let current: SpeechProvider | null = null;
+/** 已注册的实现：provider id → 定义；Map 的插入顺序就是对外顺序。 */
+const providers = new Map<string, SpeechProvider>();
 
 /**
- * Register a third-party identification implementation, overriding the one currently in effect.
+ * 注册一个语音识别实现。
  *
- * @param def - Implementation defined; `id` cannot have the same name as a built-in source (it will be difficult to
- * tell who is running when troubleshooting).
- * @returns logout function; it is only cleared when "this is still the current share". Late logout will not overthrow
- * latecomers.
- * When @throws { TypeError } is invalidly defined, `transcribe` is not a function, or id has the same name as a
- * built-in source.
+ * @param def - 实现定义；`id` 已被占用时拒绝，不做覆盖。
+ * @returns 注销函数；只在「当前仍是这一份」时才清空自己那条。
+ * @throws {TypeError} 定义不合法或 `id` 已被注册时。
  */
 export function registerSpeechProvider(def: SpeechProvider): () => void {
-  if (!def || typeof def !== 'object') throw new TypeError('Speech provider definition must be an object');
-  if (typeof def.id !== 'string' || def.id.length === 0) throw new TypeError('id must be a nonempty string');
-  if (def.id === BUILTIN_SPEECH_ID) throw new TypeError('Cannot reuse a built-in source name: ' + BUILTIN_SPEECH_ID);
-  if (typeof def.transcribe !== 'function') throw new TypeError('transcribe must be a function');
-
-  current = def;
+  validateSpeechProvider(def);
+  if (providers.has(def.id)) throw new TypeError(`识别 provider id 已被注册: ${def.id}`);
+  providers.set(def.id, def);
   return () => {
-    if (current === def) current = null;
+    if (providers.get(def.id) === def) providers.delete(def.id);
   };
 }
 
 /**
- * Which third-party implementation should be used currently.
- * The implementation of @returns has been registered; when it is not registered, `null` is returned, and the caller
- * falls back to the host with its own capabilities.
+ * 按 id 查找实现。
+ * @param id - 注册时声明的 provider id。
+ * @returns 命中时给出定义；没注册过返回 `undefined`。
  */
-export function activeSpeechProvider(): SpeechProvider | null {
-  return current;
+export function resolveSpeechProvider(id: string): SpeechProvider | undefined {
+  return providers.get(id);
 }
 
 /**
- * List the available implementations for troubleshooting "Why didn't I register the one?"
- * @returns `builtin` is always the host's own source; `external` is the currently effective third-party id (if not, it
- * is an empty array).
+ * 当前可用的实现目录；Cordis `list()` 与 `GET /voice/hear-providers` 共用这一份。
+ * @returns 按注册顺序排列；没有注册时 `providers` 为空数组。
  */
-export function listSpeechProviders(): { builtin: string[]; external: string[] } {
-  return { builtin: [BUILTIN_SPEECH_ID], external: current ? [current.id] : [] };
+export function listSpeechCatalog(): SpeechCatalog {
+  return {
+    providers: [...providers.values()].map((provider) => ({ id: provider.id, name: provider.name })),
+  };
 }
 
 /**
@@ -77,5 +50,5 @@ export function listSpeechProviders(): { builtin: string[]; external: string[] }
  * @internal
  */
 export function resetSpeechProviders(): void {
-  current = null;
+  providers.clear();
 }

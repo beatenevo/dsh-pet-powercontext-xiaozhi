@@ -18,6 +18,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
+import { DEFAULT_CHAT_MEMORY } from '../shared/chat-memory-config.ts';
+import { DSH_MEMORY_PROTOCOL, DSH_MEMORY_SERVICE } from './dsh-memory.ts';
 import { createChatMemory, type ChatMemoryInput } from './plugin/chat-memory.ts';
 import type { ChatMemoryMessage } from './chat.ts';
 import type { ConfigPaths } from './config.ts';
@@ -78,9 +80,12 @@ function createMemory(
     records?: Array<{ petId: string; leaf: string; data: Record<string, unknown> }>;
   },
   captured?: Record<string, unknown>[],
+  getService?: (name: string) => unknown,
+  environment: ChatMemoryInput['environment'] = async () => ({}),
 ) {
   return createChatMemory({
-    ctx: fakeCtx(reply, captured),
+    environment,
+    ctx: { ...(fakeCtx(reply, captured) as object), ...(getService ? { get: getService } : {}) },
     configPaths: ws.configPaths,
     log: { info: () => {}, warn: () => {}, error: () => {} },
     memeDirsFor: () => (memeDir === undefined ? [] : [memeDir]),
@@ -633,4 +638,126 @@ describe('createChatMemory - Third-party memory provider', () => {
       rmSync(ws.dir, { recursive: true, force: true });
     }
   });
+});
+
+describe('optional DSH project memory', () => {
+  test('injects project memory, isolates project histories and never calls external capture', async () => {
+    const ws = tempWorkspace({
+      chatMemory: { ...DEFAULT_CHAT_MEMORY, backend: 'dsh-powercontext' },
+      chatMemoryRounds: 10,
+    });
+    const captured: Record<string, unknown>[] = [];
+    const calls: string[] = [];
+    const service = {
+      protocol: DSH_MEMORY_PROTOCOL,
+      prepare: async ({ sessionId }: { sessionId: string }) => {
+        calls.push(sessionId);
+        return {
+          status: 'ready',
+          bindingId: (sessionId === 'alpha' ? 'a' : 'b').repeat(64),
+          scopeId: sessionId,
+          workspace: sessionId,
+          content: sessionId + '-memory',
+        };
+      },
+    };
+    let externalCalls = 0;
+    const dispose = registerChatMemoryProvider({
+      id: 'unused',
+      recall: async () => {
+        externalCalls++;
+        return undefined;
+      },
+      capture: async () => {
+        externalCalls++;
+      },
+    });
+    try {
+      const memory = createMemory('answer', ws, undefined, undefined, captured, (name) =>
+        name === DSH_MEMORY_SERVICE ? service : undefined,
+      );
+      assert.equal((await memory.chatWithPet('main', 'alpha-question', undefined, 'alpha')).ok, true);
+      assert.equal((await memory.chatWithPet('main', 'beta-question', undefined, 'beta')).ok, true);
+      assert.equal((await memory.chatWithPet('main', 'alpha-followup', undefined, 'alpha')).ok, true);
+      assert.match(JSON.stringify(captured[0]), /alpha-memory/);
+      assert.doesNotMatch(JSON.stringify(captured[1]), /alpha-question|alpha-memory/);
+      assert.match(JSON.stringify(captured[2]), /alpha-question/);
+      assert.doesNotMatch(JSON.stringify(captured[2]), /beta-question|beta-memory/);
+      assert.deepEqual(calls, ['alpha', 'beta', 'alpha']);
+      assert.equal(externalCalls, 0);
+      const stored = JSON.parse(readFileSync(join(ws.userRoot, 'memory.json'), 'utf8'));
+      assert.equal(stored.main.main.powercontext, undefined);
+      writeFileSync(
+        ws.configPaths.userFile,
+        JSON.stringify({ chatMemory: { ...DEFAULT_CHAT_MEMORY }, chatMemoryRounds: 10 }),
+      );
+      await memory.chatWithPet('main', 'private-chat');
+      assert.doesNotMatch(JSON.stringify(captured[3]), /alpha-question|beta-question|alpha-memory/);
+      assert.equal(calls.length, 3);
+    } finally {
+      dispose();
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a missing plugin keeps ordinary chat available without leaking project history', async () => {
+    const ws = tempWorkspace({ chatMemory: { ...DEFAULT_CHAT_MEMORY, backend: 'dsh-powercontext' } });
+    const captured: Record<string, unknown>[] = [];
+    try {
+      const memory = createMemory('ordinary reply', ws, undefined, undefined, captured);
+      const result = await memory.chatWithPet('main', 'hello', undefined, 'alpha');
+      assert.deepEqual(result, { ok: true, text: 'ordinary reply' });
+      assert.equal(readMessages(ws.userRoot).length, 2);
+      assert.match(JSON.stringify(await memory.memoryStatus('main', 'alpha')), /plugin-missing/);
+      assert.doesNotMatch(JSON.stringify(captured), /prepared-context/);
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+});
+
+test('available environment facts are included in the chat prompt', async () => {
+  const ws = tempWorkspace();
+  const captured: Record<string, unknown>[] = [];
+  try {
+    const memory = createMemory('hello', ws, undefined, undefined, captured, undefined, async () => ({
+      city: 'TestCity',
+    }));
+    assert.equal((await memory.chatWithPet('main', 'hello')).ok, true);
+    assert.match(JSON.stringify(captured[0].system), /TestCity/);
+  } finally {
+    rmSync(ws.dir, { recursive: true, force: true });
+  }
+});
+
+test('unavailable weather cannot block a reply or local memory persistence', { timeout: 5000 }, async () => {
+  const ws = tempWorkspace();
+  try {
+    const memory = createMemory(
+      'still here',
+      ws,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => new Promise(() => {}),
+    );
+    const result = await memory.chatWithPet('main', 'hello offline');
+    assert.equal(result.ok, true);
+    assert.equal(readMessages(ws.userRoot).slice(-1)[0]?.content, 'still here');
+  } finally {
+    rmSync(ws.dir, { recursive: true, force: true });
+  }
+});
+
+test('failed environment lookup still generates a reply', async () => {
+  const ws = tempWorkspace();
+  try {
+    const memory = createMemory('still here', ws, undefined, undefined, undefined, undefined, async () => {
+      throw new Error('weather offline');
+    });
+    assert.equal((await memory.chatWithPet('main', 'hello')).ok, true);
+  } finally {
+    rmSync(ws.dir, { recursive: true, force: true });
+  }
 });

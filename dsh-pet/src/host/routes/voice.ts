@@ -16,7 +16,7 @@ export async function handleVoiceRoutes(deps: PetRouteDeps, input: RouteInput): 
 
   if (rest === 'voice/voices') {
     if (method !== 'GET') return methodNotAllowed();
-    return okResult({ ok: true, voices: deps.voice.listVoices() });
+    return okResult({ ok: true, ...deps.voice.list() });
   }
 
   if (rest === 'voice/speak') {
@@ -29,7 +29,13 @@ export async function handleVoiceRoutes(deps: PetRouteDeps, input: RouteInput): 
     }
     const result = await deps.voice.speak(parsed);
     if (!result.ok) return failResult(result.reason, result.message);
-    return { kind: 'file', file: result.file, contentType: 'audio/mpeg' };
+    return { kind: 'file', file: result.file, contentType: result.contentType };
+  }
+
+  // 识别实现的候选来源：与 /voice/hear 的 provider 字段同源，前端据此渲染下拉。
+  if (rest === 'voice/hear-providers') {
+    if (method !== 'GET') return methodNotAllowed();
+    return okResult({ ok: true, ...deps.speech.list() });
   }
 
   // The inverse of /voice/speak: audio in, text out. The host provider validates formats; this layer forwards the result.

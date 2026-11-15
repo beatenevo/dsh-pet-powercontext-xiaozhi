@@ -10,6 +10,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { jsx } from 'react/jsx-runtime';
 
+import { DEFAULT_CHAT_MEMORY } from '../../shared/chat-memory-config.ts';
 import { makeModelCard, type ChatFlagValues } from './model-card.ts';
 
 interface Node {
@@ -97,4 +98,27 @@ describe('ModelCard——Dialogue switch', () => {
     assert.equal(pickers.length, 2, 'Each of the two model grids has a selector');
     for (const picker of pickers) assert.equal(picker.props.disabled, true);
   });
+});
+
+test('offers optional DSH sharing and hides private connection inputs in that mode', () => {
+  let changed: unknown;
+  const tree = ModelCard(
+    props(allOff, {
+      longTermMemory: { ...DEFAULT_CHAT_MEMORY, backend: 'dsh-powercontext' },
+      onLongTermMemoryChange: (value: unknown) => {
+        changed = value;
+      },
+    }) as never,
+  );
+  const nodes = flatten(tree);
+  const select = nodes.find((node) => node.tag === 'select' && node.props.value === 'dsh-powercontext');
+  assert.ok(select);
+  assert.ok(nodes.some((node) => node.tag === 'option' && node.props.value === 'native'));
+  assert.ok(nodes.some((node) => node.tag === 'option' && node.props.value === 'dsh-powercontext'));
+  assert.equal(
+    nodes.some((node) => node.tag === 'input' && node.props.type === 'url'),
+    false,
+  );
+  (select.props.onChange as (event: { target: { value: string } }) => void)({ target: { value: 'native' } });
+  assert.deepEqual(changed, DEFAULT_CHAT_MEMORY);
 });

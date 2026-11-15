@@ -36,3 +36,9 @@ A saved memory store locks the embedding endpoint, model and dimensions. Key rot
 Keep the old store, prepare a separate PowerContext service with a new directory, re-ingest retained source conversations, and verify recall before changing the pet's memory server. There is no automatic vector migration. Switching back to the old URL restores access to the retained store.
 
 Next: [manage memory](memory.md) · [token budget](token-budget.md).
+
+## Standalone service profiles
+
+The AI settings service selector keeps separate keys and protocol/endpoint/model profiles for DeepSeek, opencode Go, CommandCode and Custom. Switching services restores their saved profile; balance queries follow the selected service. Custom remains available for the other providers and gateways described above. Existing flat settings migrate on load without changing the stored chat connection.
+
+Quick Start saves only the selected chat profile. Memory extraction and embeddings retain their separate configuration. The dedicated DeepSeek speech key is independent of chat; when absent, speech can reuse the active DeepSeek chat key.

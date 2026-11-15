@@ -1,5 +1,6 @@
 /** DSH Preparation process shared with independent applications; only local memory is managed when the chat service is not transmitted. */
 import { z } from 'zod';
+import { CUSTOM_SERVICE, serviceForEndpoint, serviceKeyName, type ServiceId } from './services.ts';
 import { memoryConfigBinding } from '../host/plugin/memory-binding.ts';
 import { ROUTE_SEGMENT } from '../shared/constants.ts';
 import { localModelKey } from '../shared/memory-presets.ts';
@@ -15,6 +16,19 @@ import {
   setupErrorCode,
   setupErrorMessage,
 } from './setup-models.ts';
+
+/** Map a checked setup connection to one provider profile without replacing other saved providers. */
+function chatSettingsPatch(
+  connection: { protocol: string; baseUrl: string; model: string; apiKey: string },
+  service: ServiceId,
+) {
+  const { protocol, baseUrl, model, apiKey } = connection;
+  return {
+    service,
+    profiles: { [service]: { protocol, baseUrl, model } },
+    ...(apiKey ? { keys: { [serviceKeyName(service)]: apiKey } } : { clearKey: true }),
+  };
+}
 
 const optionalKey = memoryModelsSchema.shape.apiKey.or(z.literal('')).default('');
 const generationSchema = memoryModelsSchema
@@ -211,7 +225,12 @@ export function createSetup(
     controller.signal.throwIfAborted();
     // A first-time user can chat while installing memory; existing working settings stay intact until commit.
     const previous = ai?.connectionForSetup();
-    if (ai && (!previous?.baseUrl || !previous.model || !previous.apiKey)) await ai.saveSettings(chat);
+    const service =
+      previous && sameModelEndpoint(previous.baseUrl, chat.baseUrl)
+        ? previous.service
+        : (serviceForEndpoint(chat.baseUrl)?.id ?? CUSTOM_SERVICE);
+    const chatPatch = chatSettingsPatch(chat, service);
+    if (ai && (!previous?.baseUrl || !previous.model || !previous.apiKey)) await ai.saveSettings(chatPatch);
     if (draft.memory) {
       progress('checking_embedding');
       await checkEmbedding(models!, controller.signal);
@@ -228,12 +247,11 @@ export function createSetup(
         if (url) await binding.save(url, true);
         else if (memory?.enabled) await binding.save(memory.url!, false);
         chatAttempted = !!ai;
-        await ai?.saveSettings(chat);
+        await ai?.saveSettings(chatPatch);
       } catch (error) {
         try {
           await restoreBinding();
-          if (chatAttempted && oldChat)
-            await ai!.saveSettings({ ...oldChat, ...(!oldChat.apiKey ? { clearApiKey: true } : {}) });
+          if (chatAttempted && oldChat) await ai!.saveSettings(chatSettingsPatch(oldChat, oldChat.service));
         } catch {
           throw new Error('recovery_failed');
         }

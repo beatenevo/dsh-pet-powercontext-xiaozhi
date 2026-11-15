@@ -219,9 +219,8 @@ export function registerSessionWatch(deps: SessionWatchInput): void {
         turnFlags.get(sessionId),
       );
       if (!next) {
-        // null of turn/end (aborted / unknown kind) = The session round has ended: clear the session status, let the
-        // display return to idle or fall to other active sessions, to prevent the round from being permanently stuck
-        // in the previous state after being interrupted; null of other events are "don't care" and ignored.
+        // turn/end 的 null（aborted / blocked / 未知 kind）＝该会话回合已结束：清掉会话状态，让展示回到空闲或
+        // 落到其他活跃会话，防止回合被打断后永久卡在上一档；其他事件的 null 是「不关心」，忽略。
         if (type === 'turn/end') {
           turnFlags.delete(sessionId);
           cancelTerminalCleanup(sessionId); // All entries must be cleared. Don’t leave a timer with nothing to do after the timer expires.

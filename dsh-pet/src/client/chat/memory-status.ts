@@ -1,4 +1,5 @@
 /** A small read-only memory indicator. Delivery, retrieval and local process state are distinct facts. */
+import { describeDshMemory } from '../dsh-memory-status.ts';
 import { ROUTE_PATH } from '../../shared/constants.ts';
 import type { ChatPanelRuntime } from './runtime.ts';
 import { makeMemoryLibrary } from './memory-library.ts';
@@ -9,6 +10,8 @@ interface MemoryStatus {
   captured: number;
   recall: string;
   error?: string | null;
+  workspace?: string | null;
+  scopeId?: string | null;
 }
 interface LocalStatus {
   memoryRunning?: boolean;
@@ -40,7 +43,7 @@ export function describeMemoryStatus(status: MemoryStatus): string {
 export function makeMemoryStatus(rt: ChatPanelRuntime): (props: { petId: string; revision: number }) => unknown {
   const Library = makeMemoryLibrary(rt);
   return function MemoryStatusPanel({ petId, revision }) {
-    const [state, setState] = rt.useState({ petId: '', text: '正在读取记忆状态…', local: '' });
+    const [state, setState] = rt.useState({ petId: '', text: '正在读取记忆状态…', local: '', backend: '' });
     const standalone = typeof document !== 'undefined' && !!document.getElementById('tab-setup');
     rt.useEffect(() => {
       if (!petId) return;
@@ -50,13 +53,20 @@ export function makeMemoryStatus(rt: ChatPanelRuntime): (props: { petId: string;
         try {
           if (document.hidden || (standalone && document.getElementById('panel-chat')?.hidden)) return;
           const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]);
-          const response = await fetch(ROUTE_PATH + '/chat/powercontext?pet=' + encodeURIComponent(petId), {
-            cache: 'no-store',
-            signal,
-          });
+          const sessionId = rt.readSessionId?.();
+          const response = await fetch(
+            ROUTE_PATH +
+              '/chat/powercontext?pet=' +
+              encodeURIComponent(petId) +
+              (sessionId ? '&session=' + encodeURIComponent(sessionId) : ''),
+            {
+              cache: 'no-store',
+              signal,
+            },
+          );
           if (!response.ok) throw new Error('unavailable');
           const memory = (await response.json()) as MemoryStatus & { ok?: boolean };
-          if (memory.ok !== true || !['native', 'powercontext'].includes(memory.backend))
+          if (memory.ok !== true || !['native', 'powercontext', 'dsh-powercontext'].includes(memory.backend))
             throw new Error('unavailable');
           let local = '';
           if (standalone) {
@@ -79,9 +89,17 @@ export function makeMemoryStatus(rt: ChatPanelRuntime): (props: { petId: string;
               local = '本机记忆服务：状态暂不可用';
             }
           }
-          if (!controller.signal.aborted) setState({ petId, text: describeMemoryStatus(memory), local });
+          if (!controller.signal.aborted && rt.readSessionId?.() === sessionId)
+            setState({
+              petId,
+              text:
+                memory.backend === 'dsh-powercontext' ? describeDshMemory(memory, rt.t) : describeMemoryStatus(memory),
+              local,
+              backend: memory.backend,
+            });
         } catch {
-          if (!controller.signal.aborted) setState({ petId, text: '记忆状态暂不可用，正在重新连接。', local: '' });
+          if (!controller.signal.aborted)
+            setState({ petId, text: '记忆状态暂不可用，正在重新连接。', local: '', backend: '' });
         } finally {
           if (!controller.signal.aborted) timer = setTimeout(() => void refresh(), 5000);
         }
@@ -97,7 +115,7 @@ export function makeMemoryStatus(rt: ChatPanelRuntime): (props: { petId: string;
     return rt.h('div', {
       className: 'pet-chat-memory-status',
       children: [
-        rt.h(Library, { key: petId, petId }),
+        current && state.backend !== 'dsh-powercontext' ? rt.h(Library, { key: petId, petId }) : null,
         rt.h('p', {
           key: 'status',
           role: 'status',
@@ -107,7 +125,10 @@ export function makeMemoryStatus(rt: ChatPanelRuntime): (props: { petId: string;
         rt.h('small', {
           key: 'local',
           children:
-            (current && state.local ? state.local + '。' : '') + '已同步表示对话已送达，不代表已整理成可召回的记忆。',
+            current && state.backend === 'dsh-powercontext'
+              ? rt.t('dshMemoryLocal')
+              : (current && state.local ? state.local + '。' : '') +
+                '已同步表示对话已送达，不代表已整理成可召回的记忆。',
         }),
         standalone
           ? rt.h('button', {

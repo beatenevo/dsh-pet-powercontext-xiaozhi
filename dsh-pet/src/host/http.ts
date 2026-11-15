@@ -230,7 +230,7 @@ export type RouteResult =
   | { kind: 'none' };
 
 /** Upper limit of request body (bytes): The write endpoint only accepts JSON configuration and instructions. 1 MiB is enough. If the limit is exceeded, 413 will be sent directly. */
-export const MAX_BODY_BYTES = 1024 * 1024;
+export const MAX_BODY_BYTES = 10 * 1024 * 1024;
 
 /**
  * Collect request body (text).

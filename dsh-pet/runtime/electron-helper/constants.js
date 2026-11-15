@@ -147,9 +147,10 @@ applyDeskGeometry({
 const ORIGIN = new URL(CONFIG.configUrl).origin;
 /** host / dsh-pet-7340 prefix: bridge uses customized scheme (main process forwarding), otherwise HTTP directly connects to host */
 const BASE = BRIDGE ? 'dsh-pet-bridge://dsh-pet/dsh-pet-7340' : ORIGIN + '/dsh-pet-7340';
-const STATE_URL = BASE + '/state'; // Polling unified status S: The only data source for front-end 1 s polling (balance/working status/notification/talk)
-const BALANCE_URL = BASE + '/balance'; // Balance refresh action (POST, write S; the data itself is read from / state)
-const FOCUS_SESSION_URL = BASE + '/focus-session'; // Jump session action (POST, write sections.focusSession; the page will be cut accordingly)
+const STATE_URL = BASE + '/state'; // 轮询统一状态 S：前端 1s 轮询的唯一数据源（余额/工作状态/通知/说话）
+const BALANCE_URL = BASE + '/balance'; // 余额刷新动作（POST，写 S；数据本身从 /state 读）
+const ENVIRONMENT_URL = BASE + '/environment'; // POST refreshes weather and updates sections.env.
+const FOCUS_SESSION_URL = BASE + '/focus-session'; // 跳会话动作（POST，写 sections.focusSession；页面据此切过去）
 const WHISPER_URL = BASE + '/whisper';
 // Live reporting (renderer → host, internal channel): The third party uses GET /pose to read the snapshot saved by the host
 const POSE_REPORT_URL = BASE + '/pose/report';
@@ -157,10 +158,11 @@ const POSE_REPORT_URL = BASE + '/pose/report';
 // be merged; and must bring trailing edge (read the current value and push it once at the point), otherwise the third
 // party will always read the position in the middle of the movement without any error.
 const POSE_THROTTLE_MS = 400;
-const BUBBLE_DURATION_MS = 10 * 1000; // Balance/whisper bubble display duration (consistent with browsers: timed disappearance, decoupled from animation)
-// Balance bubble wait before content change (ms): same as . pet-bubble's opacity transition is .25 s, fade out and
-// then change, otherwise the content will be replaced when semi-transparent = visible hard cut (in line with browser
-// bubble.ts (same value)
+const BUBBLE_DURATION_MS = 10 * 1000; // 余额/碎碎念气泡展示时长（与浏览器一致：定时消失，与动画解耦）
+// 说话气泡戳破动画时长（ms）：与 index.html 的 popOut 同值，动画播完才真正收起气泡（与浏览器 WHISPER_POP_MS 一致）
+const WHISPER_POP_MS = 420;
+// 余额气泡换内容前的等待（ms）：与 .pet-bubble 的 opacity 过渡同为 .25s，淡出走完再换，
+// 否则内容会在半透明时被替换 = 看得见的硬切（与浏览器 bubble.ts 同值）
 const BALANCE_FADE_MS = 250;
 // / state Long polling hang time (same value as the browser side): The host can hang for this long at most when the version does not change, and return immediately when the leaf changes.
 const STATE_WAIT_MS = 1000;

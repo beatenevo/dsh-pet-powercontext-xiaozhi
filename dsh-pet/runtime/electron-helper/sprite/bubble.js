@@ -76,9 +76,20 @@ Object.assign(PetSprite.prototype, {
     const workOn = !!(this.workOn && this.workText);
     const whisperOn = !!(this.whisperOn && this.whisperView);
     const balanceOn = !!(this.bubbleOn && this.balanceView);
+    const envOn = !!(this.envOn && this.envState);
     const workTerminal = this.workState === 'success' || this.workState === 'error';
     const slot =
-      workTerminal && workOn ? 'work' : whisperOn ? 'whisper' : balanceOn ? 'balance' : workOn ? 'work' : 'none';
+      workTerminal && workOn
+        ? 'work'
+        : whisperOn
+          ? 'whisper'
+          : balanceOn
+            ? 'balance'
+            : envOn
+              ? 'env'
+              : workOn
+                ? 'work'
+                : 'none';
     // Remember the current slot: click processing is at init.js. You must know "which bubble is displayed now" to distinguish between page turning and session jumping.
     this.bubbleSlot = slot;
     // Choose one of two forms of pictures: url uses the complete address, image uses the asset root to spell the meme path; style/class is shared.
@@ -100,7 +111,8 @@ Object.assign(PetSprite.prototype, {
     // when paging.
     const isCustom = !!(this.balanceState && S.customViews(this.balanceState));
     const workClickable = this.workClickable();
-    const clickable = (slot === 'balance' && this.balanceClickable()) || workClickable;
+    // 说话气泡同样可点：点下去就是戳破（分流在 init.js，动作是 popWhisper）。
+    const clickable = (slot === 'balance' && this.balanceClickable()) || workClickable || this.whisperClickable();
     const expanded = slot === 'balance' && clickable && !isCustom && this.balanceViewIndex > 0;
     this.bubble.classList.toggle('is-clickable', clickable);
     this.bubble.classList.toggle('is-expanded', expanded);
@@ -141,6 +153,9 @@ Object.assign(PetSprite.prototype, {
       const views = S.customViews(this.balanceState);
       const page = views[Math.min(this.balanceViewIndex, views.length - 1)];
       if (page) this.bubble.appendChild(this.renderTree(page));
+    } else if (slot === 'env') {
+      // 环境气泡：图标 + 大字气温 + 中文短语 + 三行键值 + 观测脚注（视图与文案来自 shared）
+      this.renderEnvBubbleContent();
     } else {
       // The expanded rows are calculated here: renderBubble is a read-only rendering path and is not cached (the
       // balance changes every round, but the cache must be invalidated simultaneously). The content of each page has
@@ -245,5 +260,85 @@ Object.assign(PetSprite.prototype, {
     window.__dshPetDebug.lastBubbleTitle = this.bubble.textContent.slice(0, 60);
     // The bubble content/size has changed → Re-report the control rectangle and synchronize the busy mark. This is where all the revealing and changing content comes together.
     this.syncInputBusy();
+  },
+
+  /** 环境气泡内容：视图来自 shared 的 envBubbleView（与网页端同一份文案），这里只建 DOM。 */
+  renderEnvBubbleContent() {
+    const view = S.envBubbleView(this.envState);
+    const title = document.createElement('div');
+    title.className = 'pet-bub-title';
+    title.textContent = view.title;
+    this.bubble.appendChild(title);
+    if (view.emptyText !== undefined) {
+      const line = document.createElement('div');
+      line.className = 'pet-bub-row';
+      line.textContent = view.emptyText;
+      this.bubble.appendChild(line);
+      return;
+    }
+    const main = document.createElement('div');
+    main.className = 'pet-env-main';
+    main.appendChild(this.envIconNode(view.icon || []));
+    const temp = document.createElement('span');
+    temp.className = 'pet-env-temp';
+    temp.textContent = view.temperature || '';
+    const summary = document.createElement('span');
+    summary.className = 'pet-env-summary';
+    summary.textContent = view.summary || '';
+    main.append(temp, summary);
+    this.bubble.appendChild(main);
+    for (const row of view.rows) {
+      const line = document.createElement('div');
+      line.className = 'pet-bub-row';
+      const label = document.createElement('span');
+      label.className = 'pet-bub-sub';
+      label.textContent = row.label;
+      const value = document.createElement('span');
+      value.className = 'pet-bub-val';
+      value.textContent = row.value;
+      line.append(label, value);
+      this.bubble.appendChild(line);
+    }
+    if (view.footer !== undefined) {
+      const foot = document.createElement('div');
+      foot.className = 'pet-env-foot';
+      foot.textContent = view.footer;
+      this.bubble.appendChild(foot);
+    }
+  },
+
+  /** 天气图标：把 shared 的几何（path / line / circle）拼成一段 SVG。 */
+  envIconNode(shapes) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.7');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    for (const shape of shapes) {
+      let node;
+      if (shape.kind === 'path') {
+        node = document.createElementNS(NS, 'path');
+        node.setAttribute('d', shape.d);
+      } else if (shape.kind === 'line') {
+        node = document.createElementNS(NS, 'line');
+        node.setAttribute('x1', shape.x1);
+        node.setAttribute('y1', shape.y1);
+        node.setAttribute('x2', shape.x2);
+        node.setAttribute('y2', shape.y2);
+      } else {
+        node = document.createElementNS(NS, 'circle');
+        node.setAttribute('cx', shape.cx);
+        node.setAttribute('cy', shape.cy);
+        node.setAttribute('r', shape.r);
+      }
+      svg.appendChild(node);
+    }
+    const wrap = document.createElement('span');
+    wrap.className = 'pet-env-icon';
+    wrap.appendChild(svg);
+    return wrap;
   },
 });

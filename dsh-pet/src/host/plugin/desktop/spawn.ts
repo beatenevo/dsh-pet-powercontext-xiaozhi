@@ -12,6 +12,7 @@ import { PACKAGE_ROOT } from '../../paths.ts';
 import type { DesktopHelperDeps } from './types.ts';
 import type { DesktopPets } from './pets.ts';
 import { toBridgeResponse } from './bridge-response.ts';
+import { resolveDesktopSiteUrl } from './site-url.ts';
 import {
   HelperProcess,
   defaultElectronExe,
@@ -123,7 +124,7 @@ export function createDesktopSpawn(deps: DesktopSpawnInput) {
     // `GET /` , and replaces the signature Cookie bound to authority. All other requests are 401, so origin is passed
     // instead of another address. Token-equivalent login state: only passed to the helper memory via the child process
     // environment variable, without persisting to disk or logging.
-    const siteUrl = ctx.connection.authenticatedUrl(origin);
+    const siteUrl = resolveDesktopSiteUrl(ctx, origin);
     // The desktop renderer also gets the finished configuration from the same handlePetRoute (each pet has a small
     // local window; through the pipeline, HTTP - DSH Desktop 2.0.3+ will block the bare HTTP request of the plugin
     // self-pull process, and the browser access gate will only allow requests with tokens)

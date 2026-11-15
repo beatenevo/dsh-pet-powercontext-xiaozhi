@@ -6,6 +6,7 @@
  * should not cause the entire plugin to fail to load.
  * @module dsh-pet/src/client/chat/register
  */
+import { activeDshSession } from './dsh-session.ts';
 import { LOGO_URL } from './api.ts';
 import { makePetChatPanel, type ChatPanelRuntime } from './panel.ts';
 import { injectPanelCss } from './styles.ts';
@@ -90,7 +91,7 @@ export function registerPetChatTab(
     return () => {};
   }
   const disposeCss = injectPanelCss();
-  const Panel = makePetChatPanel(rt);
+  const Panel = makePetChatPanel({ ...rt, readSessionId: () => activeDshSession((name) => ctx.get?.(name)) });
   /** The icon of the guide page card: plugin logo; the position given by the frame is only about 16 px, which is filled with CSS. */
   const GuideIcon = () => rt.h('img', { className: 'pet-chat-guide-icon', src: LOGO_URL, alt: '', loading: 'lazy' });
 

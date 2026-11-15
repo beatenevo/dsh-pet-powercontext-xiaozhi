@@ -78,7 +78,7 @@ describe('reduceWorkStatus - event compression with turn context', () => {
   test('Others turn/end reason are not affected: error / blocked / aborted', () => {
     assert.equal(reduceWorkStatus({ type: 'turn/end', data: { reason: { kind: 'error' } } }), 'error');
     assert.equal(reduceWorkStatus({ type: 'turn/end', data: { reason: { kind: 'max-tokens' } } }), 'error');
-    assert.equal(reduceWorkStatus({ type: 'turn/end', data: { reason: { kind: 'blocked' } } }), 'waiting');
+    assert.equal(reduceWorkStatus({ type: 'turn/end', data: { reason: { kind: 'blocked' } } }), null);
     // aborted → null: caller cleans up the session and returns it to idle (existing semantics do not fall back)
     assert.equal(reduceWorkStatus({ type: 'turn/end', data: { reason: { kind: 'aborted' } } }), null);
   });

@@ -148,14 +148,20 @@ export function makeModelCard(
                     disabled: busy,
                     onChange: (event: { target: { value: string } }) =>
                       changeMemory({
-                        backend: event.target.value === 'powercontext' ? 'powercontext' : 'native',
+                        backend:
+                          event.target.value === 'dsh-powercontext'
+                            ? 'dsh-powercontext'
+                            : event.target.value === 'powercontext'
+                              ? 'powercontext'
+                              : 'native',
                       }),
                     children: [
                       h('option', { value: 'native', children: t('memoryNative') }),
                       h('option', { value: 'powercontext', children: 'PowerContext' }),
+                      h('option', { value: 'dsh-powercontext', children: t('memoryDsh') }),
                     ],
                   }),
-                  t('memoryHint'),
+                  memory.backend === 'dsh-powercontext' ? t('memoryDshHint') : t('memoryHint'),
                 ),
                 field(
                   t('historyBytes'),

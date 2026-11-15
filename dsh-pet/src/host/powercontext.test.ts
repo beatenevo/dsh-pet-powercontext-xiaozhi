@@ -77,6 +77,7 @@ async function fixture(backend: 'native' | 'powercontext' = 'powercontext') {
   const requests: Array<Record<string, unknown>> = [];
   const makeMemory = () =>
     createChatMemory({
+      environment: async () => ({}),
       ctx: {
         effect: (start: () => () => void) => {
           disposers.push(start());

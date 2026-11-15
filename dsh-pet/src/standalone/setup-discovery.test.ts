@@ -69,7 +69,11 @@ test('discovery separates capabilities, never returns keys and preserves endpoin
   assert.equal(calls[calls.length - 1]?.auth, 'Bearer private-generation');
   const ai = createStandaloneAi(home, { info() {}, warn() {}, error() {}, debug() {} });
   t.after(() => ai.dispose());
-  await ai.saveSettings({ baseUrl: base + '/generation', model: 'pet-chat', apiKey: 'private-chat' });
+  await ai.saveSettings({
+    service: 'custom',
+    keys: { CUSTOM_API_KEY: 'private-chat' },
+    profiles: { custom: { protocol: 'openai-compatible', baseUrl: base + '/generation', model: 'pet-chat' } },
+  });
   await discoverSetupModels({ action: 'models', kind: 'chat', baseUrl: base + '/generation' }, memory, ai);
   assert.equal(calls[calls.length - 1]?.auth, 'Bearer private-chat');
   await discoverSetupModels({ action: 'models', kind: 'generation', baseUrl: base + '/generation' }, memory, ai);

@@ -358,6 +358,8 @@ app.on('before-quit', () => {
 });
 
 app.on('window-all-closed', () => {
+  // 主屏缩放自查是「先关窗、再建窗」，两个动作之间窗口数会短暂为 0；新窗口已建好就不算真的全关
+  if (petWindows.state.windows.size > 0) return;
   // Permanent system tray: Keep it even if there are no pets on the desktop, otherwise you will never be able to switch it back by "turning it off completely"
   if (tray.exists()) return;
   // Application mode: The window is closed by the rebuild hook, not the user wants to exit - the process is left to wait for the next rebuild

@@ -84,3 +84,16 @@ $DSH_HOME/dsh-pet/
 ```
 
 The filename stem pairs the configuration with its animation directory; instance IDs need not equal that stem. References inside a pack resolve against its own assets. Use distinct IDs and review memory settings per pack. See [the creation guide](../guides/custom-pets.md).
+
+## Voice, weather and notification settings
+
+| Field               | Meaning                                                                        |
+| ------------------- | ------------------------------------------------------------------------------ |
+| `voiceName`         | Qualified voice ID from `/voice/voices`, for example `edge/zh-CN-YunxiNeural`  |
+| `speechProvider`    | Recognizer ID from `/voice/hear-providers`, for example `dsh` or `deepseek`    |
+| `environmentCity`   | Weather city override; empty means IP-based location                           |
+| `notifyWhenFocused` | Also notify and speak work status while the page is focused; defaults to false |
+
+Static images under `$DSH_HOME/dsh-pet/pic/` override bundled images file by file and survive package upgrades.
+
+Legacy built-in voice IDs without a provider prefix are read as the corresponding `edge/` voice, preserving the selected voice. The qualified ID is persisted on the next settings save.

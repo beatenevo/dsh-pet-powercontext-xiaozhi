@@ -4,6 +4,10 @@ English · [简体中文](../../zh/guides/memory.md) · [Documentation](../READM
 
 Memory is optional. The pet keeps recent chat locally; PowerContext 1.5.0 captures completed text exchanges, extracts facts in the background and retrieves relevant evidence for later replies. Each pet and server endpoint has its own persisted scope and delivery queue.
 
+## Reuse DSH project memory
+
+To read memories already collected by PowerContext’s DSH plugin, use the optional **Use the DSH PowerContext plugin** mode. See [shared DSH memory](dsh-memory.md) for setup, Scope binding and fallback behavior. The independent pet memory instructions below remain available.
+
 ## Enable managed local memory
 
 In DSH, open **Settings → Pet Config → Local long-term memory**. Select generation and embedding services, verify dimensions, and choose **Check and enable memory**. DSH continues to own the chat model and credentials; these generation settings are for memory extraction.

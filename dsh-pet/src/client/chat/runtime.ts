@@ -22,6 +22,8 @@ export interface PetChatUi {
 
 /** Component with hook requires subset react. */
 export interface ChatPanelRuntime {
+  /** Visible host session, looked up when sending; absent in standalone mode. */
+  readonly readSessionId?: () => string | undefined;
   /** Create element; child node is written to `props.children`. */
   h: (type: unknown, props?: Record<string, unknown> | null) => unknown;
   /** Status. */

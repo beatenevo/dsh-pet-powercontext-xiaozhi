@@ -13,7 +13,7 @@ import { failResult, invalidJson, methodNotAllowed, okResult, payloadTooLarge } 
 import type { PetRouteDeps, RouteInput } from './types.ts';
 import type { RouteResult } from '../http.ts';
 
-/** The upper limit of decoded bytes: request body 1 MiB is the upper limit of base64 text, and it naturally does not exceed 768 KiB after decoding. */
+/** 解码后的字节上限：按头像尺寸独立定，与请求体上限无关。 */
 const MAX_AVATAR_BYTES = 768 * 1024;
 
 /**

@@ -158,6 +158,7 @@ describe('The plugin host half is running in standalone mode.', () => {
     assert.deepEqual(Object.keys(body.sections).sort(), [
       'balance',
       'config',
+      'env',
       'focusSession',
       'menu',
       'notify',

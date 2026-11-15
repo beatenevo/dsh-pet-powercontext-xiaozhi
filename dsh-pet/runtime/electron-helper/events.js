@@ -201,6 +201,17 @@ PetSprite.prototype.clearWhisper = function clearWhisper() {
   this.applyWhisperHold({ kind: 'clear' });
 };
 
+// 戳破说话气泡（用户点击的落点）：先播消失动画，播完再走 clearWhisper。
+// 与 clearWhisper 同一语义——只收气泡，不碰动画与另两种气泡。
+PetSprite.prototype.popWhisper = function popWhisper() {
+  if (!this.whisperClickable()) return;
+  this.bubble.classList.add('is-popping');
+  window.setTimeout(() => {
+    this.bubble.classList.remove('is-popping');
+    this.clearWhisper();
+  }, WHISPER_POP_MS);
+};
+
 // Whisper display (this pet): Randomly draw events.whisper animation + pop text bubble (the same set of timing
 // semantics as the balance). image is the picture name randomly selected by host; url is the complete address provided
 // by the third party: choose one of the two (guaranteed by the host decision layer), distinguished by field names and
@@ -239,6 +250,8 @@ PetSprite.prototype.showWhisper = function showWhisper(text, image, url, duratio
     this.playOnce(name);
   }
   if (duration === 0) return;
+  // 新台词要看得见：清掉上一条戳破残留的消失动画。
+  this.bubble.classList.remove('is-popping');
   this.whisperView = S.whisperBubbleView({ ok: true, text, ts: 0 });
   this.whisperText = text;
   this.whisperImage = typeof image === 'string' ? image : '';
@@ -312,15 +325,38 @@ PetSprite.prototype.toggleBalanceDetail = function toggleBalanceDetail() {
   }, BUBBLE_DURATION_MS);
 };
 
+// 环境气泡（查询天气）：宿主写完 sections.env 后由 applyEnvLeaf 调到这里。
+// 睡着不弹（睡姿优先）；占用锁不挡——用户主动点的一次性查询，与手动余额同口径。
+// 计时器用自己的 envTimer：与余额共用 bubbleTimer 会互相提前收起。
+PetSprite.prototype.showEnvNow = function showEnvNow(state) {
+  if (!state || state.petId !== this.pet.id) return;
+  if (this.sleeping) return;
+  this.envState = state;
+  this.envOn = true;
+  this.renderBubble();
+  if (this.envTimer !== null) window.clearTimeout(this.envTimer);
+  this.envTimer = window.setTimeout(() => {
+    this.envTimer = null;
+    this.envOn = false;
+    this.renderBubble();
+  }, BUBBLE_DURATION_MS);
+};
+
 // Polling assembly: The container pulls and triggers in a unified manner, using the same path as the browser.
 
 // Balance unavailable → text description bubble (periodic polling and manual/balance share this path, judged at
 // shared): explicit (manual trigger) will always pop up; automatic polling will only pop up once when the reason
 // (including service provider) changes, to avoid repeatedly flashing the same sentence.
-function applyBalanceNotice(state, explicit) {
+// petId 给了就只弹给那只（右键菜单点的那只），缺省照旧全员。
+function applyBalanceNotice(state, explicit, petId) {
   const notice = S.decideBalanceNotice(state, balanceNoticeKey, explicit);
   balanceNoticeKey = notice.key;
-  if (notice.show) for (const s of sprites) s.showBalanceNotice(state, explicit);
+  if (notice.show) {
+    for (const s of sprites) {
+      if (petId !== undefined && petId !== s.pet.id) continue;
+      s.showBalanceNotice(state, explicit);
+    }
+  }
   // The unregistered service provider is a configuration fact (declared by bubble), no more console; other reasons will still report an error explicitly, and the balance will never be forged.
   if (state.reason !== 'unsupported') {
     console.error('[dsh-pet] Balance query failed reason=' + state.reason + (state.message ? ' ' + state.message : ''));
@@ -336,7 +372,8 @@ let stateSince;
 /** Does the host support long polling? Response with counter = supported; without = old host (full amount will be returned immediately and must be backed off) */
 let stateLongPoll = true;
 
-/** Balance leaf → display (successful playback of state animation + bubble; unavailable, press shared to determine pop-up text description) */
+/** 余额叶子 → 展示（成功播档位动画 + 气泡；不可用按 shared 判定弹文字说明）。
+ *  叶子带 petId 时只给那只宠物（右键菜单点的那只），不带则所有开了余额的照常显示。 */
 function applyBalanceLeaf(leaf) {
   const hit = S.readBalance(leaf);
   if (!hit) return;
@@ -345,11 +382,23 @@ function applyBalanceLeaf(leaf) {
   if (hit.state.ok) {
     balanceTick++;
     // No playback will occur while asleep: state animations and bubbles will not be updated, and manual requests are no exception (sleeping position priority)
-    for (const s of sprites) if (!s.sleeping) s.onBalanceTick(hit.state, balanceTick, hit.manual);
+    for (const s of sprites) {
+      if (s.sleeping) continue;
+      if (hit.petId !== undefined && hit.petId !== s.pet.id) continue;
+      s.onBalanceTick(hit.state, balanceTick, hit.manual);
+    }
   } else {
     // Unavailable: manual (requested by the user) will always play, and the periodic refresh will only play once when the reason changes.
-    applyBalanceNotice(hit.state, hit.manual);
+    applyBalanceNotice(hit.state, hit.manual, hit.petId);
   }
+}
+
+/** 环境叶子 → 对应宠物弹环境气泡。`petId` 是叶子写的「谁弹」，本窗口只装一只，按 id 命中。
+ *  睡着不弹（不打断睡姿）；占用锁不挡——它是用户点「查询天气」发起的一次性查询。 */
+function applyEnvLeaf(leaf) {
+  const state = S.readEnv(leaf);
+  if (!state) return;
+  for (const s of sprites) s.showEnvNow(state);
 }
 
 /** Talking leaves → corresponding pets play talking animation + bubble. `kind: 'clear'` = close the bubble, the rest = pop a bubble. */
@@ -495,6 +544,7 @@ async function pollStateOnce() {
     for (const change of S.takeChanged(s, stateBaseline)) {
       if (change.leaf.data === null) continue;
       if (change.path === 'sections.balance') applyBalanceLeaf(change.leaf);
+      else if (change.path === 'sections.env') applyEnvLeaf(change.leaf);
       else if (change.path === 'sections.workStatus') applyWorkStatusLeaf(change.leaf);
       else if (change.path === 'sections.menu') applyMenuLeaf(change.leaf);
       else if (change.path.startsWith('pets.') && change.path.endsWith('.say')) {

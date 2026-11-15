@@ -367,6 +367,7 @@ export function createCardEntry(rt: CardEntryRuntime) {
       // software and reloading the configuration) have no corresponding actions on the web page and do not appear.
       const tools: MenuNode[] = [
         { label: '查看余额', action: 'show-balance' },
+        { label: '查询天气', action: 'show-environment' },
         { label: '待办事项', action: 'todo', hint: TODO_HOTKEY_HINT },
         { label: '碎碎念', action: 'whisper' },
         { label: '对话', action: 'chat', hint: CHAT_HOTKEY_HINT },

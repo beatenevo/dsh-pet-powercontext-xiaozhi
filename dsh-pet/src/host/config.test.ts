@@ -463,6 +463,50 @@ describe('saveUserConfig ——System system tray switch (trayEnabled)', () => {
   });
 });
 
+describe('saveUserConfig —— 天气城市覆盖（environmentCity）', () => {
+  test('非法值整包拒绝：非字符串与超长都不收', () => {
+    assert.equal(saveUserConfig({ pets: PETS, environmentCity: 42 }, undefined), null);
+    assert.equal(saveUserConfig({ pets: PETS, environmentCity: '城'.repeat(33) }, undefined), null);
+  });
+
+  test('空串是有效值：清空 = 恢复自动定位，必须落盘', () => {
+    const out = saveUserConfig(
+      { pets: PETS, environmentCity: '' },
+      {
+        environmentCity: '南京市',
+      },
+    ) as Record<string, unknown>;
+    assert.equal(out.environmentCity, '');
+  });
+
+  test('请求体带了 → 去首尾空白后写入', () => {
+    const out = saveUserConfig({ pets: PETS, environmentCity: '  扬州市  ' }, undefined) as Record<string, unknown>;
+    assert.equal(out.environmentCity, '扬州市');
+  });
+
+  test('请求体没带 → 透传磁盘旧值（不得把用户填的城市抹掉）', () => {
+    const out = saveUserConfig({ pets: PETS }, { environmentCity: '扬州市' }) as Record<string, unknown>;
+    assert.equal(out.environmentCity, '扬州市');
+  });
+});
+
+describe('readAllConfig —— 天气城市覆盖（只读 main）', () => {
+  test('用户层写了 → 取用户层的值', () => {
+    const merged = readAllConfig(withBase({ environmentCity: '' }, { environmentCity: '扬州市' }));
+    assert.equal(merged.main.environmentCity, '扬州市');
+  });
+
+  test('用户层没写 → 取内置默认（空串 = 跟随 IP 自动定位）', () => {
+    const merged = readAllConfig(withBase({ environmentCity: '' }));
+    assert.equal(merged.main.environmentCity, '');
+  });
+
+  test('用户层写了非法值 → 告警并回退默认', () => {
+    const merged = readAllConfig(withBase({ environmentCity: '' }, { environmentCity: 42 }));
+    assert.equal(merged.main.environmentCity, '');
+  });
+});
+
 describe('JSONC configuration reading: comment mark and escape in character string', () => {
   const prompts = [
     '请原样解释 // 示例 这段文字',
@@ -1712,4 +1756,30 @@ describe('removeRoundsByTs - Delete by round (two pairs in a round share ts, go 
     assert.deepEqual(r.messages, []);
     assert.equal(r.removed, 4);
   });
+});
+
+test('legacy Edge voice choices remain selected after upgrading and saving', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pet-legacy-voice-'));
+  const paths: ConfigPaths = {
+    defaultFile: join(dir, 'default.jsonc'),
+    userFile: join(dir, 'main-config.jsonc'),
+    petDir: join(dir, 'pet'),
+  };
+  try {
+    mkdirSync(paths.petDir);
+    writeFileSync(paths.defaultFile, JSON.stringify({ ...BASE, voiceName: 'edge/zh-CN-XiaoyiNeural' }));
+    writeFileSync(paths.userFile, JSON.stringify({ voiceName: 'zh-CN-YunxiNeural' }));
+    writeFileSync(join(paths.petDir, 'guest-config.json'), JSON.stringify({ voiceName: 'zh-CN-YunjianNeural' }));
+    const before = readFileSync(paths.userFile, 'utf8');
+    const config = readAllConfig(paths);
+    assert.equal(config.main.voiceName, 'edge/zh-CN-YunxiNeural');
+    assert.equal(config.guest.voiceName, 'edge/zh-CN-YunjianNeural');
+    assert.equal(readFileSync(paths.userFile, 'utf8'), before);
+    const saved = saveUserConfig({ ...config.main, voiceName: config.main.voiceName });
+    assert.ok(saved);
+    writeFileSync(paths.userFile, JSON.stringify(saved));
+    assert.equal(readAllConfig(paths).main.voiceName, 'edge/zh-CN-YunxiNeural');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

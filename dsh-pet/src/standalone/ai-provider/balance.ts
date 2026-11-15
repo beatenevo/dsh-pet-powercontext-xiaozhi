@@ -10,11 +10,10 @@
 import { queryBalance as queryProviderBalance, type BalanceResult } from '../../host/balance/index.ts';
 
 /**
- * Check the balance according to the service provider selected in the settings.
- * @param provider - balanceProvider in settings; an empty string means it is not selected and unsupported is returned
- * directly.
- * @param apiKey - the key saved in the settings page; when empty, it is completed by host side to credential-missing.
- * The normalized result of @returns host side; failure will never bring false numbers.
+ * 按设置里选中的服务商查询余额。
+ * @param provider - 当前服务商；自定义（custom）不在余额名录里，由 host 半侧落成 unsupported。
+ * @param apiKey - 设置页保存的密钥；为空时由 host 半侧落成 credential-missing。
+ * @returns host 半侧的归一化结果；失败绝不带伪造数字。
  */
 export async function queryStandaloneBalance(provider: string, apiKey: string): Promise<BalanceResult> {
   if (!provider) return { ok: false, provider: '', reason: 'unsupported' };

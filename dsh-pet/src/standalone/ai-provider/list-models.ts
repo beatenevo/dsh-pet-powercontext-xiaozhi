@@ -1,6 +1,7 @@
 /** Standalone mode "pull model": request a model list from the configured endpoint according to the protocol, read-only respond once, do not cache or persist to disk. */
 import type { StandaloneAiSettings } from '../ai-config.ts';
 import type { AiFetch } from '../ai-transport.ts';
+import { serviceHeaders } from '../ai-transport.ts';
 import type { DiscoveredModel, ModelDiscoveryInput, ModelDiscoveryResult } from './types.ts';
 import { localModelKey, sameModelEndpoint } from '../../shared/memory-presets.ts';
 
@@ -60,11 +61,13 @@ function candidateUrls(protocol: string, base: string): string[] {
 }
 
 /** The respective authentication headers of the two protocols; the plaintext key only appears at this layer, and the error copy will not carry it. */
-function authHeaders(protocol: string, apiKey: string): Record<string, string> {
+function authHeaders(protocol: string, apiKey: string, base: string): Record<string, string> {
+  // 名录要求会话头的服务商（opencode Go）缺它会被判 400，清单请求也要带上。
+  const session = serviceHeaders(base);
   if (protocol === 'anthropic') {
-    return { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', accept: 'application/json' };
+    return { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', accept: 'application/json', ...session };
   }
-  return { authorization: `Bearer ${apiKey}`, accept: 'application/json' };
+  return { authorization: `Bearer ${apiKey}`, accept: 'application/json', ...session };
 }
 
 /** Unify the array or "key → entry" mapping into an array. Both are common ways of writing compatible gateways. */
@@ -189,10 +192,13 @@ export async function discoverModels(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DISCOVERY_TIMEOUT_MS);
   try {
+    // 内置服务可能给出了与对话地址不同级的清单地址（opencode），先试它，再按惯例容错。
+    const explicit = input.modelsUrl === undefined ? undefined : parseEndpoint(input.modelsUrl);
+    const urls = explicit === undefined ? candidateUrls(protocol, base) : [explicit, ...candidateUrls(protocol, base)];
     let last = failure('http');
     // Only change to the next candidate when 404: Other failures indicate that the address is correct, but there is a problem with the credentials or service, and there is no point in trying another spelling.
-    for (const url of candidateUrls(protocol, base)) {
-      const attempt = await requestList(fetcher, url, authHeaders(protocol, apiKey), controller);
+    for (const url of urls) {
+      const attempt = await requestList(fetcher, url, authHeaders(protocol, apiKey, base), controller);
       if (attempt.ok || attempt.code !== 'not-found') return attempt;
       last = attempt;
     }

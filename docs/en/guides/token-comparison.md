@@ -4,7 +4,7 @@
 
 This development feature requires a build containing the comparison panel. It is not included in the published `0.1.0-beta.1` package.
 
-Open **Pet chat → Token comparison** inside DSH. The dialog keeps the host visible and places two independently generated answers side by side. Standalone chat exposes the same tool.
+Open **Pet chat → Token comparison** inside DSH. The panel uses the DSH theme and current pet avatar, keeps the host sidebar and pet visible on wide desktop screens, and places two independently generated answers side by side. Standalone chat exposes the same tool.
 
 ## Prepare and run
 
@@ -13,13 +13,15 @@ Open **Pet chat → Token comparison** inside DSH. The dialog keeps the host vis
 3. Optionally [connect AI Vision](observability.md), including the Server exporter. Without it, the experiment still works, but trace links are absent.
 4. Paste the original background record, then one question per line. Decide the answer requirements before running. Keep the record within **49,152 UTF-8 bytes**, use at most **eight questions**, and select a recent-context budget between **128 and 8,192 bytes**.
 5. Select **Prepare memory and run**. This creates a separate persistent scope, submits the exact record as one Source, explicitly flushes one processing window, and checks for active memory before generating answers. Source acceptance alone is insufficient. It makes paid model calls.
-6. Inspect both answers and expand the short-history control beneath each pair. Mark each answer as meeting requirements, missing/incorrect, or unreviewed. Export the JSON result before starting another run or restarting the host.
+6. Use the question numbers beside **Compare answers** to switch questions; manual review labels are retained while switching. Inspect both answers and expand the short-history control beneath each pair. Mark each answer as meeting requirements, missing/incorrect, or unreviewed. Export the JSON result before starting another run or restarting the host.
 
 **Reuse this memory for more questions** appends another batch after completion. Each batch allows up to eight questions, with 32 in total. The same corpus, model, recall configuration and scope are retained; no second capture or preparation occurs. Cumulative input includes the preparation ledger exactly once. Repeated questions are allowed, but should be identified as reuse trials, not additional independent quality cases.
 
 The corpus remains fixed throughout a run. Generated answers never enter later prompts or memory. Full history sends the complete supplied record; the memory arm sends its bounded UTF-8 tail plus actual recalled context; the control sends the identical tail without memory. Arm order alternates across questions to expose order/cache effects. This is a **controlled context-strategy replay**, not execution of the DSH task agent or a measurement of DSH's default compaction policy. The normal DSH plugin appends prepared context; enabling it alone does not prove token savings.
 
 ## Read the panel
+
+The top summary shows answer input reduction, input reduction including memory overhead, and combined answer/memory generation output. Expand **Token breakdown & AI Vision** for strategy totals, preparation and cumulative ledgers, the experiment scope and preparation trace. **Export results** and **Close** stay in the header; Escape also closes the panel and returns focus to pet chat.
 
 - **Answer input reduction** compares provider-reported input tokens for all completed pairs, including separately reported cache buckets. Incomplete answers or missing input counts prevent an aggregate reduction from being displayed.
 - **Observed input including memory** adds the memory arm’s answer input, scope generation input and embedding input. It remains unknown when a required counter or completed answer is missing. It is a cross-model token-count comparison, not a bill; output is displayed separately. Negative reduction means increased input, and is retained without rounding it to zero.

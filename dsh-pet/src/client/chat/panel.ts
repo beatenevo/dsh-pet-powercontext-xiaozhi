@@ -35,7 +35,7 @@ export function makePetChatPanel(rt: ChatPanelRuntime): () => unknown {
         revision: state.messages[state.messages.length - 1]?.ts ?? 0,
       }),
       rt.h(RobotPanel, { petId: state.petId }),
-      rt.h(ComparisonPanel, {}),
+      rt.h(ComparisonPanel, { petName: state.petName, assetRoot: state.assetRoot, avatarVersion: state.avatarVersion }),
     );
   };
 }

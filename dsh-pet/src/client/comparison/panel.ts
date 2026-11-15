@@ -1,4 +1,5 @@
 /** A host-mounted comparison dialog, also shared by standalone mode. No raw content is sent to telemetry. */
+import { avatarUrl } from '../../shared/avatar.ts';
 import type { ChatPanelRuntime } from '../chat/runtime.ts';
 import { ROUTE_PATH } from '../../shared/constants.ts';
 import {
@@ -10,10 +11,22 @@ import {
   type MemoryUsage,
 } from '../../shared/comparison.ts';
 
-export function makeComparisonPanel(rt: ChatPanelRuntime): () => unknown {
-  const { h, useState, useEffect, t } = rt;
-  return function ComparisonPanel(): unknown {
+interface CompanionIdentity {
+  petName: string;
+  assetRoot: string;
+  avatarVersion: number;
+}
+
+export function makeComparisonPanel(rt: ChatPanelRuntime): (pet: CompanionIdentity) => unknown {
+  const { h, useState, useEffect, useRef, t } = rt;
+  return function ComparisonPanel(pet: CompanionIdentity): unknown {
     const [open, setOpen] = useState(false);
+    const [selectedRound, setSelectedRound] = useState(0);
+    const launchRef = useRef<HTMLButtonElement | null>(null);
+    useEffect(() => {
+      const trigger = launchRef.current;
+      if (open) return () => trigger?.focus();
+    }, [open]);
     const [corpus, setCorpus] = useState('');
     const [questions, setQuestions] = useState('');
     const [moreQuestions, setMoreQuestions] = useState('');
@@ -46,8 +59,14 @@ export function makeComparisonPanel(rt: ChatPanelRuntime): () => unknown {
     const busy = submitting || run?.status === 'preparing' || run?.status === 'running';
     const number = (value: number | undefined | null): string =>
       value == null ? t('comparisonUnknown') : value.toLocaleString();
-    const button = (label: string, onClick: () => void, disabled = false) =>
-      h('button', { type: 'button', onClick, disabled, children: label });
+    const button = (label: string, onClick: () => void, disabled = false, primary = false) =>
+      h('button', {
+        type: 'button',
+        className: primary ? 'pet-comparison-primary' : undefined,
+        onClick,
+        disabled,
+        children: label,
+      });
     const trace = (url?: string) =>
       url ? h('a', { href: url, target: '_blank', rel: 'noopener noreferrer', children: t('comparisonTrace') }) : null;
     const status = (value: string) =>
@@ -84,6 +103,7 @@ export function makeComparisonPanel(rt: ChatPanelRuntime): () => unknown {
         if (!response.ok || value.ok === false) throw new Error('start_failed');
         setRun(value.run);
         setReviews({});
+        setSelectedRound(0);
       } catch {
         setError(true);
       } finally {
@@ -150,57 +170,80 @@ export function makeComparisonPanel(rt: ChatPanelRuntime): () => unknown {
         children: [
           h('h3', { children: label }),
           ...(['generation', 'embedding'] as const).map((kind) =>
-            h('p', {
+            h('div', {
+              className: 'pet-comparison-ledger-row',
               children: [
-                t(kind === 'generation' ? 'comparisonGeneration' : 'comparisonEmbedding') + ': ',
-                number(usage?.[kind].requests) + ' ' + t('comparisonRequests') + ' · ',
-                t('comparisonInput') +
-                  ' ' +
-                  number(usage?.[kind].input) +
-                  ' · ' +
-                  t('comparisonOutput') +
-                  ' ' +
-                  number(usage?.[kind].output),
+                h('span', { children: t(kind === 'generation' ? 'comparisonGeneration' : 'comparisonEmbedding') }),
+                h('span', { children: number(usage?.[kind].requests) + ' ' + t('comparisonRequests') }),
+                h('strong', { children: t('comparisonInput') + ' ' + number(usage?.[kind].input) }),
+                h('span', { children: t('comparisonOutput') + ' ' + number(usage?.[kind].output) }),
               ],
             }),
           ),
         ],
       });
+    const strategyTitle = (strategy: string) =>
+      t(strategy === 'full' ? 'comparisonFull' : strategy === 'memory' ? 'comparisonMemory' : 'comparisonShort');
     const answerNode = (answer: ComparisonAnswer, round: number) => {
-      const title = t(
-        answer.strategy === 'full'
-          ? 'comparisonFull'
-          : answer.strategy === 'memory'
-            ? 'comparisonMemory'
-            : 'comparisonShort',
-      );
+      const title = strategyTitle(answer.strategy);
       const key = (run?.id ?? '') + ':' + round + ':' + answer.strategy;
       return h('article', {
         className: 'pet-comparison-answer',
         'data-strategy': answer.strategy,
         children: [
-          h('h3', { children: title }),
+          h('div', {
+            className: 'pet-comparison-answer-heading',
+            children: [
+              h('h3', { children: title }),
+              h('span', {
+                className: 'pet-comparison-status',
+                'data-status': answer.status,
+                children: status(answer.status),
+              }),
+            ],
+          }),
           h('div', {
             className: 'pet-comparison-tokens',
             children: [
-              `${t('comparisonInput')} ${number(comparisonInputTokens(answer.usage))} · ${t('comparisonOutput')} ${number(answer.usage?.outputTokens)}`,
-              h('small', {
-                children: `${t('comparisonCache')} ${number(answer.usage?.cacheReadTokens)} · ${t('comparisonDuration')} ${number(answer.durationMs)} ms`,
+              h('div', {
+                children: [
+                  h('small', { children: t('comparisonInput') + ' Token' }),
+                  h('strong', { children: number(comparisonInputTokens(answer.usage)) }),
+                ],
+              }),
+              h('div', {
+                children: [
+                  h('small', { children: t('comparisonOutput') + ' Token' }),
+                  h('strong', { children: number(answer.usage?.outputTokens) }),
+                ],
+              }),
+              h('div', {
+                children: [
+                  h('small', { children: t('comparisonDuration') }),
+                  h('strong', { children: number(answer.durationMs) + ' ms' }),
+                ],
               }),
             ],
           }),
           h('p', { className: 'pet-comparison-answer-text', children: answer.text ?? status(answer.status) }),
-          h('small', {
-            children:
-              `${t('comparisonBytes')} ${number(answer.contextBytes)}` +
-              (answer.strategy === 'memory' ? ` · ${t('comparisonRecall')} ${number(answer.recallBytes)}` : ''),
+          h('div', {
+            className: 'pet-comparison-answer-meta',
+            children: [
+              h('small', {
+                children:
+                  `${t('comparisonCache')} ${number(answer.usage?.cacheReadTokens)} · ${t('comparisonBytes')} ${number(answer.contextBytes)}` +
+                  (answer.strategy === 'memory' ? ` · ${t('comparisonRecall')} ${number(answer.recallBytes)}` : ''),
+              }),
+              trace(answer.traceUrl),
+            ],
           }),
-          trace(answer.traceUrl),
           h('label', {
+            className: 'pet-comparison-review',
             children: [
               t('comparisonQuality'),
               h('select', {
                 'aria-label': title + ' ' + t('comparisonQuality'),
+                'data-review': reviews[key] ?? 'unreviewed',
                 value: reviews[key] ?? 'unreviewed',
                 disabled: answer.status !== 'complete',
                 onChange: (event: { target: { value: string } }) =>
@@ -228,22 +271,93 @@ export function makeComparisonPanel(rt: ChatPanelRuntime): () => unknown {
       : [];
     const full = totals[0]?.input,
       memory = totals[1]?.input;
-    const saving =
-      full !== undefined && full > 0 && memory !== undefined
-        ? ((1 - memory / full) * 100).toFixed(1) + '%'
+    const reduction = (input: number | undefined) =>
+      full !== undefined && full > 0 && input !== undefined
+        ? ((1 - input / full) * 100).toFixed(1) + '%'
         : t('comparisonUnknown');
     const observedInput = run ? comparisonObservedInput(run) : undefined;
-    const observedSaving =
-      full !== undefined && full > 0 && observedInput !== undefined
-        ? ((1 - observedInput / full) * 100).toFixed(1) + '%'
-        : t('comparisonUnknown');
     const memoryOutput = run?.memoryUsage?.generation.output;
     const observedOutput =
       memoryOutput != null && totals[1]?.output !== undefined ? memoryOutput + totals[1].output : undefined;
+    const index = Math.min(selectedRound, Math.max(0, (run?.rounds.length ?? 1) - 1));
+    const round = run?.rounds[index];
+    const completed = run?.rounds.filter((r) => r.answers.every((a) => a.status === 'complete')).length ?? 0;
+    const metric = (label: string, value: string, detail: string, positive: boolean) =>
+      h('div', {
+        className: 'pet-comparison-metric',
+        'data-positive': positive,
+        children: [h('small', { children: label }), h('strong', { children: value }), h('span', { children: detail })],
+      });
+    const setup = h('details', {
+      className: 'pet-comparison-setup',
+      open: !run,
+      children: [
+        h('summary', { children: t(run ? 'comparisonNewRun' : 'comparisonSetup') }),
+        h('div', {
+          className: 'pet-comparison-form',
+          children: [
+            h('label', {
+              children: [
+                t('comparisonCorpus'),
+                h('textarea', {
+                  value: corpus,
+                  maxLength: 49152,
+                  disabled: busy,
+                  rows: 7,
+                  placeholder: t('comparisonCorpusHint'),
+                  onChange: (e: { target: { value: string } }) => setCorpus(e.target.value),
+                }),
+              ],
+            }),
+            h('div', {
+              children: [
+                h('label', {
+                  children: [
+                    t('comparisonQuestions'),
+                    h('textarea', {
+                      value: questions,
+                      maxLength: 8008,
+                      disabled: busy,
+                      rows: 4,
+                      placeholder: t('comparisonQuestionsHint'),
+                      onChange: (e: { target: { value: string } }) => setQuestions(e.target.value),
+                    }),
+                  ],
+                }),
+                h('label', {
+                  className: 'pet-comparison-budget',
+                  children: [
+                    t('comparisonRecent'),
+                    h('input', {
+                      type: 'number',
+                      min: 128,
+                      max: 8192,
+                      value: recentBytes,
+                      disabled: busy,
+                      onChange: (e: { target: { value: string } }) => setRecentBytes(Number(e.target.value)),
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+        h('p', { className: 'pet-comparison-note', children: t('comparisonConsent') }),
+        button(t('comparisonStart'), () => void start(), busy || !corpus.trim() || !questions.trim(), true),
+      ],
+    });
     return h('div', {
       className: 'pet-comparison-launch',
       children: [
-        button(t('comparisonOpen'), () => setOpen(true)),
+        h('button', {
+          type: 'button',
+          ref: launchRef,
+          onClick: () => setOpen(true),
+          className: 'pet-comparison-launch-button',
+          'aria-label': t('comparisonOpen'),
+          'aria-haspopup': 'dialog',
+          children: [h('span', { children: t('comparisonOpen') }), h('small', { children: 'PowerContext' })],
+        }),
         open
           ? h('dialog', {
               ref: (node: HTMLDialogElement | null) => {
@@ -254,164 +368,232 @@ export function makeComparisonPanel(rt: ChatPanelRuntime): () => unknown {
                 setOpen(false);
               },
               className: 'pet-comparison',
-              role: 'dialog',
-              'aria-modal': true,
+              'data-view': run ? 'results' : 'setup',
               'aria-label': t('comparisonTitle'),
-              onKeyDown: (event: { key: string }) => {
-                if (event.key === 'Escape') setOpen(false);
-              },
               children: [
                 h('header', {
+                  className: 'pet-comparison-header',
                   children: [
-                    h('h2', { children: t('comparisonTitle') }),
-                    button(t('comparisonClose'), () => setOpen(false)),
-                  ],
-                }),
-                h('p', { children: t('comparisonIntro') }),
-                h('details', {
-                  open: !run,
-                  children: [
-                    h('summary', { children: t('comparisonCorpus') }),
-                    h('label', {
+                    h('div', {
+                      className: 'pet-comparison-identity',
                       children: [
-                        t('comparisonCorpus'),
-                        h('textarea', {
-                          value: corpus,
-                          maxLength: 49152,
-                          disabled: busy,
-                          rows: 5,
-                          onChange: (e: { target: { value: string } }) => setCorpus(e.target.value),
-                        }),
-                      ],
-                    }),
-                    h('label', {
-                      children: [
-                        t('comparisonQuestions'),
-                        h('textarea', {
-                          value: questions,
-                          maxLength: 8008,
-                          disabled: busy,
-                          rows: 3,
-                          onChange: (e: { target: { value: string } }) => setQuestions(e.target.value),
-                        }),
-                      ],
-                    }),
-                    h('label', {
-                      children: [
-                        t('comparisonRecent'),
-                        h('input', {
-                          type: 'number',
-                          min: 128,
-                          max: 8192,
-                          value: recentBytes,
-                          disabled: busy,
-                          onChange: (e: { target: { value: string } }) => setRecentBytes(Number(e.target.value)),
-                        }),
-                      ],
-                    }),
-                    h('p', { children: t('comparisonConsent') }),
-                    button(t('comparisonStart'), () => void start(), busy || !corpus.trim() || !questions.trim()),
-                  ],
-                }),
-                error ? h('p', { role: 'alert', children: t('comparisonError') }) : null,
-                run
-                  ? h('div', {
-                      children: [
+                        h('img', { src: avatarUrl(pet.assetRoot, pet.avatarVersion), alt: '', width: 44, height: 44 }),
                         h('div', {
-                          className: 'pet-comparison-toolbar',
                           children: [
-                            h('strong', { children: status(run.status) + ' · ' + run.model.model }),
-                            button(t('comparisonExport'), exportRun),
-                            busy ? button(t('comparisonStop'), () => void cancel()) : null,
-                            trace(run.preparationTraceUrl),
+                            h('small', { children: (pet.petName || t('comparisonCompanion')) + ' / PowerContext' }),
+                            h('h2', { children: t('comparisonTitle') }),
                           ],
                         }),
-                        h('p', {
-                          children: `${t('comparisonScope')}: ${run.scopeId ?? '…'} · ${t('comparisonReady')}: ${number(run.preparation?.activeMemories)}`,
-                        }),
-                        h('section', {
-                          className: 'pet-comparison-summary',
+                      ],
+                    }),
+                    h('div', {
+                      className: 'pet-comparison-actions',
+                      children: [
+                        run ? button(t('comparisonExport'), exportRun) : null,
+                        button(t('comparisonClose'), () => setOpen(false)),
+                      ],
+                    }),
+                  ],
+                }),
+                h('div', {
+                  className: 'pet-comparison-body',
+                  children: [
+                    h('p', { className: 'pet-comparison-intro', children: t('comparisonIntro') }),
+                    error
+                      ? h('p', { className: 'pet-comparison-alert', role: 'alert', children: t('comparisonError') })
+                      : null,
+                    !run ? setup : null,
+                    run
+                      ? h('div', {
+                          className: 'pet-comparison-results',
                           children: [
-                            h('h3', { children: t('comparisonAnswerTotals') }),
-                            h('strong', { children: t('comparisonReduction') + ': ' + saving }),
-                            h('p', { children: t('comparisonObservedReduction') + ': ' + observedSaving }),
-                            h('p', {
-                              children:
-                                t('comparisonObserved') +
-                                ': ' +
-                                number(observedInput) +
-                                ' · ' +
-                                t('comparisonMemoryOutput') +
-                                ': ' +
-                                number(observedOutput),
-                            }),
-                            ...totals.map((entry) =>
-                              h('p', {
-                                children: `${t(entry.strategy === 'full' ? 'comparisonFull' : entry.strategy === 'memory' ? 'comparisonMemory' : 'comparisonShort')}: ${t('comparisonInput')} ${number(entry.input)} · ${t('comparisonOutput')} ${number(entry.output)} · ${t('comparisonCache')} ${number(entry.cacheRead)}`,
-                              }),
-                            ),
-                          ],
-                        }),
-                        h('p', { children: t('comparisonDataset') }),
-                        run.status === 'complete' && run.rounds.length < 32
-                          ? h('details', {
+                            h('div', {
+                              className: 'pet-comparison-toolbar',
                               children: [
-                                h('summary', { children: t('comparisonContinue') }),
-                                h('p', { children: t('comparisonContinueHint') }),
-                                h('textarea', {
-                                  'aria-label': t('comparisonContinue'),
-                                  value: moreQuestions,
-                                  rows: 3,
-                                  maxLength: 8008,
-                                  onChange: (event: { target: { value: string } }) =>
-                                    setMoreQuestions(event.target.value),
+                                h('span', {
+                                  className: 'pet-comparison-status',
+                                  'data-status': run.status,
+                                  role: 'status',
+                                  children: status(run.status),
                                 }),
-                                button(
-                                  t('comparisonContinue'),
-                                  () => void continueRun(),
-                                  submitting || !moreQuestions.trim(),
+                                h('span', { children: run.model.model }),
+                                h('span', {
+                                  children: `${t('comparisonProgress')} ${completed} / ${run.rounds.length}`,
+                                }),
+                                h('span', {
+                                  children: `${t('comparisonReady')} ${number(run.preparation?.activeMemories)}`,
+                                }),
+                                busy ? button(t('comparisonStop'), () => void cancel()) : null,
+                              ],
+                            }),
+                            h('section', {
+                              className: 'pet-comparison-summary',
+                              'aria-label': t('comparisonAnswerTotals'),
+                              children: [
+                                metric(
+                                  t('comparisonReduction'),
+                                  reduction(memory),
+                                  `${number(full)} → ${number(memory)}`,
+                                  full !== undefined && memory !== undefined && memory < full,
+                                ),
+                                metric(
+                                  t('comparisonObservedReduction'),
+                                  reduction(observedInput),
+                                  `${number(full)} → ${number(observedInput)}`,
+                                  full !== undefined && observedInput !== undefined && observedInput < full,
+                                ),
+                                metric(
+                                  t('comparisonMemoryOutput'),
+                                  number(observedOutput),
+                                  t('comparisonOutputCaveat'),
+                                  false,
                                 ),
                               ],
-                            })
-                          : null,
-                        ...run.rounds.map((round, index) =>
-                          h('section', {
-                            className: 'pet-comparison-round',
-                            children: [
-                              h('h3', { children: `${index + 1}. ${round.question}` }),
-                              h('div', {
-                                className: 'pet-comparison-columns',
-                                children: round.answers
-                                  .filter((answer) => answer.strategy !== 'short')
-                                  .map((answer) => answerNode(answer, index)),
-                              }),
-                              h('details', {
-                                children: [
-                                  h('summary', { children: t('comparisonShort') }),
-                                  answerNode(
-                                    round.answers.find((answer) => answer.strategy === 'short')!,
-                                    index,
-                                  ),
-                                ],
-                              }),
-                            ],
-                          }),
-                        ),
-                        h('div', {
-                          className: 'pet-comparison-columns',
-                          children: [
-                            ledger(run.preparation, t('comparisonPreparation')),
-                            ledger(run.memoryUsage, t('comparisonAccounting')),
+                            }),
+                            h('p', { className: 'pet-comparison-note', children: t('comparisonSummaryHint') }),
+                            round
+                              ? h('section', {
+                                  className: 'pet-comparison-round',
+                                  children: [
+                                    h('div', {
+                                      className: 'pet-comparison-round-heading',
+                                      children: [
+                                        h('h3', { children: t('comparisonAnswers') }),
+                                        h('nav', {
+                                          className: 'pet-comparison-question-nav',
+                                          'aria-label': t('comparisonChooseQuestion'),
+                                          children: run.rounds.map((r, i) =>
+                                            h('button', {
+                                              type: 'button',
+                                              'aria-pressed': i === index,
+                                              'aria-label': `${i + 1}. ${r.question}`,
+                                              title: r.question,
+                                              onClick: () => setSelectedRound(i),
+                                              children: String(i + 1),
+                                            }),
+                                          ),
+                                        }),
+                                      ],
+                                    }),
+                                    h('h4', {
+                                      className: 'pet-comparison-question',
+                                      children: `${index + 1}. ${round.question}`,
+                                    }),
+                                    h('div', {
+                                      className: 'pet-comparison-columns',
+                                      children: round.answers
+                                        .filter((a) => a.strategy !== 'short')
+                                        .map((a) => answerNode(a, index)),
+                                    }),
+                                    h('details', {
+                                      className: 'pet-comparison-control',
+                                      children: [
+                                        h('summary', { children: t('comparisonShort') }),
+                                        answerNode(
+                                          round.answers.find((a) => a.strategy === 'short')!,
+                                          index,
+                                        ),
+                                      ],
+                                    }),
+                                    h('p', { className: 'pet-comparison-note', children: t('comparisonDataset') }),
+                                  ],
+                                })
+                              : null,
+                            run.status === 'complete' && run.rounds.length < 32
+                              ? h('details', {
+                                  className: 'pet-comparison-continue',
+                                  children: [
+                                    h('summary', { children: t('comparisonContinue') }),
+                                    h('p', { className: 'pet-comparison-note', children: t('comparisonContinueHint') }),
+                                    h('textarea', {
+                                      'aria-label': t('comparisonContinue'),
+                                      value: moreQuestions,
+                                      rows: 3,
+                                      maxLength: 8008,
+                                      onChange: (event: { target: { value: string } }) =>
+                                        setMoreQuestions(event.target.value),
+                                    }),
+                                    button(
+                                      t('comparisonContinue'),
+                                      () => void continueRun(),
+                                      submitting || !moreQuestions.trim(),
+                                      true,
+                                    ),
+                                  ],
+                                })
+                              : null,
+                            h('details', {
+                              className: 'pet-comparison-accounting',
+                              children: [
+                                h('summary', { children: t('comparisonDetails') }),
+                                h('div', {
+                                  className: 'pet-comparison-table-wrap',
+                                  children: h('table', {
+                                    children: [
+                                      h('caption', { children: t('comparisonAnswerTotals') }),
+                                      h('thead', {
+                                        children: h('tr', {
+                                          children: (
+                                            [
+                                              'comparisonStrategy',
+                                              'comparisonInput',
+                                              'comparisonOutput',
+                                              'comparisonCache',
+                                            ] as const
+                                          ).map((key) => h('th', { scope: 'col', children: t(key) })),
+                                        }),
+                                      }),
+                                      h('tbody', {
+                                        children: totals.map((entry) =>
+                                          h('tr', {
+                                            children: [
+                                              h('th', { scope: 'row', children: strategyTitle(entry.strategy) }),
+                                              ...[entry.input, entry.output, entry.cacheRead].map((value) =>
+                                                h('td', { children: number(value) }),
+                                              ),
+                                            ],
+                                          }),
+                                        ),
+                                      }),
+                                    ],
+                                  }),
+                                }),
+                                h('div', {
+                                  className: 'pet-comparison-columns',
+                                  children: [
+                                    ledger(run.preparation, t('comparisonPreparation')),
+                                    ledger(run.memoryUsage, t('comparisonAccounting')),
+                                  ],
+                                }),
+                                h('p', {
+                                  className: 'pet-comparison-note',
+                                  children: `${t('comparisonObserved')}: ${number(observedInput)}`,
+                                }),
+                                h('p', {
+                                  className: 'pet-comparison-scope',
+                                  children: `${t('comparisonScope')}: ${run.scopeId ?? '…'}`,
+                                }),
+                                trace(run.preparationTraceUrl),
+                                !run.preparationTraceUrl ? h('p', { children: t('comparisonNoTrace') }) : null,
+                              ],
+                            }),
+                            run.accountingError || !run.memoryUsage
+                              ? h('p', {
+                                  className: 'pet-comparison-alert',
+                                  role: 'status',
+                                  children: t('comparisonIncomplete'),
+                                })
+                              : null,
+                            setup,
                           ],
-                        }),
-                        run.accountingError || !run.memoryUsage
-                          ? h('p', { role: 'status', children: t('comparisonIncomplete') })
-                          : null,
-                        !run.preparationTraceUrl ? h('p', { children: t('comparisonNoTrace') }) : null,
-                      ],
-                    })
-                  : null,
-                h('p', { className: 'pet-comparison-note', children: t('comparisonLimit') }),
+                        })
+                      : null,
+                    h('p', {
+                      className: 'pet-comparison-note pet-comparison-footnote',
+                      children: t('comparisonLimit'),
+                    }),
+                  ],
+                }),
               ],
             })
           : null,

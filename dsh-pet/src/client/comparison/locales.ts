@@ -1,5 +1,19 @@
 /** The comparison tool ships English and Chinese copy; other locales use English. */
 export const comparisonEn = {
+  comparisonCompanion: 'Pet chat',
+  comparisonSetup: 'Set up a comparison',
+  comparisonNewRun: 'Start a new comparison',
+  comparisonCorpusHint: 'Paste the conversation or project record containing the facts to remember.',
+  comparisonQuestionsHint: 'Ask questions that can be checked against the record, one per line.',
+  comparisonProgress: 'Questions completed',
+  comparisonOutputCaveat: 'Includes memory generation; separate from input reduction',
+  comparisonSummaryHint:
+    'Measured input tokens, not a price estimate. Include memory overhead and review the answers below.',
+  comparisonAnswers: 'Compare answers',
+  comparisonChooseQuestion: 'Choose a question',
+  comparisonDetails: 'Token breakdown & AI Vision',
+  comparisonStrategy: 'Context strategy',
+
   comparisonContinue: 'Reuse this memory for more questions',
   comparisonContinueHint:
     'Add up to eight questions per batch, 32 total. Reuse the same corpus, model and prepared scope; preparation is charged only once.',
@@ -8,7 +22,7 @@ export const comparisonEn = {
   comparisonMemoryOutput: 'Answer + memory generation output',
 
   comparisonOpen: 'Token comparison',
-  comparisonTitle: 'Context strategy comparison',
+  comparisonTitle: 'Memory & token comparison',
   comparisonClose: 'Close',
   comparisonIntro:
     'Replay the same questions with the same model. This compares explicit context strategies; it does not measure DSH default history compression. Answers are generated independently, without tools.',
@@ -61,6 +75,19 @@ export const comparisonEn = {
     'Review the supplied facts and answer requirements before interpreting savings. Short-history control is shown below each pair.',
 };
 export const comparisonZh: Record<keyof typeof comparisonEn, string> = {
+  comparisonCompanion: '桌宠对话',
+  comparisonSetup: '准备对照实验',
+  comparisonNewRun: '开始新的对照',
+  comparisonCorpusHint: '粘贴包含待记忆事实的对话或项目记录。',
+  comparisonQuestionsHint: '输入可以根据原始记录核对的问题，每行一个。',
+  comparisonProgress: '已完成问题',
+  comparisonOutputCaveat: '包含记忆生成，与输入减少分开计算',
+  comparisonSummaryHint: '这里展示实测输入 Token，不是费用估算。请同时关注记忆开销，并核对下方回答。',
+  comparisonAnswers: '回答对照',
+  comparisonChooseQuestion: '选择问题',
+  comparisonDetails: 'Token 明细与 AI Vision',
+  comparisonStrategy: '上下文策略',
+
   comparisonContinue: '继续复用本次记忆',
   comparisonContinueHint:
     '每批最多追加 8 个问题，累计最多 32 个。复用相同背景、模型和已准备的范围，一次性准备开销只计一次。',
@@ -69,7 +96,7 @@ export const comparisonZh: Record<keyof typeof comparisonEn, string> = {
   comparisonMemoryOutput: '回答与记忆生成的输出合计',
 
   comparisonOpen: 'Token 对照',
-  comparisonTitle: '上下文策略对照',
+  comparisonTitle: '记忆与 Token 对照',
   comparisonClose: '关闭',
   comparisonIntro:
     '同一模型、同一组问题，独立生成回答，不执行工具。这是明确的上下文策略实验，不代表 DSH 默认历史压缩策略的开销。',

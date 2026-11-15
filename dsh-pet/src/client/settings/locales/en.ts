@@ -6,7 +6,10 @@ import type { Key } from './zh.ts';
 
 import { memorySetupEn } from './memory-setup.ts';
 
+import { dshMemoryEn } from '../../dsh-memory-status.ts';
+
 export const en: Record<Key, string> = {
+  ...dshMemoryEn,
   ...memorySetupEn,
   memoryStatusHint: 'Current pet, saved settings. Synced dialogue does not establish extracted memory.',
   memoryPending: 'Pending',

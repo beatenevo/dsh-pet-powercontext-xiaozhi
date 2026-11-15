@@ -5,7 +5,10 @@ import type { Key } from './zh.ts';
 
 import { memorySetupEn } from './memory-setup.ts';
 
+import { dshMemoryEn } from '../../dsh-memory-status.ts';
+
 export const pt: Record<Key, string> = {
+  ...dshMemoryEn,
   ...memorySetupEn,
   memoryStatusHint: 'Animal atual, configurações salvas. Sincronizar não significa ter extraído memórias.',
   memoryPending: 'Pendentes',

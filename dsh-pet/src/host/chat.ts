@@ -38,6 +38,8 @@ export interface ChatMemoryMessage {
   meme?: string;
   /** The action name performed by AI in this round (the name in animations.categories); backfill with `[动作:名称]` when playing back the history. */
   action?: string;
+  /** Shared project history never enters a different workspace or private memory backend. */
+  memoryBinding?: string;
 }
 
 /** Single generation timeout (ms): Dialog waiting for LLM reply, 60 s is enough. */

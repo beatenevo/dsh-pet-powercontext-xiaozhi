@@ -257,9 +257,12 @@ export const HISTORY_ROUNDS = 200;
  * host's budget.
  * @throws when the request fails.
  */
-export async function fetchHistory(petId: string): Promise<{ messages: ChatMessageView[]; contextRounds?: number }> {
+export async function fetchHistory(
+  petId: string,
+  sessionId?: string,
+): Promise<{ messages: ChatMessageView[]; contextRounds?: number }> {
   const url = ROUTE_PATH + '/chat?pet=' + encodeURIComponent(petId) + '&rounds=' + HISTORY_ROUNDS;
-  const res = await fetch(url, { cache: 'no-store' });
+  const res = await fetch(url + (sessionId ? '&session=' + encodeURIComponent(sessionId) : ''), { cache: 'no-store' });
   if (!res.ok) throw new Error('chat HTTP ' + res.status);
   const data = (await res.json()) as { contextRounds?: number };
   return {
@@ -281,10 +284,11 @@ export async function sendMessage(
   petId: string,
   text: string,
   attachment?: ChatAttachment,
+  sessionId?: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   // surface = any: The dialogue window does not look at the rendering results, and pets hidden (display: none) should also be able to dialogue.
   const url = ROUTE_PATH + '/chat?pet=' + encodeURIComponent(petId) + '&surface=any';
-  const result = await sendChat(url, text, attachment);
+  const result = await sendChat(url + (sessionId ? '&session=' + encodeURIComponent(sessionId) : ''), text, attachment);
   return result.ok ? { ok: true } : { ok: false, message: result.message ?? result.reason };
 }
 

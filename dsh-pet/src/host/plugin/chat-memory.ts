@@ -25,6 +25,7 @@ import { pickVoiceSurface, type VoiceTarget } from '../surface.ts';
 import type { HostSetup } from './setup.ts';
 import type { HostContext } from './context.ts';
 import { DEFAULT_CHAT_MEMORY, chatMemoryConfigValid, type ChatMemoryConfig } from '../../shared/chat-memory-config.ts';
+import { prepareDshMemory, type DshMemoryResult } from '../dsh-memory.ts';
 import { boundedHistory, memoryRecallQuery } from '../memory-context.ts';
 import {
   PowerContextClient,
@@ -85,6 +86,9 @@ export function createChatMemory(deps: ChatMemoryInput) {
   const { ctx, configPaths, log, memeDirsFor, playback, state, userRoot } = deps;
   // Command "current desktop pet" (/pet selected, /chat used): global single value regardless of session; in-process memory, restart back to the default first pet
   let activePetId = '';
+  const sharedRecall = new Map<string, { bindingId?: string; sessionId?: string; status: string; error?: string }>();
+  const dshMemory = (config: ChatMemoryConfig, sessionId?: string, query?: string) =>
+    prepareDshMemory((name) => ctx.get?.(name), config, sessionId, query);
 
   // The "last spawn time" of whisper periodic scheduling (according to pet): the scheduling time is determined based
   // on this. The generated result is directly written as S. Sharing the same sentence among multiple terminals is
@@ -227,10 +231,38 @@ export function createChatMemory(deps: ChatMemoryInput) {
       };
     });
 
-  const memoryStatus = async (petId: string) => {
+  const memoryStatus = async (petId: string, sessionId?: string) => {
     const found = findPetInstance(readAllConfig(configPaths), petId);
     if (!found) return { ok: false as const, reason: 'unknown-pet' as const };
     const config = memoryConfig(found.conf);
+    if (config.backend === 'dsh-powercontext') {
+      const result = await dshMemory(config, sessionId);
+      const last = sharedRecall.get(petId);
+      return {
+        ok: true,
+        backend: config.backend,
+        pending: 0,
+        captured: 0,
+        skipped: 0,
+        scopeId: result.status === 'unavailable' ? null : result.scopeId,
+        workspace: result.status === 'unavailable' ? null : result.workspace,
+        recall:
+          result.status === 'unavailable'
+            ? 'unavailable'
+            : last && last.sessionId === sessionId && last.status === 'unavailable'
+              ? 'unavailable'
+              : last?.bindingId === result.bindingId
+                ? last.status
+                : 'not_run',
+        error:
+          result.status === 'unavailable'
+            ? result.reason
+            : last && last.sessionId === sessionId && last.status === 'unavailable'
+              ? (last.error ?? null)
+              : null,
+        processing: 'Read-only project recall; pet conversations stay local.',
+      };
+    }
     const mem = await readMemory();
     const sync = mem[found.entry]?.[petId]?.powercontext?.[memoryTarget(config)];
     return {
@@ -465,6 +497,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     petId: string,
     text: string,
     image?: PetImageRef,
+    sessionId?: string,
   ): Promise<
     | { ok: true; text: string; image?: string }
     | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
@@ -509,11 +542,30 @@ export function createChatMemory(deps: ChatMemoryInput) {
       // question 1 answer). Cannot write slice (- rounds * 2): -0 In JS === 0, slice (-0) returns the entire array
       // instead of empty.
       const config = memoryConfig(found.conf);
+      const shared: DshMemoryResult | undefined =
+        config.backend === 'dsh-powercontext' ? await dshMemory(config, sessionId, text) : undefined;
+      const binding = shared && shared.status !== 'unavailable' ? shared.bindingId : undefined;
+      // Unresolved scopes use no prior history. This avoids guessing which project owns old replies.
+      const history =
+        config.backend === 'dsh-powercontext'
+          ? binding
+            ? entry.messages.filter((message) => message.memoryBinding === binding)
+            : []
+          : entry.messages.filter((message) => message.memoryBinding === undefined);
       const list =
         config.maxHistoryBytes > 0
-          ? boundedHistory(entry.messages, rounds, config.maxHistoryBytes)
-          : sliceMemoryRounds(entry.messages, rounds);
-      let recalledContext: string | undefined;
+          ? boundedHistory(history, rounds, config.maxHistoryBytes)
+          : sliceMemoryRounds(history, rounds);
+      let recalledContext = shared?.status === 'ready' ? shared.content : undefined;
+      if (shared) {
+        if (sharedRecall.size >= 100) sharedRecall.clear();
+        sharedRecall.set(
+          petId,
+          shared.status === 'unavailable'
+            ? { sessionId, status: shared.status, error: shared.reason }
+            : { sessionId, bindingId: shared.bindingId, status: shared.status },
+        );
+      }
       if (config.backend === 'powercontext') {
         const sync = memoryState(entry, config);
         // Persist the scope idempotency key before the first external call.
@@ -540,7 +592,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       }
       // Third-party memory: Modify content before dialogue; fail or time out and downgrade to original content (see recallPatch).
       const patch =
-        config.backend === 'powercontext'
+        config.backend !== 'native'
           ? undefined
           : await recallPatch(petId, {
               system,
@@ -565,11 +617,14 @@ export function createChatMemory(deps: ChatMemoryInput) {
       // "pictures brought in this round" (chat record archive), but the picture itself is not resent to the model; the
       // picture with AI only backfills the name tag (see chat.ts's historyMarkersOf), and also does not have the
       // picture itself.
-      entry.messages.push({ role: 'user', content: text, ts: now, ...(image ? { image } : {}) });
+      const partition =
+        config.backend === 'dsh-powercontext' ? { memoryBinding: binding ?? 'unresolved:' + (sessionId ?? '') } : {};
+      entry.messages.push({ role: 'user', content: text, ts: now, ...partition, ...(image ? { image } : {}) });
       entry.messages.push({
         role: 'assistant',
         content: generated.text,
         ts: now,
+        ...partition,
         ...(generated.image ? { meme: generated.image } : {}),
         // The action name is the same as the picture name: persist to disk only saves the name, and when replaying the
         // history, chat.ts will backfill it with [action: name] - otherwise the model cannot remember what it has
@@ -581,7 +636,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       if (config.backend === 'powercontext') {
         // The synchronization is queued after the current persist to disk lock, and the reply does not wait for remote collection.
         void syncMemory(petId).catch(() => log.warn('dsh-pet: memory sync persistence unavailable'));
-      } else {
+      } else if (config.backend === 'native') {
         // Exclusive memory link when PowerContext is explicitly selected to avoid repeated collection by third-party backends.
         captureTurn(petId, {
           userText: text,

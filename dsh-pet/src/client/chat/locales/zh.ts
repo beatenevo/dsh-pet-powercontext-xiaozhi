@@ -3,7 +3,10 @@
  */
 import { robotZh } from '../../robot/locales.ts';
 
+import { dshMemoryZh } from '../../dsh-memory-status.ts';
+
 export const zh = {
+  ...dshMemoryZh,
   ...robotZh,
   factsSourceNumber: '来源 {n}',
   factsUser: '你',

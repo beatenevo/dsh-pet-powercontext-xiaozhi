@@ -5,7 +5,10 @@ import type { Key } from './zh.ts';
 
 import { memorySetupEn } from './memory-setup.ts';
 
+import { dshMemoryEn } from '../../dsh-memory-status.ts';
+
 export const fr: Record<Key, string> = {
+  ...dshMemoryEn,
   ...memorySetupEn,
   memoryStatusHint:
     'Animal actuel, réglages enregistrés. La synchronisation ne garantit pas l’extraction des souvenirs.',

@@ -12,6 +12,7 @@ import type { jsx } from 'react/jsx-runtime';
 
 /** Set the runtime dependencies of the page; each sub-component only takes the ones it uses as needed. */
 export interface SettingsRuntime {
+  readonly readSessionId?: () => string | undefined;
   h: typeof jsx;
   useState: <T>(init: T) => [T, Dispatch<SetStateAction<T>>];
   // Use React namespace type instead of typeof: type-only import of hook cannot enter declaration export (TS4078)

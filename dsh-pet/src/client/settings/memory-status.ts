@@ -1,4 +1,5 @@
 /** Per-pet status from the saved configuration; refreshes only on selection or explicit action. */
+import { describeDshMemory } from '../dsh-memory-status.ts';
 import { ROUTE_PATH } from '../../shared/constants.ts';
 import type { SettingsRuntime } from './runtime.ts';
 
@@ -10,9 +11,11 @@ interface Status {
   skipped: number;
   recall: string;
   error: string | null;
+  workspace?: string | null;
+  scopeId?: string | null;
 }
 
-export function makeMemoryStatus({ h, t, useEffect, useState }: SettingsRuntime) {
+export function makeMemoryStatus({ h, t, useEffect, useState, readSessionId }: SettingsRuntime) {
   return function MemoryStatus({ petId }: { petId: string }) {
     const [status, setStatus] = useState<Status | null>(null);
     const [busy, setBusy] = useState(false);
@@ -24,10 +27,16 @@ export function makeMemoryStatus({ h, t, useEffect, useState }: SettingsRuntime)
       setBusy(true);
       setFailed(false);
       setStatus(null);
-      void fetch(ROUTE_PATH + '/chat/powercontext?pet=' + encodeURIComponent(petId), {
-        method: action.method,
-        signal: controller.signal,
-      })
+      void fetch(
+        ROUTE_PATH +
+          '/chat/powercontext?pet=' +
+          encodeURIComponent(petId) +
+          (readSessionId?.() ? '&session=' + encodeURIComponent(readSessionId()!) : ''),
+        {
+          method: action.method,
+          signal: controller.signal,
+        },
+      )
         .then(async (response) => {
           const body = (await response.json()) as Status;
           if (!response.ok || body.ok !== true) throw new Error('unavailable');
@@ -49,26 +58,29 @@ export function makeMemoryStatus({ h, t, useEffect, useState }: SettingsRuntime)
         status
           ? h('p', {
               role: 'status',
-              children: [
-                status.backend === 'native' ? t('memoryNative') : 'PowerContext',
-                ' · ',
-                t('memoryPending'),
-                ': ',
-                String(status.pending),
-                ' · ',
-                t('memoryCaptured'),
-                ': ',
-                String(status.captured),
-                ' · ',
-                t('memorySkipped'),
-                ': ',
-                String(status.skipped),
-                ' · ',
-                t('memoryRecall'),
-                ': ',
-                t('memoryRecall_' + status.recall),
-                status.error ? ' · ' + status.error : '',
-              ],
+              children:
+                status.backend === 'dsh-powercontext'
+                  ? describeDshMemory(status, t)
+                  : [
+                      status.backend === 'native' ? t('memoryNative') : 'PowerContext',
+                      ' · ',
+                      t('memoryPending'),
+                      ': ',
+                      String(status.pending),
+                      ' · ',
+                      t('memoryCaptured'),
+                      ': ',
+                      String(status.captured),
+                      ' · ',
+                      t('memorySkipped'),
+                      ': ',
+                      String(status.skipped),
+                      ' · ',
+                      t('memoryRecall'),
+                      ': ',
+                      t('memoryRecall_' + status.recall),
+                      status.error ? ' · ' + status.error : '',
+                    ],
             })
           : null,
         failed ? h('p', { role: 'status', children: t('memoryRecall_unavailable') }) : null,

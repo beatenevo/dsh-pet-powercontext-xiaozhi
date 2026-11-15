@@ -8,6 +8,7 @@
  * not require refreshing the page.
  * @module dsh-pet/src/client/settings
  */
+import { activeDshSession } from './chat/dsh-session.ts';
 import { ROUTE_PATH } from '../shared/constants.ts';
 import { avatarUrl } from '../shared/avatar.ts';
 import { DEFAULT_FONT } from '../shared/fonts.ts';
@@ -85,7 +86,10 @@ export function makePetConfigSection(
   const GlobalCard = makeGlobalCard(rt);
   const VoiceCard = makeVoiceCard(rt, VoicePicker);
   const FontCard = makeFontCard(rt);
-  const ModelCard = makeModelCard(rt, ModelPicker);
+  const ModelCard = makeModelCard(
+    { ...rt, readSessionId: () => activeDshSession((name) => ctx.get?.(name)) },
+    ModelPicker,
+  );
   const MemorySetup = makeMemorySetup(rt);
   const PhysicsCard = makePhysicsCard(rt);
   const MotionCard = makeMotionCard(rt);
@@ -445,11 +449,13 @@ export function makePetConfigSection(
           onFlagChange: setChatFlag,
         }),
         h(MemorySetup, {
-          disabled: saving || loadState !== 'ready',
+          disabled: saving || loadState !== 'ready' || longTermMemory.backend === 'dsh-powercontext',
           onBusy: setPreparingMemory,
           onBinding: (binding: NonNullable<MemorySetupStatus['binding']>) => {
-            setLongTermMemory(binding.chatMemory);
-            setChatMemory(binding.chatMemoryRounds);
+            if (longTermMemory.backend !== 'dsh-powercontext') {
+              setLongTermMemory(binding.chatMemory);
+              setChatMemory(binding.chatMemoryRounds);
+            }
           },
         }),
         h(PhysicsCard, { busy, physics, onChange: patchPhysics }),

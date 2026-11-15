@@ -5,7 +5,10 @@ import type { Key } from './zh.ts';
 
 import { robotEn } from '../../robot/locales.ts';
 
+import { dshMemoryEn } from '../../dsh-memory-status.ts';
+
 export const fr: Record<Key, string> = {
+  ...dshMemoryEn,
   ...robotEn,
   factsSourceNumber: 'Source {n}',
   factsUser: 'Vous',

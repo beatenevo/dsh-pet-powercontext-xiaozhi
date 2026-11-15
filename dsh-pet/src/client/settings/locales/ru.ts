@@ -5,7 +5,10 @@ import type { Key } from './zh.ts';
 
 import { memorySetupEn } from './memory-setup.ts';
 
+import { dshMemoryEn } from '../../dsh-memory-status.ts';
+
 export const ru: Record<Key, string> = {
+  ...dshMemoryEn,
   ...memorySetupEn,
   memoryStatusHint: 'Текущий питомец, сохранённые настройки. Синхронизация не означает завершение извлечения памяти.',
   memoryPending: 'В очереди',

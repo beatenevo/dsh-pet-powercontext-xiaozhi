@@ -109,6 +109,21 @@ export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHan
         kind: 'prefix',
         path: ROUTE_SEGMENT,
         handler: async (req: IncomingMessage, res: ServerResponse) => {
+          // The DSH web server does not authenticate plugin routes on their behalf.
+          // Standalone supplies its own token gate before dispatching this handler.
+          let connection: { requestRejection(request: IncomingMessage): number | undefined } | undefined;
+          try {
+            connection = ctx.get?.('connection');
+          } catch {
+            // Older host contexts may throw when an optional service is absent.
+          }
+          if (typeof connection?.requestRejection === 'function') {
+            const rejection = connection.requestRejection(req);
+            if (rejection !== undefined) {
+              sendJson(res, rejection, { error: 'dsh_access_denied' });
+              return;
+            }
+          }
           let pathname: string;
           try {
             pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://localhost').pathname);

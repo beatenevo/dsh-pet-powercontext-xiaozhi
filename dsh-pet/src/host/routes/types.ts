@@ -75,7 +75,7 @@ export interface PetRouteDeps {
   /** Managed by the DSH plugin lifecycle; standalone mode uses its own preparation entry point. */
   readonly memorySetup?: import('../../standalone/setup.ts').SetupService;
   /** Optional for older embedding hosts; the shipped host provides both. */
-  readonly memoryStatus?: (petId: string) => Promise<unknown>;
+  readonly memoryStatus?: (petId: string, sessionId?: string) => Promise<unknown>;
   readonly syncMemory?: (petId: string) => Promise<void>;
   readonly listMemories?: (
     petId: string,
@@ -169,7 +169,12 @@ export interface PetRouteDeps {
   /** The number of rounds reserved for a single conversation. */
   readonly memoryRounds: (conf: Record<string, unknown>) => number;
   /** Chat with a local pet. Omitting image keeps the original text-only data path. */
-  readonly chatWithPet: (petId: string, text: string, image?: PetImageRef) => Promise<GeneratedReply>;
+  readonly chatWithPet: (
+    petId: string,
+    text: string,
+    image?: PetImageRef,
+    sessionId?: string,
+  ) => Promise<GeneratedReply>;
   /** Delete pet chat history: omit ts to clear all rounds, or delete only the matching user/assistant pair. */
   readonly deleteHistory: (
     petId: string,

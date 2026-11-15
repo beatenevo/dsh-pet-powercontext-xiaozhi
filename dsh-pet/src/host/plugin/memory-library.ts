@@ -13,6 +13,7 @@ export function createPetMemoryLibrary(deps: {
     const found = findPetInstance(readAllConfig(deps.configPaths), petId);
     if (!found || !chatMemoryConfigValid(found.conf.chatMemory)) throw new Error('memory_disabled');
     const config = found.conf.chatMemory;
+    if (config.backend === 'dsh-powercontext') throw new Error('memory_read_only');
     // Saved memories of the same service can still be managed after pausing collection.
     const state = (await deps.readMemory())[found.entry]?.[petId]?.powercontext?.[memoryTarget(config)];
     return { client: new PowerContextClient(config), scope: state?.scopeId };

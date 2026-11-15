@@ -13,7 +13,9 @@ info:
 
     In DSH, `{port}` is `ctx.webServer.port`; use the address printed by `dsh web`.
     The plugin does not choose DSH's bind address or bypass DSH authentication. Use the host's
-    authenticated session. Do not assume a loopback address makes a request unauthenticated.
+    authenticated session. DSH pet HTTP routes enforce the host connection authentication for reads and writes;
+    unauthenticated requests return 401 and rejected origins return 403 before reaching pet handlers.
+    The desktop helper uses its existing host IPC bridge. Do not assume a loopback address makes a request unauthenticated.
 
     Standalone binds to loopback, checks request origins and requires its local capability
     credential for protected operations. Its setup URL is a credential: do not publish or log it.
@@ -89,14 +91,14 @@ paths:
         Requires the standalone session token/cookie or DSH host access. Does not send RPCs. Connection
         freshness expires after 15 seconds.
       responses:
-        '200':
+        "200":
           description: Current state or business failure. Inspect ok; command acceptance is not physical completion.
           content:
             application/json:
               schema:
                 oneOf:
-                  - $ref: '#/components/schemas/RobotSnapshot'
-                  - $ref: '#/components/schemas/FailureResponse'
+                  - $ref: "#/components/schemas/RobotSnapshot"
+                  - $ref: "#/components/schemas/FailureResponse"
     post:
       tags:
         - Robot
@@ -111,21 +113,21 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RobotRequest'
+              $ref: "#/components/schemas/RobotRequest"
       responses:
-        '200':
+        "200":
           description: Current state or business failure. Inspect ok; command acceptance is not physical completion.
           content:
             application/json:
               schema:
                 oneOf:
-                  - $ref: '#/components/schemas/RobotSnapshot'
-                  - $ref: '#/components/schemas/FailureResponse'
-        '400':
+                  - $ref: "#/components/schemas/RobotSnapshot"
+                  - $ref: "#/components/schemas/FailureResponse"
+        "400":
           description: Invalid URL or JSON syntax
-        '403':
+        "403":
           description: Standalone authentication or cross-site request rejected
-        '415':
+        "415":
           description: JSON required or cross-site browser request rejected
   /dsh-pet-7340/state:
     get:
@@ -1565,10 +1567,16 @@ paths:
         Return the pet's most recent rounds of dialogue (**one-time reading, not polling**) for backfilling the history when the dialogue pop-up window is opened.
 
         The only reader and writer of the memory is the host (persist to disk at `memory.json`). Both the browser and the desktop are just clients.
-        Therefore, both ends of the same DSH instance naturally share the same memory. Keep all files and do not delete them.
+        Both ends share the same local archive. Shared DSH mode returns only the resolved connection/workspace/Scope partition.
+        If unresolved, it returns only local fallback messages for that session and contextRounds is zero.
+        Native and independent PowerContext modes exclude shared project messages; changing mode preserves all archived data.
         Just press `chatMemoryRounds` (default 5 rounds, 1 round = 1 question 1 answer) when responding to intercept the tail;
         If `?rounds=` is passed, it will be intercepted according to the incoming value (only affects this reading and does not change the number of context rounds of subsequent conversations).
       parameters:
+        - name: session
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 256 }
+          description: Visible DSH session ID. The host resolves its workspace and Scope; no client-supplied Scope or URL is accepted. Optional outside shared DSH memory mode.
         - $ref: "#/components/parameters/PetIdQuery"
         - name: rounds
           in: query
@@ -1642,6 +1650,10 @@ paths:
           When the model write-only tag has no text, it only performs actions and does not play bubbles. Independent from the map switch: both can take effect at the same time,
           You can also open just one.
       parameters:
+        - name: session
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 256 }
+          description: Visible DSH session ID. The host resolves its workspace and Scope; no client-supplied Scope or URL is accepted. Optional outside shared DSH memory mode.
         - $ref: "#/components/parameters/PetIdQuery"
         - $ref: "#/components/parameters/SurfaceQuery"
       requestBody:
@@ -1819,7 +1831,12 @@ paths:
       description: |
         Return synchronization and recall counts/status for the selected pet, without conversation text.
         A captured exchange means PowerContext accepted its Source; extraction and later recall are separate steps.
+        In dsh-powercontext mode, report read-only project recall and safe recovery codes; capture counters are zero.
       parameters:
+        - name: session
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 256 }
+          description: Visible DSH session ID. The host resolves its workspace and Scope; no client-supplied Scope or URL is accepted. Optional outside shared DSH memory mode.
         - name: pet
           in: query
           required: true
@@ -1839,6 +1856,7 @@ paths:
       summary: Retry pending pet memory synchronization
       description: |
         Retry up to two pending exchanges using their persisted Source IDs, then return the current status.
+        Shared DSH mode never uploads pet conversations; this is a no-op for synchronization.
         This operation does not directly trigger model extraction. A 409 identity conflict stops automatic
         retries and requires an administrator to resolve the conflicting identity.
       parameters:
@@ -3534,7 +3552,7 @@ components:
           type: array
           maxItems: 20
           items:
-            $ref: '#/components/schemas/RobotAction'
+            $ref: "#/components/schemas/RobotAction"
           description: Unique action keys; only manufacturer-verified taught IDs.
     RobotTelemetry:
       type: object
@@ -3571,7 +3589,7 @@ components:
           type: string
           maxLength: 1000
         telemetry:
-          $ref: '#/components/schemas/RobotTelemetry'
+          $ref: "#/components/schemas/RobotTelemetry"
         stops:
           type: object
           additionalProperties:
@@ -3646,7 +3664,7 @@ components:
           type: string
           format: uuid
         config:
-          $ref: '#/components/schemas/RobotConfig'
+          $ref: "#/components/schemas/RobotConfig"
         armed:
           type: boolean
         busy:
@@ -3660,16 +3678,16 @@ components:
         checkedAt:
           type: integer
         telemetry:
-          $ref: '#/components/schemas/RobotTelemetry'
+          $ref: "#/components/schemas/RobotTelemetry"
         error:
           type: string
         stopResult:
-          $ref: '#/components/schemas/RobotResult'
+          $ref: "#/components/schemas/RobotResult"
         commands:
           type: array
           maxItems: 20
           items:
-            $ref: '#/components/schemas/RobotCommand'
+            $ref: "#/components/schemas/RobotCommand"
     RobotRequest:
       oneOf:
         - type: object
@@ -3681,7 +3699,7 @@ components:
             action:
               const: configure
             config:
-              $ref: '#/components/schemas/RobotConfig'
+              $ref: "#/components/schemas/RobotConfig"
         - type: object
           additionalProperties: false
           required:
@@ -4940,7 +4958,12 @@ components:
           timeoutMs,
         ]
       properties:
-        backend: { type: string, enum: [native, powercontext], default: native }
+        backend:
+          {
+            type: string,
+            enum: [native, powercontext, dsh-powercontext],
+            default: native,
+          }
         maxHistoryBytes:
           type: integer
           minimum: 0
@@ -4977,10 +5000,16 @@ components:
         ]
       properties:
         ok: { type: boolean, const: true }
-        backend: { type: string, enum: [native, powercontext] }
+        backend:
+          { type: string, enum: [native, powercontext, dsh-powercontext] }
         pending: { type: integer, minimum: 0 }
         captured: { type: integer, minimum: 0 }
         skipped: { type: integer, minimum: 0 }
+        workspace:
+          {
+            type: [string, "null"],
+            description: Display name of the current DSH workspace in shared mode.,
+          }
         scopeId: { type: [string, "null"] }
         recall: { type: string, enum: [not_run, empty, ready, unavailable] }
         error: { type: [string, "null"] }
@@ -4994,6 +5023,9 @@ components:
       type: object
       required: [role, content, ts]
       properties:
+        memoryBinding:
+          type: string
+          description: Opaque local context partition for shared DSH project messages. Missing on native messages.
         role:
           type: string
           enum: [user, assistant]

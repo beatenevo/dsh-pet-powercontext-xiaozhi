@@ -26,19 +26,19 @@ Do not copy addresses, ports or action IDs from demonstration programs. Sharing 
 
 Open [Robot slim bundles](https://github.com/ob-labs/dsh-pet-powercontext/actions/workflows/robot-bundles.yml), select a successful run, sign in to GitHub, and download the appropriate group from **Artifacts**. Artifacts expire after seven days. If expired, select a newer successful run or ask the maintainer to rebuild.
 
-| Host computer                  | Artifact                                    |
-| ------------------------------ | ------------------------------------------- |
-| Windows x64                    | `dsh-pet-astra-pro-2.0-bundles-windows-x64` |
-| Linux x64                      | `dsh-pet-astra-pro-2.0-bundles-linux-x64`   |
-| Linux ARM64                    | `dsh-pet-astra-pro-2.0-bundles-linux-arm64` |
-| macOS Intel                    | `dsh-pet-astra-pro-2.0-bundles-macos-x64`   |
-| macOS Apple Silicon (M series) | `dsh-pet-astra-pro-2.0-bundles-macos-arm64` |
+| Host computer                  | Artifact                                                 |
+| ------------------------------ | -------------------------------------------------------- |
+| Windows x64                    | `dsh-pet-powercontext-astra-pro-2.0-bundles-windows-x64` |
+| Linux x64                      | `dsh-pet-powercontext-astra-pro-2.0-bundles-linux-x64`   |
+| Linux ARM64                    | `dsh-pet-powercontext-astra-pro-2.0-bundles-linux-arm64` |
+| macOS Intel                    | `dsh-pet-powercontext-astra-pro-2.0-bundles-macos-x64`   |
+| macOS Apple Silicon (M series) | `dsh-pet-powercontext-astra-pro-2.0-bundles-macos-arm64` |
 
-Extract the artifact ZIP downloaded from GitHub first. It contains application packages, a runtime archive and size reports. In the filenames below, `<version>` is the actual package version, such as `0.1.0-beta.1`; `<platform>` is the OS and architecture from the table, such as `windows-x64`:
+Extract the artifact ZIP downloaded from GitHub first. It contains application packages and a runtime archive; size and validation reports are available in the workflow **Summary**. In the filenames below, `<version>` is the actual package version, such as `0.1.0-beta.1`; `<platform>` is the OS and architecture from the table, such as `windows-x64`:
 
 - **Standalone Windows desktop pet:** use `dsh-pet-powercontext-<version>-desktop-windows-x64-astra-pro-2.0-bundled.zip`.
 - **DSH plugin or Node standalone:** use `dsh-pet-powercontext-<version>-plugin-<platform>-astra-pro-2.0-bundled.tgz`. Keep the `.tgz` intact for the installation command.
-- `astra-pro-2.0-runtime-only-<platform>-python-sdk.tar.gz` is already included in the application packages; there is no separate installation step.
+- `dsh-pet-powercontext-astra-pro-2.0-runtime-only-<platform>-python-sdk.tar.gz` is already included in the application packages; there is no separate installation step.
 - In the Windows group, the file ending in `desktop-windows-x64-standard.zip` lacks the bundled robot runtime. Choose the file ending in `desktop-windows-x64-astra-pro-2.0-bundled.zip` for this tutorial.
 
 The slim package includes private Python, Astra SDK 2.0.0 and control dependencies. You do not need to install Python, and your existing Python installation is not modified. OpenCV, NumPy and the manufacturer's camera/image helpers are excluded. See [package details](../guides/robot-bundles.md).

@@ -41,7 +41,7 @@ jobs:
           npm pack --pack-destination "$RUNNER_TEMP/base-package"
       - uses: actions/upload-artifact@v4
         with:
-          name: dsh-pet-plugin-standard-all-platforms
+          name: dsh-pet-powercontext-plugin-standard-all-platforms
           path: ${{ runner.temp }}/base-package/*.tgz
           retention-days: 7
           if-no-files-found: error
@@ -89,7 +89,7 @@ jobs:
           python-version: "3.11"
       - uses: actions/download-artifact@v4
         with:
-          name: dsh-pet-plugin-standard-all-platforms
+          name: dsh-pet-powercontext-plugin-standard-all-platforms
           path: ${{ runner.temp }}/base-package
       - name: Build and validate the slim native plugin
         run: |
@@ -105,45 +105,17 @@ jobs:
           pnpm run bundle
           pnpm run build:desktop-core
           python scripts/astra/desktop.py --output "$RUNNER_TEMP/robot-build"
+      - name: Show package sizes and validation in the workflow summary
+        if: always()
+        run: |
+          python scripts/astra/report.py "$RUNNER_TEMP/robot-build" --platform "${{ matrix.platform }}" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
-          name: dsh-pet-astra-pro-2.0-bundles-${{ matrix.download_platform }}
+          name: dsh-pet-powercontext-astra-pro-2.0-bundles-${{ matrix.download_platform }}
           compression-level: 0
           retention-days: 7
           if-no-files-found: error
           path: |
             ${{ runner.temp }}/robot-build/*-plugin-*-astra-pro-2.0-bundled.tgz
-            ${{ runner.temp }}/robot-build/astra-pro-2.0-runtime-only-*.tar.gz
+            ${{ runner.temp }}/robot-build/dsh-pet-powercontext-astra-pro-2.0-runtime-only-*.tar.gz
             ${{ runner.temp }}/robot-build/*desktop*.zip
-            ${{ runner.temp }}/robot-build/sizes-*.json
-            ${{ runner.temp }}/robot-build/smoke.json
-            ${{ runner.temp }}/robot-build/desktop-smoke/desktop.png
-            ${{ runner.temp }}/robot-build/desktop-smoke/result.json
-      - uses: actions/upload-artifact@v4
-        with:
-          name: report-package-sizes-${{ matrix.download_platform }}
-          path: ${{ runner.temp }}/robot-build/sizes-*.json
-          retention-days: 7
-          if-no-files-found: error
-
-  sizes:
-    needs: native
-    if: always()
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: report-package-sizes-*
-          merge-multiple: true
-          path: ${{ runner.temp }}/size-reports
-      - name: Compare all requested platforms
-        run: |
-          python dsh-pet/scripts/astra/report.py "$RUNNER_TEMP/size-reports" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: report-all-platforms-package-sizes
-          path: ${{ runner.temp }}/size-reports/
-          retention-days: 7
-          if-no-files-found: error

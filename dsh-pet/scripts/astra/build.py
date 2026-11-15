@@ -121,7 +121,7 @@ def main():
     output = outside_checkout(args.output)
     target = target_platform()
     runtime, python_bytes = build_runtime(output, target)
-    archive = output / f"astra-pro-2.0-runtime-only-{distribution_platform(target)}-python-sdk.tar.gz"
+    archive = output / f"dsh-pet-powercontext-astra-pro-2.0-runtime-only-{distribution_platform(target)}-python-sdk.tar.gz"
     archive_tree(runtime, archive, "astra-runtime")
     # Test the actual compressed runtime, not just its pre-archive staging tree.
     extract(archive, output / "archive-check")

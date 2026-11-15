@@ -26,19 +26,19 @@
 
 打开 [Robot slim bundles 流水线](https://github.com/ob-labs/dsh-pet-powercontext/actions/workflows/robot-bundles.yml)，选择成功的构建，登录 GitHub，在页面的 **Artifacts** 区域下载对应分组。产物保留七天；过期后选择新的成功构建，或请维护者重新运行。
 
-| 电脑                          | 下载的 artifact                             |
-| ----------------------------- | ------------------------------------------- |
-| Windows x64                   | `dsh-pet-astra-pro-2.0-bundles-windows-x64` |
-| Linux x64                     | `dsh-pet-astra-pro-2.0-bundles-linux-x64`   |
-| Linux ARM64                   | `dsh-pet-astra-pro-2.0-bundles-linux-arm64` |
-| macOS Intel                   | `dsh-pet-astra-pro-2.0-bundles-macos-x64`   |
-| macOS Apple Silicon（M 系列） | `dsh-pet-astra-pro-2.0-bundles-macos-arm64` |
+| 电脑                          | 下载的 artifact                                          |
+| ----------------------------- | -------------------------------------------------------- |
+| Windows x64                   | `dsh-pet-powercontext-astra-pro-2.0-bundles-windows-x64` |
+| Linux x64                     | `dsh-pet-powercontext-astra-pro-2.0-bundles-linux-x64`   |
+| Linux ARM64                   | `dsh-pet-powercontext-astra-pro-2.0-bundles-linux-arm64` |
+| macOS Intel                   | `dsh-pet-powercontext-astra-pro-2.0-bundles-macos-x64`   |
+| macOS Apple Silicon（M 系列） | `dsh-pet-powercontext-astra-pro-2.0-bundles-macos-arm64` |
 
-先解压 GitHub 下载的 artifact ZIP。里面会看到安装包、运行环境包和体积报告。以下文件名中的 `<version>` 是实际包版本，例如 `0.1.0-beta.1`；`<platform>` 是上表中的系统和架构，如 `windows-x64`：
+先解压 GitHub 下载的 artifact ZIP，里面只有安装包和运行环境包；体积与验证报告在流水线 **Summary** 中查看。以下文件名中的 `<version>` 是实际包版本，例如 `0.1.0-beta.1`；`<platform>` 是上表中的系统和架构，如 `windows-x64`：
 
 - **Windows 独立桌宠：**使用 `dsh-pet-powercontext-<version>-desktop-windows-x64-astra-pro-2.0-bundled.zip`。
 - **装进 DSH 或使用 Node 独立模式：**使用 `dsh-pet-powercontext-<version>-plugin-<platform>-astra-pro-2.0-bundled.tgz`；保留 `.tgz`，交给安装命令处理。
-- `astra-pro-2.0-runtime-only-<platform>-python-sdk.tar.gz` 已包含在上述安装包内，无需再装一遍。
+- `dsh-pet-powercontext-astra-pro-2.0-runtime-only-<platform>-python-sdk.tar.gz` 已包含在上述安装包内，无需再装一遍。
 - Windows 分组中，以 `desktop-windows-x64-standard.zip` 结尾的文件不含机器人内置环境；本教程选择以 `desktop-windows-x64-astra-pro-2.0-bundled.zip` 结尾的文件。
 
 精简包包含独立 Python、Astra SDK 2.0.0 和控制依赖，不需要你另装 Python，也不会修改电脑已有的 Python。它不含 OpenCV、NumPy，不提供厂商摄像头预览和图像处理辅助功能。[安装包详情](../guides/robot-bundles.md)。

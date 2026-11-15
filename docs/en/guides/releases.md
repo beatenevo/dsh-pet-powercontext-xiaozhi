@@ -2,20 +2,20 @@
 
 English · [简体中文](../../zh/guides/releases.md) · [Documentation](../README.md)
 
-The package is `dsh-pet-powercontext`, starting at `0.1.0-beta.1`. The [Release workflow](../../../.github/workflows/release.yml) validates PRs and manual runs; only a pushed `v*` tag enters publication.
+The package is `dsh-pet-powercontext`. The release version configured in this source tree is **`0.1.0`**, a stable release that uses the npm **`latest`** channel. The [Release workflow](../../../.github/workflows/release.yml) validates PRs and manual runs; only a pushed `v*` tag enters publication. Updating or merging the version alone does not publish it.
 
 ## Prepare
 
 1. Merge the intended changes into `master`.
-2. Set the version in `dsh-pet/package.json` and `openapi.yaml` together, then commit and merge that change. The first release already uses `0.1.0-beta.1`.
+2. Set the version in `dsh-pet/package.json` and `openapi.yaml` together, then commit and merge that change. Both must read `0.1.0` for the release below.
 3. To publish npm, configure repository Actions variable `NPM_PUBLISH=true` and Actions secret `NPM_TOKEN` with publish access. Use an npm token suitable for unattended publication; never commit it to `.npmrc`. If the variable is absent or false, only GitHub Release and the desktop artifact are published.
 4. Push the matching tag from the intended commit:
 
 ```sh
 git switch master
 git pull --ff-only origin master
-git tag v0.1.0-beta.1
-git push origin v0.1.0-beta.1
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
 Use a new version/tag for later releases. The workflow checks the committed version; it does not rewrite it.

@@ -2,20 +2,20 @@
 
 [English](../../en/guides/releases.md) · 简体中文 · [文档首页](../README.md)
 
-包名为 `dsh-pet-powercontext`，初始版本 `0.1.0-beta.1`。[Release workflow](../../../.github/workflows/release.yml)对 PR 和手动运行做验证，只有推送 `v*` 标签才进入发布。
+包名为 `dsh-pet-powercontext`。当前源码配置的发布版本为 **`0.1.0`**，属于使用 npm **`latest`** 通道的正式版本。[Release workflow](../../../.github/workflows/release.yml)对 PR 和手动运行做验证，只有推送 `v*` 标签才进入发布。仅修改或合并版本号不会发布。
 
 ## 发布准备
 
 1. 将需要发布的改动合并到 `master`。
-2. 同步修改 `dsh-pet/package.json` 与 `openapi.yaml` 的版本，再提交并合并。首版已设置为 `0.1.0-beta.1`。
+2. 同步修改 `dsh-pet/package.json` 与 `openapi.yaml` 的版本，再提交并合并。执行下方发布命令时，两者都应为 `0.1.0`。
 3. 需要发布 npm 时，在仓库 Actions Variables 配置 `NPM_PUBLISH=true`，Actions Secrets 配置有发布权限、适合无人值守发布的 `NPM_TOKEN`。不要把令牌提交到 `.npmrc`。没有开启变量时，只发布 GitHub Release 和桌面产物。
 4. 从准备发布的提交推送匹配标签：
 
 ```sh
 git switch master
 git pull --ff-only origin master
-git tag v0.1.0-beta.1
-git push origin v0.1.0-beta.1
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
 后续版本使用新的版本号和标签。流程只校验已提交版本，不会临时改版本。

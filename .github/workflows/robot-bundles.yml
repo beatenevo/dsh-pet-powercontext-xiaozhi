@@ -41,7 +41,7 @@ jobs:
           npm pack --pack-destination "$RUNNER_TEMP/base-package"
       - uses: actions/upload-artifact@v4
         with:
-          name: ordinary-plugin
+          name: dsh-pet-plugin-standard-all-platforms
           path: ${{ runner.temp }}/base-package/*.tgz
           retention-days: 7
           if-no-files-found: error
@@ -53,14 +53,19 @@ jobs:
       matrix:
         include:
           - platform: linux-x64
+            download_platform: linux-x64
             runner: ubuntu-24.04
           - platform: linux-arm64
+            download_platform: linux-arm64
             runner: ubuntu-24.04-arm
           - platform: win32-x64
+            download_platform: windows-x64
             runner: windows-2022
           - platform: darwin-x64
+            download_platform: macos-x64
             runner: macos-15-intel
           - platform: darwin-arm64
+            download_platform: macos-arm64
             runner: macos-26
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
@@ -84,7 +89,7 @@ jobs:
           python-version: "3.11"
       - uses: actions/download-artifact@v4
         with:
-          name: ordinary-plugin
+          name: dsh-pet-plugin-standard-all-platforms
           path: ${{ runner.temp }}/base-package
       - name: Build and validate the slim native plugin
         run: |
@@ -102,13 +107,13 @@ jobs:
           python scripts/astra/desktop.py --output "$RUNNER_TEMP/robot-build"
       - uses: actions/upload-artifact@v4
         with:
-          name: robot-slim-${{ matrix.platform }}
+          name: dsh-pet-astra-pro-2.0-bundles-${{ matrix.download_platform }}
           compression-level: 0
           retention-days: 7
           if-no-files-found: error
           path: |
-            ${{ runner.temp }}/robot-build/*-slim.tgz
-            ${{ runner.temp }}/robot-build/astra-runtime-*.tar.gz
+            ${{ runner.temp }}/robot-build/*-plugin-*-astra-pro-2.0-bundled.tgz
+            ${{ runner.temp }}/robot-build/astra-pro-2.0-runtime-only-*.tar.gz
             ${{ runner.temp }}/robot-build/*desktop*.zip
             ${{ runner.temp }}/robot-build/sizes-*.json
             ${{ runner.temp }}/robot-build/smoke.json
@@ -116,7 +121,7 @@ jobs:
             ${{ runner.temp }}/robot-build/desktop-smoke/result.json
       - uses: actions/upload-artifact@v4
         with:
-          name: sizes-${{ matrix.platform }}
+          name: report-package-sizes-${{ matrix.download_platform }}
           path: ${{ runner.temp }}/robot-build/sizes-*.json
           retention-days: 7
           if-no-files-found: error
@@ -129,7 +134,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          pattern: sizes-*
+          pattern: report-package-sizes-*
           merge-multiple: true
           path: ${{ runner.temp }}/size-reports
       - name: Compare all requested platforms
@@ -138,7 +143,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: robot-size-report
+          name: report-all-platforms-package-sizes
           path: ${{ runner.temp }}/size-reports/
           retention-days: 7
           if-no-files-found: error

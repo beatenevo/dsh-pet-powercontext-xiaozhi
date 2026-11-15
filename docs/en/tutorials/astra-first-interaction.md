@@ -4,7 +4,7 @@ English · [简体中文](../../zh/tutorials/astra-first-interaction.md) · [Doc
 
 This tutorial takes you through installing dsh-pet, configuring chat, connecting Astra Pro 2.0, and using the pet panel to request speech and manufacturer-verified robot actions.
 
-**Required build:** a `slim` preview containing robot support. The build checked on 2026-11-13 comes from commit `faa9197` and passed native validation on all five platforms. The published npm `0.1.0-beta.1` and older Windows ZIP do not include robot support. Preview filenames also contain `0.1.0-beta.1`: identify them by the **`slim` suffix and build source**, not the version alone.
+**Required build:** a slim preview containing robot support, with **`astra-pro-2.0-bundled`** in the package name to indicate included Python, SDK and robot control dependencies. The published npm `0.1.0-beta.1` and older Windows ZIP do not include robot support; do not use them for the robot sections of this tutorial. Preview filenames may also contain `0.1.0-beta.1`: check the purpose marker and build source as well as the version.
 
 ## 1. Prepare your equipment and connection details
 
@@ -24,22 +24,22 @@ Do not copy addresses, ports or action IDs from demonstration programs. Sharing 
 
 ## 2. Download the right package
 
-Open [the verified slim build](https://github.com/ob-labs/dsh-pet-powercontext/actions/runs/43197695059), sign in to GitHub, and download the appropriate item from **Artifacts**. Artifacts expire after seven days. If expired, select a newer successful run of [Robot slim bundles](https://github.com/ob-labs/dsh-pet-powercontext/actions/workflows/robot-bundles.yml) or ask the maintainer to rebuild.
+Open [Robot slim bundles](https://github.com/ob-labs/dsh-pet-powercontext/actions/workflows/robot-bundles.yml), select a successful run, sign in to GitHub, and download the appropriate group from **Artifacts**. Artifacts expire after seven days. If expired, select a newer successful run or ask the maintainer to rebuild.
 
-| Host computer                  | Artifact                  |
-| ------------------------------ | ------------------------- |
-| Windows x64                    | `robot-slim-win32-x64`    |
-| Linux x64                      | `robot-slim-linux-x64`    |
-| Linux ARM64                    | `robot-slim-linux-arm64`  |
-| macOS Intel                    | `robot-slim-darwin-x64`   |
-| macOS Apple Silicon (M series) | `robot-slim-darwin-arm64` |
+| Host computer                  | Artifact                                    |
+| ------------------------------ | ------------------------------------------- |
+| Windows x64                    | `dsh-pet-astra-pro-2.0-bundles-windows-x64` |
+| Linux x64                      | `dsh-pet-astra-pro-2.0-bundles-linux-x64`   |
+| Linux ARM64                    | `dsh-pet-astra-pro-2.0-bundles-linux-arm64` |
+| macOS Intel                    | `dsh-pet-astra-pro-2.0-bundles-macos-x64`   |
+| macOS Apple Silicon (M series) | `dsh-pet-astra-pro-2.0-bundles-macos-arm64` |
 
-Extract the artifact ZIP downloaded from GitHub first. It contains application packages, a runtime archive and size reports:
+Extract the artifact ZIP downloaded from GitHub first. It contains application packages, a runtime archive and size reports. In the filenames below, `<version>` is the actual package version, such as `0.1.0-beta.1`; `<platform>` is the OS and architecture from the table, such as `windows-x64`:
 
-- **Standalone Windows desktop pet:** use `dsh-pet-win32-x64-desktop-slim.zip`.
-- **DSH plugin or Node standalone:** use `dsh-pet-powercontext-<version>-<platform>-slim.tgz`. Keep the `.tgz` intact for the installation command.
-- `astra-runtime-<platform>-slim.tar.gz` is already included in the application packages; there is no separate installation step.
-- The ordinary `desktop.zip` in the Windows artifact lacks the bundled robot runtime. Choose `desktop-slim.zip` for this tutorial.
+- **Standalone Windows desktop pet:** use `dsh-pet-powercontext-<version>-desktop-windows-x64-astra-pro-2.0-bundled.zip`.
+- **DSH plugin or Node standalone:** use `dsh-pet-powercontext-<version>-plugin-<platform>-astra-pro-2.0-bundled.tgz`. Keep the `.tgz` intact for the installation command.
+- `astra-pro-2.0-runtime-only-<platform>-python-sdk.tar.gz` is already included in the application packages; there is no separate installation step.
+- In the Windows group, the file ending in `desktop-windows-x64-standard.zip` lacks the bundled robot runtime. Choose the file ending in `desktop-windows-x64-astra-pro-2.0-bundled.zip` for this tutorial.
 
 The slim package includes private Python, Astra SDK 2.0.0 and control dependencies. You do not need to install Python, and your existing Python installation is not modified. OpenCV, NumPy and the manufacturer's camera/image helpers are excluded. See [package details](../guides/robot-bundles.md).
 
@@ -47,7 +47,7 @@ The slim package includes private Python, Astra SDK 2.0.0 and control dependenci
 
 ### A. Windows desktop: no DSH or Node.js required
 
-1. Fully extract `dsh-pet-win32-x64-desktop-slim.zip` into a writable directory, such as `D:\Apps\dsh-pet-astra`.
+1. Fully extract `dsh-pet-powercontext-<version>-desktop-windows-x64-astra-pro-2.0-bundled.zip` into a writable directory, such as `D:\Apps\dsh-pet-astra`.
 2. Open its `win-unpacked` folder and double-click `dsh-pet.exe`.
 3. Keep the entire folder, including `resources`. Do not copy just the EXE or launch it from inside an archive viewer.
 4. AI settings open on first launch. You can reopen them from the pet's context menu: **打开 AI 设置** (Open AI settings).
@@ -65,13 +65,13 @@ Run the appropriate command in a terminal, replacing the **archive path** with y
 Windows PowerShell, DSH web profile:
 
 ```powershell
-dsh plugin --profile web add "C:\Downloads\dsh-pet-powercontext-0.1.0-beta.1-win32-x64-slim.tgz"
+dsh plugin --profile web add "C:\Downloads\dsh-pet-powercontext-0.1.0-beta.1-plugin-windows-x64-astra-pro-2.0-bundled.tgz"
 ```
 
 Linux x64, DSH web profile:
 
 ```bash
-dsh plugin --profile web add "$HOME/Downloads/dsh-pet-powercontext-0.1.0-beta.1-linux-x64-slim.tgz"
+dsh plugin --profile web add "$HOME/Downloads/dsh-pet-powercontext-0.1.0-beta.1-plugin-linux-x64-astra-pro-2.0-bundled.tgz"
 ```
 
 Use the corresponding filename for Linux ARM64 or macOS. For DSH Desktop, replace `--profile web` with `--profile desktop`. These commands let DSH install and enable the local plugin; DSH's own dependencies may still require network access.
@@ -89,7 +89,7 @@ The slim plugin archive also runs without DSH. Install Node.js **22.12+**, creat
 ```bash
 mkdir astra-pet
 cd astra-pet
-npm install --offline --legacy-peer-deps "/absolute/path/dsh-pet-powercontext-0.1.0-beta.1-linux-x64-slim.tgz"
+npm install --offline --legacy-peer-deps "/absolute/path/dsh-pet-powercontext-0.1.0-beta.1-plugin-linux-x64-astra-pro-2.0-bundled.tgz"
 npx --no-install dsh-pet-powercontext --setup
 ```
 

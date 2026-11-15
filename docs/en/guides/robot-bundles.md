@@ -6,12 +6,26 @@ The **Robot slim bundles** GitHub Actions workflow creates preview artifacts for
 
 ## Download and install
 
-Open [the workflow](https://github.com/ob-labs/dsh-pet-powercontext/actions/workflows/robot-bundles.yml), select a successful run and download `robot-slim-<platform>` from **Artifacts**. Artifact downloads require a GitHub login and are retained for seven days. Extract the artifact ZIP first.
+Choose the OS and architecture of the **computer running DSH or the pet**. Download names use `windows`, `linux`, and `macos`; `x64` means Intel/AMD 64-bit and `arm64` includes Apple Silicon. `<version>` is the package version, such as `0.1.0-beta.1`.
 
-- **Windows desktop:** extract `dsh-pet-win32-x64-desktop-slim.zip`, keep the complete `win-unpacked` directory, and run `dsh-pet.exe`. Python, the SDK, Electron/Node and application dependencies are included. The unsigned preview may trigger Windows reputation prompts.
-- **DSH plugin:** use the `dsh-pet-powercontext-<version>-<platform>-slim.tgz` matching the **host computer**, then run `dsh plugin --profile web add "/absolute/path/to/the-slim.tgz"`. For DSH Desktop, use `--profile desktop`; launch the app once to initialize its profile, then fully quit before installation. Restart DSH afterwards. Its own dependencies may require network access. Follow the [illustrated tutorial](../tutorials/astra-first-interaction.md).
+| What you need                                                      | File to choose                                                                  |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Standard plugin; prepare any robot environment separately          | `dsh-pet-powercontext-<version>.tgz` in `dsh-pet-plugin-standard-all-platforms` |
+| DSH plugin with Python, Astra Pro 2.0 SDK and control dependencies | `dsh-pet-powercontext-<version>-plugin-<platform>-astra-pro-2.0-bundled.tgz`    |
+| Windows application with the robot environment included            | `dsh-pet-powercontext-<version>-desktop-windows-x64-astra-pro-2.0-bundled.zip`  |
+| Windows application without the robot environment                  | `dsh-pet-powercontext-<version>-desktop-windows-x64-standard.zip`               |
+| Inspect the robot environment by itself; no pet application        | `astra-pro-2.0-runtime-only-<platform>-python-sdk.tar.gz`                       |
+
+`astra-pro-2.0-bundled` includes the slim **control** environment: Python, SDK, gRPC and protobuf, without OpenCV or NumPy. `standard` has no bundled robot environment. The npm package keeps its standard npm filename and package name. None of these archives bundles DSH, `powercontext-dsh`, PowerContext Server or model weights; those integrations remain optional and separately configured.
+
+Each successful run produces eight pet packages and five runtime-only archives. GitHub groups them into six package artifacts: one standard-plugin group and five platform groups. The Windows platform group contains both desktop ZIPs as well as the plugin and runtime-only archive. The other six artifacts start with `report-`; they contain reports, not applications. The workflow summary and `SIZE-REPORT.md` also list the actual filenames and their purpose.
+
+Open [the workflow](https://github.com/ob-labs/dsh-pet-powercontext/actions/workflows/robot-bundles.yml), select a successful run and download `dsh-pet-astra-pro-2.0-bundles-<platform>` from **Artifacts**. Artifact downloads require a GitHub login and are retained for seven days. Extract the artifact ZIP first.
+
+- **Windows desktop:** extract `dsh-pet-powercontext-<version>-desktop-windows-x64-astra-pro-2.0-bundled.zip`, keep the complete `win-unpacked` directory, and run `dsh-pet.exe`. Python, the SDK, Electron/Node and application dependencies are included. The unsigned preview may trigger Windows reputation prompts.
+- **DSH plugin:** use the `dsh-pet-powercontext-<version>-plugin-<platform>-astra-pro-2.0-bundled.tgz` matching the **host computer**, then run `dsh plugin --profile web add "/absolute/path/to/the-slim.tgz"`. For DSH Desktop, use `--profile desktop`; launch the app once to initialize its profile, then fully quit before installation. Restart DSH afterwards. Its own dependencies may require network access. Follow the [illustrated tutorial](../tutorials/astra-first-interaction.md).
 - **Node standalone:** in an empty directory, run `npm install --offline --legacy-peer-deps "/absolute/path/to/the-slim.tgz"`, then `npx --no-install dsh-pet-powercontext --setup`. Node 22.12+ is required, and displaying the desktop character may download Electron separately. DSH itself is not included.
-- **Runtime only:** `astra-runtime-<platform>-slim.tar.gz` is provided for deployment inspection. The slim plugin and desktop archives already contain it.
+- **Runtime only:** `astra-pro-2.0-runtime-only-<platform>-python-sdk.tar.gz` is provided for deployment inspection. The slim plugin and desktop archives already contain it.
 
 In the robot panel, select **Bundled environment (recommended)**. There is no Python installation step. Copying only the executable or `bridge.py` is insufficient: preserve the complete runtime directory. Configuration saved with a custom Python path remains custom; switch to bundled explicitly when upgrading that installation.
 
@@ -33,7 +47,7 @@ After this workflow is on the default branch, select **Run workflow** and choose
 
 Each native runner verifies the Python archive and wheel hashes and checks the dependency closure before installing the SDK. Afterwards it permits exactly the two missing OpenCV requirements declared by the unmodified SDK metadata and rejects all other dependency errors. A plain `pip check` therefore reports those intentional omissions; reinstalling the SDK with automatic dependency resolution would restore the vision stack. Validation confirms `cv2` and NumPy are unavailable and imports the actual SDK protocol modules. It tests the relocated interpreter with hostile Python environment variables; exercises status, single/group actions, speech and all three stops against a loopback gRPC server; and repeats smoke tests after extracting the compressed archives. The slim npm archive must install with an empty npm cache in offline mode; the installed HTTP host must then select its bundled interpreter and read the loopback controller state.
 
-`robot-size-report` contains `SIZE-REPORT.md` and per-platform JSON reports, including SHA256 checksums, archive sizes, unpacked payload sizes, Python size before SDK installation, Node dependency size, and Python component breakdowns. Values use MiB (1,048,576 bytes). Filesystem allocation and installation scratch space are not included. Missing platform reports fail the aggregate job.
+`report-all-platforms-package-sizes` contains `SIZE-REPORT.md` and per-platform JSON reports, including SHA256 checksums, archive sizes, unpacked payload sizes, Python size before SDK installation, Node dependency size, and Python component breakdowns. Values use MiB (1,048,576 bytes). Filesystem allocation and installation scratch space are not included. Missing platform reports fail the aggregate job.
 
 The Windows desktop ZIP is extracted and launched with real Electron. CI verifies a window loads and the ASAR host reaches the bundled SDK, then saves a screenshot. Exhibition hardware still requires on-site acceptance and physical robot validation. Loopback RPCs do not validate robot firmware, movement, playback or stopping distance.
 

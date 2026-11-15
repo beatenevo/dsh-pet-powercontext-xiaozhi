@@ -11,7 +11,7 @@ import platform
 import shutil
 import sys
 
-from common import (INPUTS, artifact, archive_tree, clean_bytecode, component_sizes, download,
+from common import (INPUTS, artifact, archive_tree, clean_bytecode, component_sizes, distribution_platform, download,
                     extract, npm, outside_checkout, read_json, run, sha256, size, write_json)
 
 
@@ -94,7 +94,8 @@ def slim_package(base, runtime, output, target):
     # npm installation discards symlinks, including Python's interpreter aliases.
     # Materialize native aliases so installed archives remain self-contained.
     shutil.copytree(runtime, package / "runtime/astra-native", symlinks=False)
-    archive = output / f"dsh-pet-powercontext-{metadata['version']}-{target}-slim.tgz"
+    archive = output / (f"dsh-pet-powercontext-{metadata['version']}-plugin-"
+                        f"{distribution_platform(target)}-astra-pro-2.0-bundled.tgz")
     # The base tar supplies the publication allowlist; dependencies were installed
     # into this external stage and declared as bundled in the package metadata.
     archive_tree(package, archive, "package")
@@ -120,7 +121,7 @@ def main():
     output = outside_checkout(args.output)
     target = target_platform()
     runtime, python_bytes = build_runtime(output, target)
-    archive = output / f"astra-runtime-{target}-slim.tar.gz"
+    archive = output / f"astra-pro-2.0-runtime-only-{distribution_platform(target)}-python-sdk.tar.gz"
     archive_tree(runtime, archive, "astra-runtime")
     # Test the actual compressed runtime, not just its pre-archive staging tree.
     extract(archive, output / "archive-check")

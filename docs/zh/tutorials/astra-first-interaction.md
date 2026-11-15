@@ -4,7 +4,7 @@
 
 这份教程带你完成四件事：安装 dsh-pet、配置聊天、连接 Astra Pro 2.0，然后通过桌宠面板让机器人播报和执行厂家确认过的动作。
 
-**适用版本：**包含机器人功能的 `slim` 预览包。2026-11-13 核对的构建来自提交 `faa9197`，五个平台均已通过构建验证。npm 已发布的 `0.1.0-beta.1` 和旧版 Windows ZIP 尚不包含机器人功能；不要用旧包完成本教程的机器人部分。预览包文件名也含 `0.1.0-beta.1`，请同时认准 **`slim` 后缀和构建来源**。
+**适用版本：**包含机器人功能的精简预览包，安装包名称带有 **`astra-pro-2.0-bundled`**，表示内置 Python、SDK 和机器人控制依赖。npm 已发布的 `0.1.0-beta.1` 和旧版 Windows ZIP 尚不包含机器人功能；不要用旧包完成本教程的机器人部分。预览包文件名也可能含 `0.1.0-beta.1`，请同时认准用途标记和构建来源。
 
 ## 1. 先准备这些东西
 
@@ -24,22 +24,22 @@
 
 ## 2. 下载正确的安装包
 
-打开[已验证的精简包构建](https://github.com/ob-labs/dsh-pet-powercontext/actions/runs/43197695059)，登录 GitHub，在页面的 **Artifacts** 区域下载对应文件。产物保留七天；过期后到 [Robot slim bundles 流水线](https://github.com/ob-labs/dsh-pet-powercontext/actions/workflows/robot-bundles.yml)选择新的成功构建，或请维护者重新运行。
+打开 [Robot slim bundles 流水线](https://github.com/ob-labs/dsh-pet-powercontext/actions/workflows/robot-bundles.yml)，选择成功的构建，登录 GitHub，在页面的 **Artifacts** 区域下载对应分组。产物保留七天；过期后选择新的成功构建，或请维护者重新运行。
 
-| 电脑                          | 下载的 artifact           |
-| ----------------------------- | ------------------------- |
-| Windows x64                   | `robot-slim-win32-x64`    |
-| Linux x64                     | `robot-slim-linux-x64`    |
-| Linux ARM64                   | `robot-slim-linux-arm64`  |
-| macOS Intel                   | `robot-slim-darwin-x64`   |
-| macOS Apple Silicon（M 系列） | `robot-slim-darwin-arm64` |
+| 电脑                          | 下载的 artifact                             |
+| ----------------------------- | ------------------------------------------- |
+| Windows x64                   | `dsh-pet-astra-pro-2.0-bundles-windows-x64` |
+| Linux x64                     | `dsh-pet-astra-pro-2.0-bundles-linux-x64`   |
+| Linux ARM64                   | `dsh-pet-astra-pro-2.0-bundles-linux-arm64` |
+| macOS Intel                   | `dsh-pet-astra-pro-2.0-bundles-macos-x64`   |
+| macOS Apple Silicon（M 系列） | `dsh-pet-astra-pro-2.0-bundles-macos-arm64` |
 
-先解压 GitHub 下载的 artifact ZIP。里面会看到安装包、运行环境包和体积报告：
+先解压 GitHub 下载的 artifact ZIP。里面会看到安装包、运行环境包和体积报告。以下文件名中的 `<version>` 是实际包版本，例如 `0.1.0-beta.1`；`<platform>` 是上表中的系统和架构，如 `windows-x64`：
 
-- **Windows 独立桌宠：**使用 `dsh-pet-win32-x64-desktop-slim.zip`。
-- **装进 DSH 或使用 Node 独立模式：**使用 `dsh-pet-powercontext-<版本>-<平台>-slim.tgz`；保留 `.tgz`，交给安装命令处理。
-- `astra-runtime-<平台>-slim.tar.gz` 已包含在上述安装包内，无需再装一遍。
-- Windows artifact 里的普通 `desktop.zip` 不含机器人内置环境；本教程选 `desktop-slim.zip`。
+- **Windows 独立桌宠：**使用 `dsh-pet-powercontext-<version>-desktop-windows-x64-astra-pro-2.0-bundled.zip`。
+- **装进 DSH 或使用 Node 独立模式：**使用 `dsh-pet-powercontext-<version>-plugin-<platform>-astra-pro-2.0-bundled.tgz`；保留 `.tgz`，交给安装命令处理。
+- `astra-pro-2.0-runtime-only-<platform>-python-sdk.tar.gz` 已包含在上述安装包内，无需再装一遍。
+- Windows 分组中，以 `desktop-windows-x64-standard.zip` 结尾的文件不含机器人内置环境；本教程选择以 `desktop-windows-x64-astra-pro-2.0-bundled.zip` 结尾的文件。
 
 精简包包含独立 Python、Astra SDK 2.0.0 和控制依赖，不需要你另装 Python，也不会修改电脑已有的 Python。它不含 OpenCV、NumPy，不提供厂商摄像头预览和图像处理辅助功能。[安装包详情](../guides/robot-bundles.md)。
 
@@ -47,7 +47,7 @@
 
 ### A. Windows 独立桌面版：不需要 DSH、Node.js
 
-1. 将 `dsh-pet-win32-x64-desktop-slim.zip` **完整解压**到可写目录，例如 `D:\Apps\dsh-pet-astra`。
+1. 将 `dsh-pet-powercontext-<version>-desktop-windows-x64-astra-pro-2.0-bundled.zip` **完整解压**到可写目录，例如 `D:\Apps\dsh-pet-astra`。
 2. 打开其中的 `win-unpacked` 文件夹，双击 `dsh-pet.exe`。
 3. 保留整个文件夹，包括 `resources`；不要只复制 EXE，也不要在压缩软件内直接运行。
 4. 首次启动会打开 AI 设置。以后可以右键桌宠，选择 **打开 AI 设置**。
@@ -65,13 +65,13 @@
 Windows PowerShell，DSH 浏览器版：
 
 ```powershell
-dsh plugin --profile web add "C:\Downloads\dsh-pet-powercontext-0.1.0-beta.1-win32-x64-slim.tgz"
+dsh plugin --profile web add "C:\Downloads\dsh-pet-powercontext-0.1.0-beta.1-plugin-windows-x64-astra-pro-2.0-bundled.tgz"
 ```
 
 Linux x64，DSH 浏览器版：
 
 ```bash
-dsh plugin --profile web add "$HOME/Downloads/dsh-pet-powercontext-0.1.0-beta.1-linux-x64-slim.tgz"
+dsh plugin --profile web add "$HOME/Downloads/dsh-pet-powercontext-0.1.0-beta.1-plugin-linux-x64-astra-pro-2.0-bundled.tgz"
 ```
 
 Linux ARM64 和 macOS 改用对应平台的文件名。DSH 桌面应用把 `--profile web` 改成 `--profile desktop`。这些命令会让 DSH 处理本地包及插件启用；DSH 自身的依赖可能仍需要联网下载。
@@ -89,7 +89,7 @@ Linux ARM64 和 macOS 改用对应平台的文件名。DSH 桌面应用把 `--pr
 ```bash
 mkdir astra-pet
 cd astra-pet
-npm install --offline --legacy-peer-deps "/absolute/path/dsh-pet-powercontext-0.1.0-beta.1-linux-x64-slim.tgz"
+npm install --offline --legacy-peer-deps "/absolute/path/dsh-pet-powercontext-0.1.0-beta.1-plugin-linux-x64-astra-pro-2.0-bundled.tgz"
 npx --no-install dsh-pet-powercontext --setup
 ```
 

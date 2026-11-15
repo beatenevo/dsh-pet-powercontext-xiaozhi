@@ -3,7 +3,7 @@
 import argparse
 from pathlib import Path
 
-from common import INPUTS, read_json
+from common import INPUTS, PACKAGE, distribution_platform, read_json
 
 
 def main():
@@ -13,9 +13,31 @@ def main():
     reports = {item["platform"]: item for path in args.directory.rglob("sizes-*.json")
                if (item := read_json(path))}
     expected = set(read_json(INPUTS / "distributions.json")["platforms"])
-    lines = ["# Slim robot bundle sizes", "", "All sizes are MiB (1,048,576 bytes). Unpacked values count file payloads, not filesystem allocation.", "",
+    version = read_json(PACKAGE / "package.json")["version"]
+    lines = ["# Choose a download", "",
+             "Choose the OS and architecture of the computer running DSH or the pet, not the robot.", "",
+             "- `plugin`: install into DSH, or use with an existing Node.js runtime.",
+             "- `desktop`: extract and run on Windows; Electron/Node is included.",
+             "- `standard`: no bundled Astra Python/SDK environment.",
+             "- `astra-pro-2.0-bundled`: private Python, Astra SDK and control dependencies included; no OpenCV or NumPy.",
+             "- `runtime-only`: environment files only, without the pet; already included in the robot bundles.",
+             "- `report-*`: size/validation reports, not installation packages.", "",
+             "No package bundles DSH, the powercontext-dsh plugin, or PowerContext Server.", "",
+             "| Artifact group | Use | File inside |", "| --- | --- | --- |",
+             f"| `dsh-pet-plugin-standard-all-platforms` | Standard plugin | `dsh-pet-powercontext-{version}.tgz` |"]
+    for target in sorted(expected):
+        if target not in reports:
+            continue
+        group = f"dsh-pet-astra-pro-2.0-bundles-{distribution_platform(target)}"
+        for key, purpose in (("plugin", "Plugin with robot environment"),
+                             ("desktopSlim", "Windows desktop with robot environment"),
+                             ("desktop", "Standard Windows desktop"),
+                             ("runtime", "Runtime only; no pet")):
+            if key in reports[target]:
+                lines.append(f"| `{group}` | {purpose} | `{reports[target][key]['file']}` |")
+    lines.extend(["", "# Package sizes", "", "All sizes are MiB (1,048,576 bytes). Unpacked values count file payloads, not filesystem allocation.", "",
              "| Platform | Python before SDK | Robot runtime archive / unpacked | Slim npm archive / unpacked | Node dependencies |",
-             "| --- | ---: | ---: | ---: | ---: |"]
+             "| --- | ---: | ---: | ---: | ---: |"])
     mib = lambda count: f"{count / 1048576:.1f}"
     pair = lambda item: f"{mib(item['compressedBytes'])} / {mib(item['unpackedBytes'])}"
     for target in sorted(expected):
@@ -25,7 +47,7 @@ def main():
         report = reports[target]
         if report["profile"] != "slim":
             raise ValueError(f"Unexpected runtime profile: {target}")
-        lines.append(f"| {target} | {mib(report['pythonBytes'])} | {pair(report['runtime'])} | {pair(report['plugin'])} | {mib(report['nodeDependencyBytes'])} |")
+        lines.append(f"| {distribution_platform(target)} | {mib(report['pythonBytes'])} | {pair(report['runtime'])} | {pair(report['plugin'])} | {mib(report['nodeDependencyBytes'])} |")
     if (windows := reports.get("win32-x64")) and "desktop" in windows:
         lines.extend(["", f"Windows desktop baseline: **{pair(windows['desktop'])} MiB** (archive / unpacked).",
                       f"Windows desktop with slim robot runtime: **{pair(windows['desktopSlim'])} MiB**.", ""])

@@ -14,6 +14,13 @@ PACKAGE = Path(__file__).resolve().parents[2]
 INPUTS = PACKAGE / "runtime" / "astra"
 
 
+def distribution_platform(target):
+    """Use familiar OS names in downloads while retaining Node IDs in manifests."""
+    return {"win32-x64": "windows-x64", "linux-x64": "linux-x64",
+            "linux-arm64": "linux-arm64", "darwin-x64": "macos-x64",
+            "darwin-arm64": "macos-arm64"}[target]
+
+
 def read_json(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 

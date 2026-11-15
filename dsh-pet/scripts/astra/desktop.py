@@ -30,12 +30,14 @@ def main():
          "--win", "dir", "--config", configuration], cwd=PACKAGE,
         env={**os.environ, "CSC_IDENTITY_AUTO_DISCOVERY": "false"})
     unpacked = output / "desktop/win-unpacked"
-    baseline = output / "dsh-pet-win32-x64-desktop.zip"
+    version = read_json(PACKAGE / "package.json")["version"]
+    prefix = f"dsh-pet-powercontext-{version}-desktop-windows-x64"
+    baseline = output / f"{prefix}-standard.zip"
     zip_tree(unpacked, baseline)
     baseline_record = artifact(baseline, size(unpacked))
     # Native Python and DLLs must be real files outside app.asar.
     shutil.copytree(runtime, unpacked / "resources/astra-runtime")
-    slim = output / "dsh-pet-win32-x64-desktop-slim.zip"
+    slim = output / f"{prefix}-astra-pro-2.0-bundled.zip"
     zip_tree(unpacked, slim)
     # Validate the distributed archive after extracting it into a different directory.
     restored = output / "desktop-unzip"

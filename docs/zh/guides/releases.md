@@ -22,15 +22,15 @@ git push origin v0.1.0-beta.1
 
 ## 自动执行顺序
 
-| 阶段                | 内容                                                             |
-| ------------------- | ---------------------------------------------------------------- |
-| 校验                | 包名、版本、标签完全一致                                         |
-| 构建                | 按锁文件安装依赖，跑单测和完整 `npm pack` 发布前检查             |
-| 验证                | Chromium UI / 脚本测试，实装归档并检查 CLI `--help` / `--check`  |
-| 保存产物            | 生成 SHA256SUMS，上传已测试安装包为 Actions artifact，保留 14 天 |
-| 可选 npm 发布       | 核对校验和，发布同一份归档，不再执行包内生命周期脚本             |
-| 创建 GitHub Release | 自动生成说明，附上归档和校验文件                                 |
-| 桌面构建            | 调用 Windows workflow，将 `dsh-pet-win-x64.zip` 挂到同一 Release |
+| 阶段                | 内容                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------ |
+| 校验                | 包名、版本、标签完全一致                                                                                     |
+| 构建                | 按锁文件安装依赖，跑单测和完整 `npm pack` 发布前检查                                                         |
+| 验证                | Chromium UI / 脚本测试，实装归档并检查 CLI `--help` / `--check`                                              |
+| 保存产物            | 生成 SHA256SUMS，上传已测试安装包为 Actions artifact，保留 14 天                                             |
+| 可选 npm 发布       | 核对校验和，发布同一份归档，不再执行包内生命周期脚本                                                         |
+| 创建 GitHub Release | 自动生成说明，附上归档和校验文件                                                                             |
+| 桌面构建            | 调用 Windows workflow，将 `dsh-pet-powercontext-<version>-desktop-windows-x64-standard.zip` 挂到同一 Release |
 
 `alpha.N`、`beta.N`、`rc.N` 分别使用对应 npm 通道，并创建 GitHub 预发布；正式版本使用 `latest`。PR 和 **Run workflow** 即使选择标签也不会发布。
 

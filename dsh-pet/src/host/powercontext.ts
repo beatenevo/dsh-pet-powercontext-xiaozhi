@@ -4,11 +4,15 @@ import type { ChatMemoryConfig } from '../shared/chat-memory-config.ts';
 import { memoryToken } from './powercontext-auth.ts';
 import { listRememberedFacts, inspectRememberedFact, changeRememberedFact } from './powercontext-library.ts';
 import type { MemoryChange, MemoryEvidence, MemoryPage } from '../shared/memory-library.ts';
+import type { TraceReference } from '../shared/observability.ts';
+import { referenceContext } from './observability/service.ts';
 
 export interface MemoryTurn {
   id: string;
   at: number;
   content: string;
+  /** Optional causal link for later delivery; never part of the captured Source content. */
+  observation?: TraceReference;
 }
 
 export interface MemorySyncState {
@@ -55,7 +59,13 @@ export function memoryState(entry: MemoryEntryState, config: ChatMemoryConfig): 
 }
 
 /** Store the exact payload before attempting any network write, so retries cannot change its identity. */
-export function queueMemoryTurn(state: MemorySyncState, user: string, assistant: string, at: number): void {
+export function queueMemoryTurn(
+  state: MemorySyncState,
+  user: string,
+  assistant: string,
+  at: number,
+  observation?: TraceReference,
+): void {
   const content = JSON.stringify({
     kind: 'dsh-pet-dialogue',
     occurred_at: new Date(at).toISOString(),
@@ -70,7 +80,7 @@ export function queueMemoryTurn(state: MemorySyncState, user: string, assistant:
     state.lastError = 'source_too_large';
     return;
   }
-  state.pending.push({ id: 'dsh-pet-turn:' + randomUUID(), at, content });
+  state.pending.push({ id: 'dsh-pet-turn:' + randomUUID(), at, content, ...(observation ? { observation } : {}) });
 }
 
 export class MemoryServiceError extends Error {
@@ -89,9 +99,11 @@ export function memoryErrorCode(error: unknown): string {
 export class PowerContextClient {
   declare private readonly config: ChatMemoryConfig;
   declare private readonly fetcher: typeof fetch;
-  constructor(config: ChatMemoryConfig, fetcher: typeof fetch = fetch) {
+  declare private readonly traceContext: TraceReference | undefined;
+  constructor(config: ChatMemoryConfig, fetcher: typeof fetch = fetch, traceContext?: TraceReference) {
     this.config = config;
     this.fetcher = fetcher;
+    this.traceContext = referenceContext(traceContext) ? traceContext : undefined;
   }
 
   private async request(
@@ -101,6 +113,7 @@ export class PowerContextClient {
     options: { method?: 'GET' | 'POST' | 'PUT'; headers?: Record<string, string> } = {},
   ): Promise<Record<string, unknown>> {
     const headers: Record<string, string> = { 'content-type': 'application/json', ...options.headers };
+    if (this.traceContext) headers.traceparent = this.traceContext.traceparent;
     const token = memoryToken(this.config.serverUrl);
     if (token) headers.authorization = 'Bearer ' + token;
     const response = await this.fetcher(this.config.serverUrl.replace(/\/+$/, '') + path, {

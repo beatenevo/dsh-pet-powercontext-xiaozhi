@@ -30,6 +30,7 @@ import { settingsPage } from './settings-page/chrome.ts';
 import { settingsStyle } from './settings-page/style.ts';
 import { setupScript } from './settings-page/script/setup.ts';
 import { setupModelsScript } from './settings-page/script/setup-models.ts';
+import { observabilityScript } from './settings-page/script/observability.ts';
 
 export { settingsPage, settingsStyle };
 
@@ -64,6 +65,7 @@ export const settingsScript = [
   aiScript(),
   setupModelsScript(),
   setupScript(),
+  observabilityScript(),
   bootScript(),
   'boot();',
   '})();',

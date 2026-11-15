@@ -25,6 +25,8 @@ import { SLEEP_TALK_INSTRUCTION } from '../whisper.ts';
 import { pickVoiceSurface, type VoiceTarget } from '../surface.ts';
 import type { HostSetup } from './setup.ts';
 import type { HostContext } from './context.ts';
+import type { PetObservability } from '../observability/service.ts';
+import type { PetOperation } from '../../shared/observability.ts';
 import { DEFAULT_CHAT_MEMORY, chatMemoryConfigValid, type ChatMemoryConfig } from '../../shared/chat-memory-config.ts';
 import { prepareDshMemory, type DshMemoryResult } from '../dsh-memory.ts';
 import { boundedHistory, memoryRecallQuery } from '../memory-context.ts';
@@ -71,6 +73,7 @@ function voiceTargetFor(pet: Record<string, unknown>): VoiceTarget | undefined {
 
 /** Input of dialogue and memory: assembly period objects and earlier factories. */
 export type ChatMemoryInput = {
+  observability?: PetObservability;
   /** host context (the one apply received). */
   ctx: HostContext;
   /** Optional environment lookup; tests provide local facts instead of calling public weather services. */
@@ -87,6 +90,11 @@ export type ChatMemoryInput = {
  */
 export function createChatMemory(deps: ChatMemoryInput) {
   const { ctx, configPaths, log, memeDirsFor, playback, state, userRoot } = deps;
+  const observe = <T>(
+    operation: PetOperation,
+    task: () => Promise<T>,
+    options?: Parameters<PetObservability['run']>[2],
+  ): Promise<T> => (deps.observability ? deps.observability.run(operation, task, options) : task());
   /** Weather enriches replies but must not delay offline chat. Late results may still populate the shared cache. */
   const environmentForPrompt = async (): Promise<EnvironmentFacts> => {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -107,7 +115,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
   let activePetId = '';
   const sharedRecall = new Map<string, { bindingId?: string; sessionId?: string; status: string; error?: string }>();
   const dshMemory = (config: ChatMemoryConfig, sessionId?: string, query?: string) =>
-    prepareDshMemory((name) => ctx.get?.(name), config, sessionId, query);
+    prepareDshMemory((name) => ctx.get?.(name), config, sessionId, query, deps.observability?.reference());
 
   // The "last spawn time" of whisper periodic scheduling (according to pet): the scheduling time is determined based
   // on this. The generated result is directly written as S. Sharing the same sentence among multiple terminals is
@@ -192,7 +200,20 @@ export function createChatMemory(deps: ChatMemoryInput) {
         if (!snapshot) return;
         let failure: string | undefined;
         try {
-          await new PowerContextClient(snapshot.config).capture(snapshot.sync, snapshot.turn);
+          await observe(
+            'memory.capture',
+            async () => {
+              await new PowerContextClient(snapshot.config, fetch, deps.observability?.reference()).capture(
+                snapshot.sync,
+                snapshot.turn,
+              );
+              deps.observability?.fields({
+                'dsh_pet.memory.backend': 'powercontext',
+                'dsh_pet.memory.status': 'accepted',
+              });
+            },
+            { link: snapshot.turn.observation ?? { traceparent: '' } },
+          );
         } catch (error) {
           failure = memoryErrorCode(error);
         }
@@ -420,61 +441,70 @@ export function createChatMemory(deps: ChatMemoryInput) {
   ): Promise<
     | { ok: true; text: string; image?: string }
     | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet' | 'unknown-image'; message?: string }
-  > => {
-    const cfg = readAllConfig(configPaths);
-    const found = findPetInstance(cfg, petId);
-    // The pet may be deleted between the "verification reading" and here (the configuration may change at any time,
-    // and the window is between two reads): clear failure, no generation, no writing S - written down is a ghost leaf
-    // that no longer exists (resident until the process is restarted).
-    if (!found) return { ok: false, reason: 'unknown-pet', message: '没有这只桌宠：' + petId };
-    // Each type of voice is determined by its own switch: for periodic scheduling, see voiceWhisperEnabled, for manual
-    // triggering (right-click menu, slash command), see voiceEnabled. Leaves without voiceTo = no one wants to play,
-    // bubble still plays.
-    const whisperVoiceOn = cfg.main?.voiceWhisperEnabled === true;
-    const manualVoiceOn = cfg.main?.voiceEnabled === true;
-    const voiceOff = kind === 'whisper' ? !whisperVoiceOn : !manualVoiceOn;
-    const target = voiceOff ? undefined : (voiceTo ?? voiceTargetFor(found.pet));
-    const system = petSystemPrompt(found, { env: await environmentForPrompt() });
-    // The pool is only counted once: the named picture and the randomly drawn picture share the same one (including file existence determination).
-    const pool = readMemePool(found.conf.memes, memeDirsFor(found.entry));
-    // I called the name but missed = the configuration was wrongly written or the picture has been deleted: the clear failed, do not silently change to another one (if you click A but see B, you will think it is broken).
-    const forced = image === undefined ? undefined : matchMeme(pool, image);
-    if (image !== undefined && forced === undefined) {
-      return { ok: false, reason: 'unknown-image', message: '表情包不在池内：' + image };
-    }
-    const meme = forced ?? (found.conf.whisperImageEnabled === true ? pickMeme(pool) : undefined);
-    // Model: whisperModel of the entry configuration takes precedence (leave blank = not specified); failure on the generation side will fallback to the model of the current conversation and try again.
-    const result = await generateWhisper(ctx, {
-      system,
-      meme,
-      preferred: configuredModel(found.conf, 'whisperModel'),
-    });
-    if (!result.ok) {
-      // Do not write S on failure: silently skip + warn, no forged text, no error bubbles
-      log.warn(
-        '[dsh-pet] Whisper generation failed pet=' +
-          petId +
-          ' reason=' +
-          result.reason +
-          (result.message ? ' ' + result.message : ''),
-      );
-      // The real reason is brought back as it is: If the route is hardcoded as generate-error, the provider-missing
-      // calculated in standalone mode will be swallowed at the boundary (API.md describes the downgrade reason).
-      return result;
-    }
-    state.writePet(petId, 'say', {
-      text: result.text,
-      ...(result.image ? { image: result.image } : {}),
-      ...(target ? { voiceTo: target } : {}),
-    });
-    // Leave a line for success: otherwise "not triggered" and "triggered and successful" in logs.txt cannot be distinguished.
-    log.info(
-      `[dsh-pet] Whisper generated pet=${petId}, ${result.text.length} characters` +
-        (result.image ? `, image=${result.image}` : ''),
+  > =>
+    observe(
+      'whisper',
+      async () => {
+        const cfg = readAllConfig(configPaths);
+        const found = findPetInstance(cfg, petId);
+        // The pet may be deleted between the "verification reading" and here (the configuration may change at any time,
+        // and the window is between two reads): clear failure, no generation, no writing S - written down is a ghost leaf
+        // that no longer exists (resident until the process is restarted).
+        if (!found) return { ok: false, reason: 'unknown-pet', message: '没有这只桌宠：' + petId };
+        // Each type of voice is determined by its own switch: for periodic scheduling, see voiceWhisperEnabled, for manual
+        // triggering (right-click menu, slash command), see voiceEnabled. Leaves without voiceTo = no one wants to play,
+        // bubble still plays.
+        const whisperVoiceOn = cfg.main?.voiceWhisperEnabled === true;
+        const manualVoiceOn = cfg.main?.voiceEnabled === true;
+        const voiceOff = kind === 'whisper' ? !whisperVoiceOn : !manualVoiceOn;
+        const target = voiceOff ? undefined : (voiceTo ?? voiceTargetFor(found.pet));
+        const system = petSystemPrompt(found, { env: await environmentForPrompt() });
+        // The pool is only counted once: the named picture and the randomly drawn picture share the same one (including file existence determination).
+        const pool = readMemePool(found.conf.memes, memeDirsFor(found.entry));
+        // I called the name but missed = the configuration was wrongly written or the picture has been deleted: the clear failed, do not silently change to another one (if you click A but see B, you will think it is broken).
+        const forced = image === undefined ? undefined : matchMeme(pool, image);
+        if (image !== undefined && forced === undefined) {
+          return { ok: false, reason: 'unknown-image', message: '表情包不在池内：' + image };
+        }
+        const meme = forced ?? (found.conf.whisperImageEnabled === true ? pickMeme(pool) : undefined);
+        // Model: whisperModel of the entry configuration takes precedence (leave blank = not specified); failure on the generation side will fallback to the model of the current conversation and try again.
+        const result = await generateWhisper(ctx, {
+          observability: deps.observability,
+          system,
+          meme,
+          preferred: configuredModel(found.conf, 'whisperModel'),
+        });
+        if (!result.ok) {
+          // Do not write S on failure: silently skip + warn, no forged text, no error bubbles
+          log.warn(
+            '[dsh-pet] Whisper generation failed pet=' +
+              petId +
+              ' reason=' +
+              result.reason +
+              (result.message ? ' ' + result.message : ''),
+          );
+          // The real reason is brought back as it is: If the route is hardcoded as generate-error, the provider-missing
+          // calculated in standalone mode will be swallowed at the boundary (API.md describes the downgrade reason).
+          return result;
+        }
+        state.writePet(petId, 'say', {
+          text: result.text,
+          ...(deps.observability?.reference()
+            ? { observationId: deps.observability.reference()!.traceparent.split('-')[1] }
+            : {}),
+          ...(result.image ? { image: result.image } : {}),
+          ...(target ? { voiceTo: target } : {}),
+        });
+        // Leave a line for success: otherwise "not triggered" and "triggered and successful" in logs.txt cannot be distinguished.
+        log.info(
+          `[dsh-pet] Whisper generated pet=${petId}, ${result.text.length} characters` +
+            (result.image ? `, image=${result.image}` : ''),
+        );
+        // The text is brought out with the return value, and it is the same variable as the one just written into the leaf: two exits give the same text, not two versions of the same truth.
+        return { ok: true, text: result.text, ...(result.image ? { image: result.image } : {}) };
+      },
+      { conversationKey: 'whisper:' + petId },
     );
-    // The text is brought out with the return value, and it is the same variable as the one just written into the leaf: two exits give the same text, not two versions of the same truth.
-    return { ok: true, text: result.text, ...(result.image ? { image: result.image } : {}) };
-  };
 
   /**
    * Generate and write a sleep whisper: system Only use persona, and the function command is whisper (the same code
@@ -483,30 +513,36 @@ export function createChatMemory(deps: ChatMemoryInput) {
    * Whether @returns is really generated and written into S; if it fails, only one line of log will be left, and the
    * next tick will be scheduled to try again.
    */
-  const publishSleepTalk = async (petId: string): Promise<boolean> => {
-    const cfg = readAllConfig(configPaths);
-    const found = findPetInstance(cfg, petId);
-    if (!found) return false;
-    const system = petSystemPrompt(found, { env: await environmentForPrompt() });
-    const result = await generateWhisper(ctx, {
-      system,
-      preferred: configuredModel(found.conf, 'whisperModel'),
-      instruction: SLEEP_TALK_INSTRUCTION,
-    });
-    if (!result.ok) {
-      log.warn(
-        '[dsh-pet] Dream speech generation failed pet=' +
-          petId +
-          ' reason=' +
-          result.reason +
-          (result.message ? ' ' + result.message : ''),
-      );
-      return false;
-    }
-    state.writePet(petId, 'say', { text: result.text, anim: false });
-    log.info(`[dsh-pet] Dream speech generated pet=${petId}, ${result.text.length} characters`);
-    return true;
-  };
+  const publishSleepTalk = async (petId: string): Promise<boolean> =>
+    observe(
+      'sleep_talk',
+      async () => {
+        const cfg = readAllConfig(configPaths);
+        const found = findPetInstance(cfg, petId);
+        if (!found) return false;
+        const system = petSystemPrompt(found, { env: await environmentForPrompt() });
+        const result = await generateWhisper(ctx, {
+          observability: deps.observability,
+          system,
+          preferred: configuredModel(found.conf, 'whisperModel'),
+          instruction: SLEEP_TALK_INSTRUCTION,
+        });
+        if (!result.ok) {
+          log.warn(
+            '[dsh-pet] Dream speech generation failed pet=' +
+              petId +
+              ' reason=' +
+              result.reason +
+              (result.message ? ' ' + result.message : ''),
+          );
+          return false;
+        }
+        state.writePet(petId, 'say', { text: result.text, anim: false });
+        log.info(`[dsh-pet] Dream speech generated pet=${petId}, ${result.text.length} characters`);
+        return true;
+      },
+      { conversationKey: 'sleep:' + petId },
+    );
 
   /**
    * Conversation with a certain pet: intercept recent memory → generate reply → write to memory → write pets .< id >.
@@ -521,177 +557,210 @@ export function createChatMemory(deps: ChatMemoryInput) {
   ): Promise<
     | { ok: true; text: string; image?: string }
     | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
-  > => {
-    // Query optional weather outside the journal lock so it does not block other conversations.
-    const env = await environmentForPrompt();
-    return withMemoryLock(async () => {
-      const cfg = readAllConfig(configPaths);
-      const found = findPetInstance(cfg, petId);
-      // The pet was deleted between the "verification reading" and here - this function also needs to queue the serial
-      // queue of withMemoryLock first. The window may be seconds, so this one will really hit. Definite failure: no
-      // generation, no memory writing, no leaf writing, otherwise a deleted pet bucket and a ghost leaf will be
-      // permanently left in memory.json.
-      if (!found) return { ok: false, reason: 'unknown-pet', message: '没有这只桌宠：' + petId };
-      const rounds = memoryRounds(found.conf);
-      // Picture: switch off → empty pool (instructions and analysis are not involved); directory links are taken
-      // according to the corresponding entries. The upper limit of the number of sheets (chatImageLimit, 0 = no
-      // limit): the entire list must be attached to each message, and the upper limit of the cost is controllable
-      // after truncation.
-      const pool =
-        found.conf.chatImageEnabled === true
-          ? limitPool(readMemePool(found.conf.memes, memeDirsFor(found.entry)), Number(found.conf.chatImageLimit))
-          : [];
-      // Action list: Take only when the switch is turned on (off = no injection or parsing); the list itself is empty (no categories is configured), which is also equivalent to being closed.
-      const actions = found.conf.chatAnimationEnabled === true ? chatActionNames(found.conf.animations) : [];
-      const mem = await readMemory();
-      // Bad structure (array/scalar) is rebuilt as an empty bucket; messages entries that are not arrays are processed as new sessions to avoid push crashing on bad objects
-      const bucket =
-        mem[found.entry] && typeof mem[found.entry] === 'object' && !Array.isArray(mem[found.entry])
-          ? mem[found.entry]
-          : (mem[found.entry] = {});
-      const existing = bucket[petId];
-      if (existing !== undefined && (!existing || !Array.isArray(existing.messages))) {
-        log.error(
-          `[dsh-pet] Invalid memory structure (messages is not an array) pet=${petId}; starting a new conversation: ${memoryPath}`,
-        );
-      }
-      const entry =
-        existing && typeof existing === 'object' && !Array.isArray(existing)
-          ? existing
-          : (bucket[petId] = { messages: [] });
-      if (!Array.isArray(entry.messages)) entry.messages = [];
-      // rounds = 0 (user turns off history) → empty history; otherwise, truncate the tail rounds rounds (1 round = 1
-      // question 1 answer). Cannot write slice (- rounds * 2): -0 In JS === 0, slice (-0) returns the entire array
-      // instead of empty.
-      const config = memoryConfig(found.conf);
-      const shared: DshMemoryResult | undefined =
-        config.backend === 'dsh-powercontext' ? await dshMemory(config, sessionId, text) : undefined;
-      const binding = shared && shared.status !== 'unavailable' ? shared.bindingId : undefined;
-      // Unresolved scopes use no prior history. This avoids guessing which project owns old replies.
-      const history =
-        config.backend === 'dsh-powercontext'
-          ? binding
-            ? entry.messages.filter((message) => message.memoryBinding === binding)
-            : []
-          : entry.messages.filter((message) => message.memoryBinding === undefined);
-      const list =
-        config.maxHistoryBytes > 0
-          ? boundedHistory(history, rounds, config.maxHistoryBytes)
-          : sliceMemoryRounds(history, rounds);
-      let recalledContext = shared?.status === 'ready' ? shared.content : undefined;
-      if (shared) {
-        if (sharedRecall.size >= 100) sharedRecall.clear();
-        sharedRecall.set(
-          petId,
-          shared.status === 'unavailable'
-            ? { sessionId, status: shared.status, error: shared.reason }
-            : { sessionId, bindingId: shared.bindingId, status: shared.status },
-        );
-      }
-      if (config.backend === 'powercontext') {
-        const sync = memoryState(entry, config);
-        // Persist the scope idempotency key before the first external call.
-        await writeMemory(mem);
-        try {
-          recalledContext = await new PowerContextClient(config).prepare(sync, memoryRecallQuery(list, text));
-        } catch (error) {
-          sync.lastRecall = 'unavailable';
-          sync.lastError = memoryErrorCode(error);
-          log.warn('dsh-pet: memory recall ' + sync.lastError);
-        }
-        await writeMemory(mem);
-      }
-      // persona: instance level whisperPrompt takes priority, and the entry of fallback is not written (the same
-      // assemble as whisper). Only add the [History] paragraph when there is history: When there is no history, that
-      // paragraph is describing a prefix that does not exist, which will only mislead the model.
-      const system = petSystemPrompt(found, { historyTimes: list.length > 0, env });
-      // Only the size and number of bytes of the image are recorded (base64 is not recorded): When the model does not support image reading, dsh-llm will project it into a placeholder text, and rely on this line of logs to locate it.
-      if (image !== undefined) {
-        log.info(
-          `[dsh-pet] Chat image pet=${petId}, ${image.width}x${image.height}, ${image.bytes} bytes` +
-            '(the kernel substitutes placeholder text if the model cannot read images)',
-        );
-      }
-      // Third-party memory: Modify content before dialogue; fail or time out and downgrade to original content (see recallPatch).
-      const patch =
-        config.backend !== 'native'
-          ? undefined
-          : await recallPatch(petId, {
-              system,
-              history: list.map(({ role, content, ts }) => ({ role, content, ts })),
+  > =>
+    observe(
+      'chat',
+      async () => {
+        // Query optional weather outside the journal lock so it does not block other conversations.
+        const env = await environmentForPrompt();
+        return withMemoryLock(async () => {
+          const cfg = readAllConfig(configPaths);
+          const found = findPetInstance(cfg, petId);
+          // The pet was deleted between the "verification reading" and here - this function also needs to queue the serial
+          // queue of withMemoryLock first. The window may be seconds, so this one will really hit. Definite failure: no
+          // generation, no memory writing, no leaf writing, otherwise a deleted pet bucket and a ghost leaf will be
+          // permanently left in memory.json.
+          if (!found) return { ok: false, reason: 'unknown-pet', message: '没有这只桌宠：' + petId };
+          const rounds = memoryRounds(found.conf);
+          // Picture: switch off → empty pool (instructions and analysis are not involved); directory links are taken
+          // according to the corresponding entries. The upper limit of the number of sheets (chatImageLimit, 0 = no
+          // limit): the entire list must be attached to each message, and the upper limit of the cost is controllable
+          // after truncation.
+          const pool =
+            found.conf.chatImageEnabled === true
+              ? limitPool(readMemePool(found.conf.memes, memeDirsFor(found.entry)), Number(found.conf.chatImageLimit))
+              : [];
+          // Action list: Take only when the switch is turned on (off = no injection or parsing); the list itself is empty (no categories is configured), which is also equivalent to being closed.
+          const actions = found.conf.chatAnimationEnabled === true ? chatActionNames(found.conf.animations) : [];
+          const mem = await readMemory();
+          // Bad structure (array/scalar) is rebuilt as an empty bucket; messages entries that are not arrays are processed as new sessions to avoid push crashing on bad objects
+          const bucket =
+            mem[found.entry] && typeof mem[found.entry] === 'object' && !Array.isArray(mem[found.entry])
+              ? mem[found.entry]
+              : (mem[found.entry] = {});
+          const existing = bucket[petId];
+          if (existing !== undefined && (!existing || !Array.isArray(existing.messages))) {
+            log.error(
+              `[dsh-pet] Invalid memory structure (messages is not an array) pet=${petId}; starting a new conversation: ${memoryPath}`,
+            );
+          }
+          const entry =
+            existing && typeof existing === 'object' && !Array.isArray(existing)
+              ? existing
+              : (bucket[petId] = { messages: [] });
+          if (!Array.isArray(entry.messages)) entry.messages = [];
+          // rounds = 0 (user turns off history) → empty history; otherwise, truncate the tail rounds rounds (1 round = 1
+          // question 1 answer). Cannot write slice (- rounds * 2): -0 In JS === 0, slice (-0) returns the entire array
+          // instead of empty.
+          const config = memoryConfig(found.conf);
+          deps.observability?.fields({ 'dsh_pet.memory.backend': config.backend });
+          const shared: DshMemoryResult | undefined =
+            config.backend === 'dsh-powercontext'
+              ? await observe('memory.recall', async () => {
+                  const result = await dshMemory(config, sessionId, text);
+                  deps.observability?.fields({
+                    'dsh_pet.memory.backend': config.backend,
+                    'dsh_pet.memory.status': result.status === 'connected' ? 'skipped' : result.status,
+                  });
+                  return result;
+                })
+              : undefined;
+          const binding = shared && shared.status !== 'unavailable' ? shared.bindingId : undefined;
+          // Unresolved scopes use no prior history. This avoids guessing which project owns old replies.
+          const history =
+            config.backend === 'dsh-powercontext'
+              ? binding
+                ? entry.messages.filter((message) => message.memoryBinding === binding)
+                : []
+              : entry.messages.filter((message) => message.memoryBinding === undefined);
+          const list =
+            config.maxHistoryBytes > 0
+              ? boundedHistory(history, rounds, config.maxHistoryBytes)
+              : sliceMemoryRounds(history, rounds);
+          let recalledContext = shared?.status === 'ready' ? shared.content : undefined;
+          if (shared) {
+            if (sharedRecall.size >= 100) sharedRecall.clear();
+            sharedRecall.set(
+              petId,
+              shared.status === 'unavailable'
+                ? { sessionId, status: shared.status, error: shared.reason }
+                : { sessionId, bindingId: shared.bindingId, status: shared.status },
+            );
+          }
+          if (config.backend === 'powercontext') {
+            const sync = memoryState(entry, config);
+            // Persist the scope idempotency key before the first external call.
+            await writeMemory(mem);
+            try {
+              recalledContext = await observe('memory.recall', async () => {
+                const content = await new PowerContextClient(config, fetch, deps.observability?.reference()).prepare(
+                  sync,
+                  memoryRecallQuery(list, text),
+                );
+                deps.observability?.fields({
+                  'dsh_pet.memory.backend': config.backend,
+                  'dsh_pet.memory.status': content ? 'ready' : 'empty',
+                  'dsh_pet.memory.context_bytes': content ? Buffer.byteLength(content) : 0,
+                });
+                return content;
+              });
+            } catch (error) {
+              sync.lastRecall = 'unavailable';
+              sync.lastError = memoryErrorCode(error);
+              log.warn('dsh-pet: memory recall ' + sync.lastError);
+            }
+            await writeMemory(mem);
+          }
+          // persona: instance level whisperPrompt takes priority, and the entry of fallback is not written (the same
+          // assemble as whisper). Only add the [History] paragraph when there is history: When there is no history, that
+          // paragraph is describing a prefix that does not exist, which will only mislead the model.
+          const system = petSystemPrompt(found, { historyTimes: list.length > 0, env });
+          // Only the size and number of bytes of the image are recorded (base64 is not recorded): When the model does not support image reading, dsh-llm will project it into a placeholder text, and rely on this line of logs to locate it.
+          if (image !== undefined) {
+            log.info(
+              `[dsh-pet] Chat image pet=${petId}, ${image.width}x${image.height}, ${image.bytes} bytes` +
+                '(the kernel substitutes placeholder text if the model cannot read images)',
+            );
+          }
+          // Third-party memory: Modify content before dialogue; fail or time out and downgrade to original content (see recallPatch).
+          const patch =
+            config.backend !== 'native'
+              ? undefined
+              : await recallPatch(petId, {
+                  system,
+                  history: list.map(({ role, content, ts }) => ({ role, content, ts })),
+                  userText: text,
+                });
+          // Model: chatModel of the entry configuration takes precedence (leave blank = not specified); failure on the generation side will fallback to the model of the current conversation and try again.
+          const generated = await generateChat({
+            observability: deps.observability,
+            ctx,
+            system: patch?.system ?? system,
+            history: patch?.history ?? list,
+            recalledContext,
+            userText: patch?.userText ?? text,
+            pool,
+            actions,
+            preferred: configuredModel(found.conf, 'chatModel'),
+            image,
+          });
+          if (!generated.ok) return generated;
+          const now = Date.now();
+          // The pictures uploaded by the user are only saved but not sent: the memory must be able to restore the
+          // "pictures brought in this round" (chat record archive), but the picture itself is not resent to the model; the
+          // picture with AI only backfills the name tag (see chat.ts's historyMarkersOf), and also does not have the
+          // picture itself.
+          const partition =
+            config.backend === 'dsh-powercontext'
+              ? { memoryBinding: binding ?? 'unresolved:' + (sessionId ?? '') }
+              : {};
+          entry.messages.push({ role: 'user', content: text, ts: now, ...partition, ...(image ? { image } : {}) });
+          entry.messages.push({
+            role: 'assistant',
+            content: generated.text,
+            ts: now,
+            ...partition,
+            ...(generated.image ? { meme: generated.image } : {}),
+            // The action name is the same as the picture name: persist to disk only saves the name, and when replaying the
+            // history, chat.ts will backfill it with [action: name] - otherwise the model cannot remember what it has
+            // performed, and it will not be able to judge if the user says "change it"
+            ...(generated.action ? { action: generated.action } : {}),
+          });
+          if (config.backend === 'powercontext')
+            queueMemoryTurn(memoryState(entry, config), text, generated.text, now, deps.observability?.reference());
+          await writeMemory(mem);
+          if (config.backend === 'powercontext') {
+            // The synchronization is queued after the current persist to disk lock, and the reply does not wait for remote collection.
+            void syncMemory(petId).catch(() => log.warn('dsh-pet: memory sync persistence unavailable'));
+          } else if (config.backend === 'native') {
+            // Exclusive memory link when PowerContext is explicitly selected to avoid repeated collection by third-party backends.
+            captureTurn(petId, {
               userText: text,
+              replyText: generated.text,
+              ts: now,
+              ...(generated.action !== undefined ? { action: generated.action } : {}),
+              ...(generated.image !== undefined ? { image: generated.image } : {}),
             });
-      // Model: chatModel of the entry configuration takes precedence (leave blank = not specified); failure on the generation side will fallback to the model of the current conversation and try again.
-      const generated = await generateChat({
-        ctx,
-        system: patch?.system ?? system,
-        history: patch?.history ?? list,
-        recalledContext,
-        userText: patch?.userText ?? text,
-        pool,
-        actions,
-        preferred: configuredModel(found.conf, 'chatModel'),
-        image,
-      });
-      if (!generated.ok) return generated;
-      const now = Date.now();
-      // The pictures uploaded by the user are only saved but not sent: the memory must be able to restore the
-      // "pictures brought in this round" (chat record archive), but the picture itself is not resent to the model; the
-      // picture with AI only backfills the name tag (see chat.ts's historyMarkersOf), and also does not have the
-      // picture itself.
-      const partition =
-        config.backend === 'dsh-powercontext' ? { memoryBinding: binding ?? 'unresolved:' + (sessionId ?? '') } : {};
-      entry.messages.push({ role: 'user', content: text, ts: now, ...partition, ...(image ? { image } : {}) });
-      entry.messages.push({
-        role: 'assistant',
-        content: generated.text,
-        ts: now,
-        ...partition,
-        ...(generated.image ? { meme: generated.image } : {}),
-        // The action name is the same as the picture name: persist to disk only saves the name, and when replaying the
-        // history, chat.ts will backfill it with [action: name] - otherwise the model cannot remember what it has
-        // performed, and it will not be able to judge if the user says "change it"
-        ...(generated.action ? { action: generated.action } : {}),
-      });
-      if (config.backend === 'powercontext') queueMemoryTurn(memoryState(entry, config), text, generated.text, now);
-      await writeMemory(mem);
-      if (config.backend === 'powercontext') {
-        // The synchronization is queued after the current persist to disk lock, and the reply does not wait for remote collection.
-        void syncMemory(petId).catch(() => log.warn('dsh-pet: memory sync persistence unavailable'));
-      } else if (config.backend === 'native') {
-        // Exclusive memory link when PowerContext is explicitly selected to avoid repeated collection by third-party backends.
-        captureTurn(petId, {
-          userText: text,
-          replyText: generated.text,
-          ts: now,
-          ...(generated.action !== undefined ? { action: generated.action } : {}),
-          ...(generated.image !== undefined ? { image: generated.image } : {}),
+          }
+          // The action is written first: the same writeback link as POST /anim (record + anim leaf), the renderer plays and reports the execution accordingly.
+          if (generated.action !== undefined) {
+            const record = playback.create(petId, generated.action);
+            state.writePet(petId, 'anim', { name: generated.action, playbackId: record.playbackId });
+          }
+          // The reply is written into S (the same leaf as whisper: the front end is originally the same display link).
+          // Which end should press this pet's display push: The dialogue request contains surface = any, and there is no
+          // specific end available. The conversation reply returns to "manual broadcasting": this sentence is only
+          // available after the user sends a message, and it is up to voiceEnabled to decide whether to read it or not.
+          const replyVoiceTo = cfg.main?.voiceEnabled === true ? voiceTargetFor(found.pet) : undefined;
+          // Only actions but no text (the model is marked write-only) → Do not write say to avoid popping an empty bubble.
+          if (generated.text !== '') {
+            state.writePet(petId, 'say', {
+              text: generated.text,
+              ...(deps.observability?.reference()
+                ? { observationId: deps.observability.reference()!.traceparent.split('-')[1] }
+                : {}),
+              ...(generated.image ? { image: generated.image } : {}),
+              // Explicitly turn off the whisper animation when taking action: the bubble is played, but the action of the just playback request is not blocked.
+              ...(generated.action !== undefined ? { anim: false } : {}),
+              ...(replyVoiceTo ? { voiceTo: replyVoiceTo } : {}),
+            });
+          }
+          // The same text is brought out with the return value (the leaves are written as written, not one of the two)
+          return { ok: true as const, text: generated.text, ...(generated.image ? { image: generated.image } : {}) };
         });
-      }
-      // The action is written first: the same writeback link as POST /anim (record + anim leaf), the renderer plays and reports the execution accordingly.
-      if (generated.action !== undefined) {
-        const record = playback.create(petId, generated.action);
-        state.writePet(petId, 'anim', { name: generated.action, playbackId: record.playbackId });
-      }
-      // The reply is written into S (the same leaf as whisper: the front end is originally the same display link).
-      // Which end should press this pet's display push: The dialogue request contains surface = any, and there is no
-      // specific end available. The conversation reply returns to "manual broadcasting": this sentence is only
-      // available after the user sends a message, and it is up to voiceEnabled to decide whether to read it or not.
-      const replyVoiceTo = cfg.main?.voiceEnabled === true ? voiceTargetFor(found.pet) : undefined;
-      // Only actions but no text (the model is marked write-only) → Do not write say to avoid popping an empty bubble.
-      if (generated.text !== '') {
-        state.writePet(petId, 'say', {
-          text: generated.text,
-          ...(generated.image ? { image: generated.image } : {}),
-          // Explicitly turn off the whisper animation when taking action: the bubble is played, but the action of the just playback request is not blocked.
-          ...(generated.action !== undefined ? { anim: false } : {}),
-          ...(replyVoiceTo ? { voiceTo: replyVoiceTo } : {}),
-        });
-      }
-      // The same text is brought out with the return value (the leaves are written as written, not one of the two)
-      return { ok: true as const, text: generated.text, ...(generated.image ? { image: generated.image } : {}) };
-    });
-  };
+      },
+      { conversationKey: 'chat:' + JSON.stringify([petId, sessionId ?? '']) },
+    );
 
   /**
    * Delete the dialogue memory of a certain pet: `ts` default = clear all, given ts = only delete the hit round (two

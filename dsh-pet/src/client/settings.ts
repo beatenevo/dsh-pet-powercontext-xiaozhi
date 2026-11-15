@@ -28,6 +28,7 @@ import { makeGlobalCard, type GlobalFlagKey, type GlobalFlags } from './settings
 import { makeLoadStatus } from './settings/load-status.ts';
 import { makeModelCard, type ChatFlagKey, type ChatFlagValues, type ModelFieldKey } from './settings/model-card.ts';
 import { makeMemorySetup } from './settings/memory-setup.ts';
+import { makeObservabilityCard } from './settings/observability-card.ts';
 import type { MemorySetupStatus } from '../shared/memory-setup.ts';
 import { makeMobileCard } from './settings/mobile-card.ts';
 import { makeMotionCard } from './settings/motion-card.ts';
@@ -93,6 +94,7 @@ export function makePetConfigSection(
     ModelPicker,
   );
   const MemorySetup = makeMemorySetup(rt);
+  const ObservabilityCard = makeObservabilityCard(rt);
   const PhysicsCard = makePhysicsCard(rt);
   const MotionCard = makeMotionCard(rt);
   const ShortcutsCard = makeShortcutsCard(rt, ctx);
@@ -522,6 +524,7 @@ export function makePetConfigSection(
 
         // Save button The following is a reference card: read-only description, no need to click save whether to change it or not.
         h(ShortcutsCard, {}),
+        h(ObservabilityCard, {}),
 
         // The persist to disk position of both cards is meta. If it cannot be read, the whole block will not appear.
         paths ? h(ConfigMetaCard, { paths }) : null,

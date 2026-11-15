@@ -10,6 +10,8 @@ Built on [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet).
 
 Development preview: [Astra Pro 2.0 robot controls](docs/en/guides/robot.md) connect taught actions, robot speech and controller-state feedback to pet chat. Use a preview package marked `astra-pro-2.0-bundled`; the published npm `0.1.0-beta.1` does not include robot support. [Choose a download](docs/en/guides/robot-bundles.md#download-and-install) · [Follow the illustrated setup tutorial](docs/en/tutorials/astra-first-interaction.md).
 
+Development preview: [AI Vision observability](docs/en/guides/observability.md) adds optional, content-free traces and links to the platform’s existing memory views.
+
 ## See it in use
 
 ![Live conversation with the pet inside DeepSeek Harness](docs/assets/demos/dsh-chat.gif)

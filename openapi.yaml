@@ -81,6 +81,74 @@ tags:
     description: Optional Astra Pro 2.0 operator controls and status
 
 paths:
+  /dsh-pet-7340/observability:
+    get:
+      tags: [Config]
+      operationId: getObservability
+      summary: Read credential-free AI Vision configuration and recent interactions
+      description: Returns at most 30 process-local root interactions. No credentials or business content are returned.
+      responses:
+        "200":
+          description: Observation status or the standard unsupported failure envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservabilityStatus"
+    put:
+      tags: [Config]
+      operationId: configureObservability
+      summary: Save optional AI Vision observation settings
+      description: |
+        Requires the existing authenticated host session. SpaceKey is write-only. Omitting it preserves
+        the existing key only for the same destination, Agent and space. Changing a target requires a new key.
+        HTTPS is required except loopback or explicitly permitted private-network HTTP. Redirects do not
+        establish an accepted export. Disabling observation preserves ordinary pet behavior.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/ObservabilityConfig"
+                - type: object
+                  properties:
+                    spaceKey:
+                      {
+                        type: string,
+                        minLength: 1,
+                        maxLength: 4096,
+                        writeOnly: true,
+                      }
+                    clearKey: { type: boolean }
+      responses:
+        "200":
+          description: Credential-free status or standard bad-request failure envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservabilityStatus"
+        "400":
+          description: Invalid JSON.
+  /dsh-pet-7340/observability/check:
+    post:
+      tags: [Config]
+      operationId: checkObservability
+      summary: Export a content-free connection-check trace
+      description: |
+        Uses saved settings and performs no model or robot call. Ingest acceptance does not prove
+        storage or query readback. The HTTP 200 body may contain accepted false or the standard failure envelope.
+      responses:
+        "200":
+          description: Export acceptance and current status, or a disabled/unavailable failure.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  accepted: { type: boolean }
+                  status:
+                    $ref: "#/components/schemas/ObservabilityStatus"
   /dsh-pet-7340/robot:
     get:
       tags:
@@ -2771,6 +2839,10 @@ paths:
                   description: |
                     Qualified voice ID (`provider/voice`) from /voice/voices. Defaults to main.voiceName.
                     Missing or unknown selections return bad-request.
+                observationId:
+                  type: string
+                  pattern: "^[a-f0-9]{32}$"
+                  description: Optional recent interaction ID issued by this host. Unknown IDs start an independent voice trace and never change synthesis.
                 rate:
                   type: string
                   description:
@@ -3618,6 +3690,52 @@ components:
             $ref: "#/components/schemas/FailureResponse"
 
   schemas:
+    ObservabilityConfig:
+      type: object
+      required: [enabled, baseUrl, agentId, spaceId, allowInsecureHttp]
+      properties:
+        enabled: { type: boolean }
+        baseUrl: { type: string, maxLength: 2048 }
+        agentId:
+          {
+            type: string,
+            description: Agent UUID; may be empty while disabled.,
+          }
+        spaceId:
+          {
+            type: string,
+            description: Space UUID; may be empty while disabled.,
+          }
+        allowInsecureHttp: { type: boolean }
+    ObservabilityStatus:
+      type: object
+      required: [config, hasKey, interactions]
+      properties:
+        config:
+          $ref: "#/components/schemas/ObservabilityConfig"
+        hasKey: { type: boolean }
+        error: { type: string, enum: [configuration_invalid, export_failed] }
+        lastExportAt:
+          {
+            type: number,
+            description: Last successful ingest acknowledgement in Unix milliseconds.,
+          }
+        memoryUrl: { type: string, format: uri }
+        interactions:
+          type: array
+          maxItems: 30
+          items:
+            type: object
+            required: [traceId, operation, startedAt, outcome, delivery, url]
+            properties:
+              traceId: { type: string, pattern: "^[a-f0-9]{32}$" }
+              operation: { type: string }
+              startedAt: { type: number, description: Unix milliseconds. }
+              durationMs: { type: number, minimum: 0 }
+              outcome:
+                { type: string, enum: [running, success, error, cancelled] }
+              delivery: { type: string, enum: [pending, accepted, failed] }
+              url: { type: string, format: uri }
     RobotAction:
       type: object
       additionalProperties: false
@@ -4959,6 +5077,10 @@ components:
             Explicit `false` = only play the bubble, without checking the animation pool or changing the source.
             Similarly, only `POST /broadcast` can write; whisper and conversation replies cannot be written.
           example: true
+        observationId:
+          type: string
+          pattern: "^[a-f0-9]{32}$"
+          description: Optional host-issued interaction identity for automatic voice synthesis correlation.
         voiceTo:
           type: string
           enum: [web, desktop]

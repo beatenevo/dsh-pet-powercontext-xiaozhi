@@ -11,6 +11,7 @@ import type { RobotResult, RobotSnapshot } from '../../shared/robot.ts';
 import { defaultRobotConfig, robotConfigSchema, robotRequestSchema, type RobotRequest } from './config.ts';
 import { readRobotJournal, writeRobotJournal, type RobotReceipt } from './journal.ts';
 import { runRobotWorker, type RobotRunner, type RobotCall } from './worker.ts';
+import type { PetObservability } from '../observability/service.ts';
 
 /** Pet feedback is best-effort and never changes the recorded physical command result. */
 export interface RobotFeedback {
@@ -29,12 +30,21 @@ export interface RobotService {
 /** Create a controller with an injectable SDK transport; no movement is sent during construction. */
 export function createRobotService(options: {
   userRoot: string;
+  observability?: PetObservability;
   run?: RobotRunner;
   feedback?: (event: RobotFeedback) => Promise<void>;
   now?: () => number;
   monitor?: boolean;
 }): RobotService {
-  const run = options.run ?? runRobotWorker;
+  const transport = options.run ?? runRobotWorker;
+  const run: RobotRunner = (config, call, signal) => {
+    if (!options.observability || call.operation === 'status') return transport(config, call, signal);
+    return options.observability.run(`robot.${call.operation}`, async () => {
+      const result = await transport(config, call, signal);
+      options.observability?.fields({ 'dsh_pet.robot.evidence': 'worker_result' });
+      return result;
+    });
+  };
   const now = options.now ?? Date.now;
   const configFile = join(options.userRoot, 'astra-robot.json');
   const journalFile = join(options.userRoot, 'astra-commands.json');

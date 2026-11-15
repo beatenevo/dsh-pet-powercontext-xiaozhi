@@ -9,6 +9,11 @@ import { type createAiConfig, type StandaloneAiPublicSettings, type StandaloneAi
 import { type AiFetch } from '../ai-transport.ts';
 import { type StandaloneLogger } from '../context.ts';
 import { type BalanceResult } from '../../host/balance/index.ts';
+import type { ReportedTokenUsage } from '../../shared/token-usage.ts';
+
+/** DSH-compatible text and usage events. */
+export type StandaloneStreamChunk =
+  { type: 'text'; text: string; usage?: never } | { type: 'usage'; usage: ReportedTokenUsage; text?: never };
 
 /** Set storage: return shape of `createAiConfig`. */
 export type AiStore = ReturnType<typeof createAiConfig>;
@@ -87,7 +92,7 @@ export interface StandaloneAiService {
     signal?: AbortSignal,
   ): Promise<undefined | { id: string; name: string }>;
   /** Return text increments in an asynchronous sequence. */
-  stream(options: unknown): AsyncIterable<{ type: 'text'; text: string }>;
+  stream(options: unknown): AsyncIterable<StandaloneStreamChunk>;
   /** Get the current settings after desensitization. */
   getSettings(): StandaloneAiPublicSettings;
   /** Internal setup transaction only; includes credentials and must never be serialized in HTTP responses. */

@@ -30,9 +30,9 @@ const options = {
   system: 'system',
   messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }], source: { kind: 'user' } }],
 };
-const collect = async (stream: AsyncIterable<{ text: string }>) => {
+const collect = async (stream: AsyncIterable<{ text?: string }>) => {
   const result: string[] = [];
-  for await (const part of stream) result.push(part.text);
+  for await (const part of stream) if (part.text !== undefined) result.push(part.text);
   return result.join('');
 };
 
@@ -433,5 +433,127 @@ test('testConnection checks parameters and reports success or friendly error', a
     async () => {
       return new Response('Unauthorized', { status: 401 });
     },
+  );
+});
+
+test('standalone streams preserve reported OpenAI cache usage without duplicating text', async () => {
+  await fixture(
+    async (ai) => {
+      const parts = [];
+      for await (const part of ai.stream(options)) parts.push(part);
+      assert.equal(
+        parts
+          .filter((part) => part.type === 'text')
+          .map((part) => part.text)
+          .join(''),
+        'hello',
+      );
+      assert.deepEqual(parts.find((part) => part.type === 'usage')?.usage, {
+        inputTokens: 10,
+        outputTokens: 4,
+        cacheReadTokens: 20,
+      });
+    },
+    async () =>
+      new Response(
+        [
+          { choices: [{ index: 0, delta: { content: 'hello' } }] },
+          {
+            choices: [],
+            usage: { prompt_tokens: 30, completion_tokens: 4, prompt_tokens_details: { cached_tokens: 20 } },
+          },
+        ]
+          .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+          .join('') + 'data: [DONE]\n\n',
+        {
+          headers: { 'content-type': 'text/event-stream' },
+        },
+      ),
+  );
+});
+
+test('standalone streams preserve Anthropic input, cache and final output buckets', async () => {
+  await fixture(
+    async (ai) => {
+      const parts = [];
+      for await (const part of ai.stream(options)) parts.push(part);
+      assert.equal(
+        parts
+          .filter((part) => part.type === 'text')
+          .map((part) => part.text)
+          .join(''),
+        'hello',
+      );
+      assert.deepEqual(parts.find((part) => part.type === 'usage')?.usage, {
+        inputTokens: 10,
+        outputTokens: 4,
+        cacheReadTokens: 20,
+        cacheWriteTokens: 3,
+      });
+    },
+    async () =>
+      new Response(
+        [
+          {
+            type: 'message_start',
+            message: {
+              id: 'msg_1',
+              type: 'message',
+              role: 'assistant',
+              content: [],
+              model: 'test-model',
+              usage: {
+                input_tokens: 10,
+                output_tokens: 1,
+                cache_read_input_tokens: 20,
+                cache_creation_input_tokens: 3,
+              },
+            },
+          },
+          { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+          { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hello' } },
+          { type: 'content_block_stop', index: 0 },
+          {
+            type: 'message_delta',
+            delta: { stop_reason: 'end_turn', stop_sequence: null },
+            usage: { output_tokens: 4 },
+          },
+          { type: 'message_stop' },
+        ]
+          .map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
+          .join(''),
+        {
+          headers: { 'content-type': 'text/event-stream' },
+        },
+      ),
+    'anthropic',
+  );
+});
+
+test('Anthropic-compatible streams without optional usage keep chat available and usage unknown', async () => {
+  await fixture(
+    async (ai) => {
+      const chunks = [];
+      for await (const chunk of ai.stream(options)) chunks.push(chunk);
+      assert.deepEqual(chunks, [{ type: 'text', text: 'hello' }]);
+    },
+    async () =>
+      new Response(
+        [
+          {
+            type: 'message_start',
+            message: { id: 'no_usage', type: 'message', role: 'assistant', content: [], model: 'test-model' },
+          },
+          { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hello' } },
+          { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null } },
+          { type: 'message_stop' },
+        ]
+          .map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
+          .join(''),
+        {
+          headers: { 'content-type': 'text/event-stream' },
+        },
+      ),
+    'anthropic',
   );
 });

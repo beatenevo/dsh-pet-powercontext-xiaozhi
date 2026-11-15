@@ -8,7 +8,10 @@ import { memorySetupEn } from './memory-setup.ts';
 
 import { dshMemoryEn } from '../../dsh-memory-status.ts';
 
+import { observabilityEn } from './observability.ts';
+
 export const en: Record<Key, string> = {
+  ...observabilityEn,
   ...dshMemoryEn,
   ...memorySetupEn,
   memoryStatusHint: 'Current pet, saved settings. Synced dialogue does not establish extracted memory.',

@@ -197,7 +197,11 @@ async function loadConfigOnce(): Promise<void> {
  *
  * @param say - Which sentence should be read: `text` text, `voiceTo` which end should be read.
  */
-export function playSayVoice(say: { readonly text: string; readonly voiceTo?: VoiceTarget }): void {
+export function playSayVoice(say: {
+  readonly text: string;
+  readonly voiceTo?: VoiceTarget;
+  readonly observationId?: string;
+}): void {
   const isMine = say.voiceTo !== undefined && say.voiceTo === surface;
   if (!say.text || !isMine) {
     setVoiceState('idle');
@@ -207,7 +211,7 @@ export function playSayVoice(say: { readonly text: string; readonly voiceTo?: Vo
     setVoiceState('idle');
     return;
   }
-  void speakWhenReady(say.text); // No await: Playback is bypass and cannot block bubbles and animations
+  void speakWhenReady(say.text, false, say.observationId); // No await: Playback is bypass and cannot block bubbles and animations
 }
 
 /**
@@ -217,14 +221,14 @@ export function playSayVoice(say: { readonly text: string; readonly voiceTo?: Vo
  * @param canPlayHidden - Whether to continue playing when the page is hidden; the default is `false` (muted when
  * hidden).
  */
-async function speakWhenReady(text: string, canPlayHidden = false): Promise<void> {
+async function speakWhenReady(text: string, canPlayHidden = false, observationId?: string): Promise<void> {
   await loadConfigOnce();
   const seq = ++utteranceSeq;
   // Report first and then set loading: The bubble depends on this event to suspend and close the timing. If it is a step later, it may have closed.
   emitUtterance({ kind: 'start', seq, text });
   setVoiceState('loading');
   try {
-    await speak(text, canPlayHidden);
+    await speak(text, canPlayHidden, observationId);
   } finally {
     // Success, failure, and timeout all go here: bubble is waiting for this cleanup. If it fails once, it will hang forever.
     emitUtterance({ kind: 'end', seq, text });
@@ -315,14 +319,18 @@ if (typeof document !== 'undefined' && typeof document.addEventListener === 'fun
  * @param text - the entire sentence to be read.
  * @param canPlayHidden - Whether to continue playing when the page is hidden; default `false` .
  */
-async function speak(text: string, canPlayHidden = false): Promise<void> {
+async function speak(text: string, canPlayHidden = false, observationId?: string): Promise<void> {
   const token = ++autoSeq;
   stopAutoAudio();
   try {
     const response = await fetch(voiceBase + '/voice/speak', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text, ...(voiceName ? { voice: voiceName } : {}) }),
+      body: JSON.stringify({
+        text,
+        ...(voiceName ? { voice: voiceName } : {}),
+        ...(observationId ? { observationId } : {}),
+      }),
       signal: speakSignal(),
     });
     if (token !== autoSeq) return;

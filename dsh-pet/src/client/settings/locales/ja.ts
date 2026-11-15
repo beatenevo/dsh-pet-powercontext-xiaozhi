@@ -7,7 +7,10 @@ import { memorySetupEn } from './memory-setup.ts';
 
 import { dshMemoryEn } from '../../dsh-memory-status.ts';
 
+import { observabilityEn } from './observability.ts';
+
 export const ja: Record<Key, string> = {
+  ...observabilityEn,
   ...dshMemoryEn,
   ...memorySetupEn,
   memoryStatusHint: '保存済み設定の現在のペット。同期済みでも記憶の抽出完了とは限りません。',

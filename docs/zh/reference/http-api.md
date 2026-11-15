@@ -196,3 +196,9 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 ## 环境查询
 
 `POST /environment` 返回城市和天气；加 `?pet=<id>&surface=web|desktop|both|any` 会为这只桌宠更新 `sections.env`，不传 pet 时只查询。`fresh=1` 跳过缓存，`ip=1` 忽略配置城市；不可用的字段直接省略。`POST /balance` 同样支持 pet/surface，只让被选中的宠物显示余额气泡。
+
+## AI Vision 观测
+
+`GET /observability` 读取公开配置和进程内近期交互；`PUT /observability` 保存配置，可写入仅写入的 SpaceKey；`POST /observability/check` 测试带认证的 OTLP 导出。这些路由沿用桌宠其他路由的宿主认证。接入端接受与存储／回读是不同的验证。参阅[连接指南](../guides/observability.md)。
+
+`say` 状态叶可携带可选 `observationId`，自动语音将其传回 `POST /voice/speak`。宿主只关联自己发出的近期身份；缺失或未知身份不改变语音行为。

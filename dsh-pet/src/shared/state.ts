@@ -207,6 +207,7 @@ export type SayCue =
       duration?: number;
       anim?: boolean;
       voiceTo?: VoiceTarget;
+      observationId?: string;
     }
   | { kind: 'clear' };
 
@@ -228,6 +229,7 @@ export function readSay(leaf: StateLeaf): SayCue | null {
     duration?: unknown;
     anim?: unknown;
     voiceTo?: unknown;
+    observationId?: unknown;
     clear?: unknown;
   };
   // The clear command takes precedence: it does not carry text, so it must be ranked before text verification.
@@ -246,6 +248,9 @@ export function readSay(leaf: StateLeaf): SayCue | null {
     anim: typeof d.anim === 'boolean' ? d.anim : undefined,
     // Only two valid literals are recognized: the wrong end name equals "not specified", and the consumer will not read it accordingly.
     voiceTo: d.voiceTo === 'web' || d.voiceTo === 'desktop' ? d.voiceTo : undefined,
+    ...(typeof d.observationId === 'string' && /^[a-f0-9]{32}$/.test(d.observationId)
+      ? { observationId: d.observationId }
+      : {}),
   };
 }
 

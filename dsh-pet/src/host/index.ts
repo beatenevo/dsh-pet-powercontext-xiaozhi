@@ -5,6 +5,7 @@
  * @module dsh-pet/src/host/index
  */
 import { createHostSetup } from './plugin/setup.ts';
+import { PetObservability } from './observability/service.ts';
 import { registerRobot } from './plugin/robot.ts';
 import { registerManagedMemory } from './plugin/managed-memory.ts';
 import { readAllConfig } from './config.ts';
@@ -90,7 +91,9 @@ export function apply(ctx: any): void {
     const city = readAllConfig(configPaths).main?.environmentCity;
     return typeof city === 'string' && city.trim() !== '' ? city.trim() : undefined;
   });
-  const chatMemory = createChatMemory({ ctx, configPaths, log, memeDirsFor, playback, state, userRoot });
+  const observability = new PetObservability(userRoot);
+  ctx.effect(() => () => observability.shutdown());
+  const chatMemory = createChatMemory({ ctx, configPaths, log, memeDirsFor, playback, state, userRoot, observability });
   const { lastWhisperAt, publishWhisper, publishSleepTalk, chatWithPet, getActivePetId, setActivePetId } = chatMemory;
 
   const balancePoll = createBalancePoll({ ctx, configPaths, getActivePetId, log, state, standaloneAiBalance });
@@ -130,7 +133,8 @@ export function apply(ctx: any): void {
   ensureDeepseekAsrProvider({ resolveKey: resolveDeepseekKey });
 
   const deps: PetRouteDeps = {
-    robot: registerRobot(ctx, userRoot, () => httpRoute.handlePetRoute),
+    observability,
+    robot: registerRobot(ctx, userRoot, () => httpRoute.handlePetRoute, observability),
     memorySetup: registerManagedMemory(ctx, setup, () => httpRoute.memoryConfig),
     ...setup,
     ...petLookup,

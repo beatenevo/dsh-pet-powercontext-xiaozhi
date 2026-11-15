@@ -6,7 +6,10 @@ import { memorySetupZh } from './memory-setup.ts';
 
 import { dshMemoryZh } from '../../dsh-memory-status.ts';
 
+import { observabilityZh } from './observability.ts';
+
 export const zh = {
+  ...observabilityZh,
   ...dshMemoryZh,
   ...memorySetupZh,
   memoryStatusHint: '已保存配置的当前宠物状态；已同步不代表已经提炼成长期记忆。',

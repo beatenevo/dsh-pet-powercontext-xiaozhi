@@ -12,7 +12,7 @@
 import { isAuthenticationFailure, isRateLimitFailure, sdkTextStream, type AiTransportEvent } from '../ai-transport.ts';
 import { MAX_EVENTS, MAX_OUTPUT_CHARS } from './limits.ts';
 import { abortable, parseRequest } from './request.ts';
-import type { AiRuntime } from './types.ts';
+import type { AiRuntime, StandaloneStreamChunk } from './types.ts';
 
 /** Fixed text written by this layer: only these can be revealed to the caller as they are. */
 const OWN_MESSAGES: readonly string[] = [
@@ -46,9 +46,7 @@ function normalizeFailure(runtime: AiRuntime, controller: AbortController, error
  * @param runtime - Shared running state (readiness determination, rate limiting window, in-transit controller).
  * @returns accepts the DSH request object and produces an asynchronous sequence of text increments.
  */
-export function createTextStream(
-  runtime: AiRuntime,
-): (options: unknown) => AsyncIterable<{ type: 'text'; text: string }> {
+export function createTextStream(runtime: AiRuntime): (options: unknown) => AsyncIterable<StandaloneStreamChunk> {
   return async function* stream(options) {
     if (!runtime.ready()) throw new Error('Standalone AI is not ready. Configure and enable the model first.');
     const settings = runtime.store.current();
@@ -72,6 +70,7 @@ export function createTextStream(
         // There should also be an upper limit on the number of events to prevent the peer from holding up the process with a large number of empty blocks.
         if (++events > MAX_EVENTS) throw new Error('Standalone AI response exceeds limits.');
         if (part.value.refusal) throw new Error('Standalone AI could not answer this request.');
+        if (part.value.usage) yield { type: 'usage', usage: part.value.usage };
         const text = part.value.text;
         if (!text) continue;
         emitted += text.length;

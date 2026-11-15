@@ -13,6 +13,22 @@ const ready = {
   content: 'Useful memory',
 };
 
+test('shared recall passes an optional parent without changing query, binding or credentials', async () => {
+  const traceContext = { traceparent: '00-' + '1'.repeat(32) + '-' + '2'.repeat(16) + '-01' };
+  let received: unknown;
+  const service = {
+    protocol: DSH_MEMORY_PROTOCOL,
+    prepare: async (request: unknown) => {
+      received = request;
+      return ready;
+    },
+  };
+  assert.deepEqual(await prepareDshMemory(() => service, config, 'active', 'private query', traceContext), ready);
+  assert.deepEqual((received as { traceContext: unknown }).traceContext, traceContext);
+  assert.equal((received as { sessionId: string }).sessionId, 'active');
+  assert.equal((received as { query: string }).query, 'private query');
+});
+
 test('missing, incompatible and throwing plugins fail open without disclosing errors', async () => {
   assert.deepEqual(await prepareDshMemory(() => undefined, config), {
     status: 'unavailable',

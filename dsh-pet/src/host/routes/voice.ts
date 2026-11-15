@@ -27,7 +27,17 @@ export async function handleVoiceRoutes(deps: PetRouteDeps, input: RouteInput): 
     } catch {
       return invalidJson();
     }
-    const result = await deps.voice.speak(parsed);
+    let parentInteractionId: string | undefined;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const { observationId, ...request } = parsed as Record<string, unknown>;
+      if (typeof observationId === 'string' && /^[a-f0-9]{32}$/.test(observationId))
+        parentInteractionId = observationId;
+      parsed = request;
+    }
+    const run = () => deps.voice.speak(parsed);
+    const result = deps.observability
+      ? await deps.observability.run('voice.speak', run, { parentInteractionId })
+      : await run();
     if (!result.ok) return failResult(result.reason, result.message);
     return { kind: 'file', file: result.file, contentType: result.contentType };
   }
@@ -47,7 +57,8 @@ export async function handleVoiceRoutes(deps: PetRouteDeps, input: RouteInput): 
     } catch {
       return invalidJson();
     }
-    const result = await deps.speech.hear(parsed, signal);
+    const run = () => deps.speech.hear(parsed, signal);
+    const result = deps.observability ? await deps.observability.run('voice.hear', run) : await run();
     if (!result.ok) return failResult(result.reason, result.message);
     return okResult({ ok: true, text: result.text });
   }

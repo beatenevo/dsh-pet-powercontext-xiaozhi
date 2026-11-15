@@ -120,6 +120,7 @@ export function buildPanel(
   state: ChatPanelState,
   memoryStatus?: unknown,
   robotPanel?: unknown,
+  comparisonPanel?: unknown,
 ): unknown {
   const { h } = rt;
   return h('div', {
@@ -134,6 +135,7 @@ export function buildPanel(
       toolsNode(h, rt.t, state),
       memoryStatus ?? null,
       robotPanel ?? null,
+      comparisonPanel ?? null,
       personaNode(h, state),
       listNode(rt, state),
       confirmNode(rt, state),

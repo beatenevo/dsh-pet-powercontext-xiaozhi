@@ -6,6 +6,7 @@ Start with a working pet, then add the memory and controls you need.
 
 ## Learn
 
+- [AI Vision observability](guides/observability.md): configure export, inspect real interactions and understand evidence limits.
 - [Share DSH project memory](guides/dsh-memory.md): reuse the host connection, bind a workspace and keep chat available without memory.
 - [From installation to Astra Pro 2.0 interaction](tutorials/astra-first-interaction.md): slim packages, chat setup, robot connection, speech, actions and stopping.
 - [Your first pet](tutorials/first-pet.md): install, configure a model, chat and check a remembered fact.
@@ -36,3 +37,5 @@ Start with a working pet, then add the memory and controls you need.
 - [Media sources](../assets/README.md): screenshot versions and chart provenance.
 
 Code uses the [MIT license](../../LICENSE); character assets have [separate terms](../../dsh-pet/ASSET-LICENSE.md).
+
+- [Compare answers and token use in DSH](guides/token-comparison.md)

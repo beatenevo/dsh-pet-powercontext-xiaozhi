@@ -7,7 +7,10 @@ import { memorySetupEn } from './memory-setup.ts';
 
 import { dshMemoryEn } from '../../dsh-memory-status.ts';
 
+import { observabilityEn } from './observability.ts';
+
 export const de: Record<Key, string> = {
+  ...observabilityEn,
   ...dshMemoryEn,
   ...memorySetupEn,
   memoryStatusHint:

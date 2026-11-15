@@ -113,6 +113,10 @@
     "@anthropic-ai/sdk": "0.135.0",
     "@electron-internal/extract-zip": "^1.0.5",
     "@electron/get": "^5.1.0",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/exporter-trace-otlp-proto": "0.218.0",
+    "@opentelemetry/resources": "2.7.1",
+    "@opentelemetry/sdk-trace-base": "2.7.1",
     "openai": "7.39.0",
     "zod": "4.6.7"
   },

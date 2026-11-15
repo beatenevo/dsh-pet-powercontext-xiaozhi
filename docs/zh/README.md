@@ -6,6 +6,7 @@
 
 ## 跟着做
 
+- [AI Vision 可观测性](guides/observability.md)：配置导出、查看真实交互并理解证据边界。
 - [共享 DSH 项目记忆](guides/dsh-memory.md)：复用宿主连接、关联工作区，以及未接入时的使用方式。
 - [从安装桌宠到联动 Astra Pro 2.0](tutorials/astra-first-interaction.md)：精简包安装、模型配置、机器人接入、播报、动作与停止。
 - [养好第一只桌宠](tutorials/first-pet.md)：安装、配置模型、开始聊天，再验证一条记忆。
@@ -36,3 +37,5 @@
 - [图文来源](../assets/README.md)：截图对应版本及图表出处。
 
 代码采用 [MIT 许可](../../LICENSE)，角色素材遵循[单独的授权条款](../../dsh-pet/ASSET-LICENSE.md)。
+
+- [在 DSH 中对照回答与 Token 用量](guides/token-comparison.md)

@@ -100,3 +100,9 @@ Standalone chat works after its model is configured. Balance and DSH session ser
 `POST /environment` returns city and weather. Add `?pet=<id>&surface=web|desktop|both|any` to update `sections.env` for that pet; without a pet it only queries. `fresh=1` bypasses caches and `ip=1` ignores the configured city. Missing location/weather fields are omitted. The same optional pet/surface pair on `POST /balance` limits its bubble to one pet.
 
 Voice catalogs group qualified `provider/voice` IDs by provider. Omitted selections use `main.voiceName` and `main.speechProvider`; unknown selections return `bad-request`. See [Cordis services](cordis.md) for registration and timeout contracts.
+
+## AI Vision observation
+
+`GET /observability` reads public settings and recent process-local interactions; `PUT /observability` saves settings with an optional write-only SpaceKey. `POST /observability/check` tests authenticated OTLP export. These routes use the same host authentication as the other pet routes. Ingest acceptance is distinct from storage/readback. See the [connection guide](../guides/observability.md).
+
+An optional `observationId` on a `say` leaf can be returned to `POST /voice/speak`. The host joins only a recent identity it issued; missing or unknown IDs do not change voice behavior.

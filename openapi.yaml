@@ -81,6 +81,154 @@ tags:
     description: Optional Astra Pro 2.0 operator controls and status
 
 paths:
+  /dsh-pet-7340/comparison:
+    get:
+      tags: [Config]
+      operationId: getContextComparison
+      summary: Read the latest process-local context strategy experiment
+      responses:
+        "200":
+          description: Latest run or null; raw content is visible only through the authenticated host
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run: { type: [object, "null"], additionalProperties: true }
+    post:
+      tags: [Action]
+      operationId: startContextComparison
+      summary: Create an isolated memory scope and replay bounded questions across three strategies
+      description: Uses the configured chat model and saved direct PowerContext connection. Only one experiment runs at a time. No model fallback or automatic retry. The returned run progresses through preparing, running, complete, failed or cancelled. Results are process-local; the isolated PowerContext scope persists. Limit corpus to 49152 UTF-8 bytes and questions to eight.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [corpus, questions, recentBytes]
+              properties:
+                corpus: { type: string, minLength: 1, maxLength: 49152 }
+                questions:
+                  type: array
+                  minItems: 1
+                  maxItems: 8
+                  items: { type: string, minLength: 1, maxLength: 1000 }
+                recentBytes: { type: integer, minimum: 128, maximum: 8192 }
+      responses:
+        "200":
+          description: Experiment accepted, or an explicit ok=false failure
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+  /dsh-pet-7340/comparison/continue:
+    post:
+      tags: [Action]
+      operationId: continueContextComparison
+      summary: Reuse the latest completed experiment scope for another question batch
+      description: Preserves the original corpus, model and recall configuration without another Source capture or flush. Maximum eight additional questions per batch and 32 in total. A failed, active or unknown experiment cannot be continued.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [id, questions]
+              properties:
+                id: { type: string, format: uuid }
+                questions:
+                  type: array
+                  minItems: 1
+                  maxItems: 8
+                  items: { type: string, minLength: 1, maxLength: 1000 }
+      responses:
+        "200":
+          description: Additional questions accepted, or an explicit ok=false failure
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+  /dsh-pet-7340/comparison/cancel:
+    post:
+      tags: [Action]
+      operationId: cancelContextComparison
+      summary: Stop scheduling experiment calls and cancel active requests
+      description: Cancellation cannot undo provider billing or accepted Source processing. No existing memory scope is deleted.
+      responses:
+        "200":
+          description: Cancellation requested
+          content:
+            application/json:
+              schema: { type: object, properties: { ok: { type: boolean } } }
+  /dsh-pet-7340/observability:
+    get:
+      tags: [Config]
+      operationId: getObservability
+      summary: Read credential-free AI Vision configuration and recent interactions
+      description: Returns at most 30 process-local root interactions. No credentials or business content are returned.
+      responses:
+        "200":
+          description: Observation status or the standard unsupported failure envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservabilityStatus"
+    put:
+      tags: [Config]
+      operationId: configureObservability
+      summary: Save optional AI Vision observation settings
+      description: |
+        Requires the existing authenticated host session. SpaceKey is write-only. Omitting it preserves
+        the existing key only for the same destination, Agent and space. Changing a target requires a new key.
+        HTTPS is required except loopback or explicitly permitted private-network HTTP. Redirects do not
+        establish an accepted export. Disabling observation preserves ordinary pet behavior.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/ObservabilityConfig"
+                - type: object
+                  properties:
+                    spaceKey:
+                      {
+                        type: string,
+                        minLength: 1,
+                        maxLength: 4096,
+                        writeOnly: true,
+                      }
+                    clearKey: { type: boolean }
+      responses:
+        "200":
+          description: Credential-free status or standard bad-request failure envelope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservabilityStatus"
+        "400":
+          description: Invalid JSON.
+  /dsh-pet-7340/observability/check:
+    post:
+      tags: [Config]
+      operationId: checkObservability
+      summary: Export a content-free connection-check trace
+      description: |
+        Uses saved settings and performs no model or robot call. Ingest acceptance does not prove
+        storage or query readback. The HTTP 200 body may contain accepted false or the standard failure envelope.
+      responses:
+        "200":
+          description: Export acceptance and current status, or a disabled/unavailable failure.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  accepted: { type: boolean }
+                  status:
+                    $ref: "#/components/schemas/ObservabilityStatus"
   /dsh-pet-7340/robot:
     get:
       tags:
@@ -2771,6 +2919,10 @@ paths:
                   description: |
                     Qualified voice ID (`provider/voice`) from /voice/voices. Defaults to main.voiceName.
                     Missing or unknown selections return bad-request.
+                observationId:
+                  type: string
+                  pattern: "^[a-f0-9]{32}$"
+                  description: Optional recent interaction ID issued by this host. Unknown IDs start an independent voice trace and never change synthesis.
                 rate:
                   type: string
                   description:
@@ -3618,6 +3770,52 @@ components:
             $ref: "#/components/schemas/FailureResponse"
 
   schemas:
+    ObservabilityConfig:
+      type: object
+      required: [enabled, baseUrl, agentId, spaceId, allowInsecureHttp]
+      properties:
+        enabled: { type: boolean }
+        baseUrl: { type: string, maxLength: 2048 }
+        agentId:
+          {
+            type: string,
+            description: Agent UUID; may be empty while disabled.,
+          }
+        spaceId:
+          {
+            type: string,
+            description: Space UUID; may be empty while disabled.,
+          }
+        allowInsecureHttp: { type: boolean }
+    ObservabilityStatus:
+      type: object
+      required: [config, hasKey, interactions]
+      properties:
+        config:
+          $ref: "#/components/schemas/ObservabilityConfig"
+        hasKey: { type: boolean }
+        error: { type: string, enum: [configuration_invalid, export_failed] }
+        lastExportAt:
+          {
+            type: number,
+            description: Last successful ingest acknowledgement in Unix milliseconds.,
+          }
+        memoryUrl: { type: string, format: uri }
+        interactions:
+          type: array
+          maxItems: 30
+          items:
+            type: object
+            required: [traceId, operation, startedAt, outcome, delivery, url]
+            properties:
+              traceId: { type: string, pattern: "^[a-f0-9]{32}$" }
+              operation: { type: string }
+              startedAt: { type: number, description: Unix milliseconds. }
+              durationMs: { type: number, minimum: 0 }
+              outcome:
+                { type: string, enum: [running, success, error, cancelled] }
+              delivery: { type: string, enum: [pending, accepted, failed] }
+              url: { type: string, format: uri }
     RobotAction:
       type: object
       additionalProperties: false
@@ -4959,6 +5157,10 @@ components:
             Explicit `false` = only play the bubble, without checking the animation pool or changing the source.
             Similarly, only `POST /broadcast` can write; whisper and conversation replies cannot be written.
           example: true
+        observationId:
+          type: string
+          pattern: "^[a-f0-9]{32}$"
+          description: Optional host-issued interaction identity for automatic voice synthesis correlation.
         voiceTo:
           type: string
           enum: [web, desktop]

@@ -10,7 +10,34 @@
 
 开发预览：[Astra Pro 2.0 机器人联动](docs/zh/guides/robot.md)支持在桌宠聊天中执行示教动作、语音播报和接收状态反馈。请使用带有 `astra-pro-2.0-bundled` 标记的预览包，npm 已发布的 `0.1.0-beta.1` 尚不包含机器人功能。[选择下载包](docs/zh/guides/robot-bundles.md#下载和安装) · [完整安装与互动图文教程](docs/zh/tutorials/astra-first-interaction.md)。
 
+开发预览：[AI Vision 可观测性](docs/zh/guides/observability.md)提供可选、不含正文的链路采集，以及平台已有记忆视图的查看入口。[Token 对照](docs/zh/guides/token-comparison.md)可以比较三种上下文策略的回答与实测用量。这些功能尚未包含在 npm 已发布的 `0.1.0-beta.1` 中。
+
 ## 看看用起来的样子
+
+### DSH、桌宠与记忆在同一个工作区
+
+![完整 DSH 工作区中的桌宠，以及 PowerContext 已生成的两条记忆](docs/assets/screenshots/dsh-live-memory.zh.png)
+
+_DSH Agent 会话和桌宠面板同时保留在工作区。PowerContext 已从桌宠对话生成两条记忆：设备预算与离线备用资料的位置。展开列表可以查看事实及其来源入口；仅有「已同步」状态不能证明抽取或召回成功。_
+
+### 并排看回答，也看 Token 开销
+
+![DSH 内真实运行的 Token 对照：完整背景与 PowerContext 回答并排展示](docs/assets/screenshots/dsh-token-comparison.zh.png)
+
+_同一个合成场景、真实模型调用：13 个问题复用 6 条已生成的记忆。相对每次携带完整背景，回答输入减少 **80.5%**（61,387 → 11,944 Token）；计入记忆生成与向量化输入后，减少 **12.6%**（61,387 → 53,641）。这是实测输入量，不是费用节省，也不是对 DSH 默认任务 Agent 策略的测量。_
+
+[首批 6 个问题](docs/assets/screenshots/dsh-token-first-batch.zh.png)计入记忆开销后，输入反而**增加了 65.4%**。已知输出也增加了，向量化输出未报告。解读节省比例时，请一起看 [Token 明细](docs/assets/screenshots/dsh-token-details.zh.png)和[对照操作指南](docs/zh/guides/token-comparison.md)。
+
+### 在 AI Vision 中追踪一次桌宠回复
+
+![AI Vision 中的真实桌宠调用链，包含 PowerContext 召回和回答模型调用](docs/assets/screenshots/ai-vision-pet-trace.zh.png)
+
+_这是一条单独的普通桌宠聊天轨迹：从记忆召回进入 PowerContext，再调用回答模型，共 10 个节点，检索返回 2 条记忆。提示词和回答正文按设计不采集；AI Vision 展示已知 Token 小计，缺失用量时完整总量保持未知。此图不是对照实验的汇总。_
+
+以上 **1600 × 1000** 原始截图于 **2026-11-15** 在 Linux Chromium 中采集，使用 **DSH 0.2.2-rc.1**、桌宠预览构建 **`2e080f1`**、PowerContext **`1.5.2.dev148+gfa80ab6b2`** 与本机部署的 AI Vision。演示事实为虚构资料，生成与向量化均调用真实服务。中英文 README 共用原始中文界面，未替换界面文字。[采集说明与验证范围](docs/assets/README.md#live-comparison-and-traces--对照与调用链实拍)。
+
+<details>
+<summary>展开观看聊天与记忆召回实录 GIF</summary>
 
 ![在完整 DeepSeek Harness 界面中与桌宠真实聊天](docs/assets/demos/dsh-chat.gif)
 
@@ -20,7 +47,9 @@ _同一界面保留 DSH 工作区、Agent 会话和桌宠聊天面板，实际�
 
 _后台抽取后，桌宠再次答出项目名 Moonleaf 和“无糖茉莉花茶”。本次演示将近期聊天设为 **0 轮**：实际模型请求携带召回记忆和新问题，没有携带历史问答。展开「Remembered facts」可以查看抽取后的事实。_
 
-以上 GIF 在 Linux Chromium 中实录，使用当前分支、**DSH 0.2.2-rc.1** 与 **PowerContext 1.5.0**，保留界面原有的中英文控件。[查看原尺寸聊天截图](docs/assets/screenshots/dsh-chat.en.png) · [召回与记忆列表](docs/assets/screenshots/dsh-facts.en.png) · [图文来源](docs/assets/README.md)。
+以上 GIF 于 **2026-11-11** 在 Linux Chromium 中实录，使用 **DSH 0.2.2-rc.1** 与 **PowerContext 1.5.0**，保留当时界面原有的中英文控件。[查看原尺寸聊天截图](docs/assets/screenshots/dsh-chat.en.png) · [召回与记忆列表](docs/assets/screenshots/dsh-facts.en.png) · [图文来源](docs/assets/README.md)。
+
+</details>
 
 ## 先养好一只
 

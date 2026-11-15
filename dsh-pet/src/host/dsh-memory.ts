@@ -1,5 +1,6 @@
 /** Optional, read-only recall through the running PowerContext DSH plugin. */
 import type { ChatMemoryConfig } from '../shared/chat-memory-config.ts';
+import type { TraceReference } from '../shared/observability.ts';
 
 export const DSH_MEMORY_SERVICE = 'powercontextCompanionMemory';
 export const DSH_MEMORY_PROTOCOL = 'powercontext.companion-memory.v1';
@@ -11,7 +12,13 @@ export type DshMemoryResult =
 
 interface DshMemoryService {
   protocol?: unknown;
-  prepare?: (input: { sessionId: string; query?: string; maxBytes: number; signal: AbortSignal }) => Promise<unknown>;
+  prepare?: (input: {
+    sessionId: string;
+    query?: string;
+    maxBytes: number;
+    signal: AbortSignal;
+    traceContext?: TraceReference;
+  }) => Promise<unknown>;
 }
 
 /** Validate the versioned boundary; never pass raw errors or connection configuration to clients. */
@@ -50,6 +57,7 @@ export async function prepareDshMemory(
   config: ChatMemoryConfig,
   sessionId?: string,
   query?: string,
+  traceContext?: TraceReference,
 ): Promise<DshMemoryResult> {
   if (!sessionId) return { status: 'unavailable', reason: 'session-required' };
   const controller = new AbortController();
@@ -72,6 +80,7 @@ export async function prepareDshMemory(
           query,
           maxBytes: config.maxRecallBytes,
           signal: controller.signal,
+          ...(traceContext ? { traceContext } : {}),
         }),
       )
       .then((value) => {

@@ -18,6 +18,8 @@ import { handleChatRoutes } from './chat.ts';
 import { handleMemoryLibraryRoutes } from './memory-library.ts';
 import { handleMemorySetupRoutes } from './memory-setup.ts';
 import { handleRobotRoutes } from './robot.ts';
+import { handleComparisonRoutes } from './comparison.ts';
+import { handleObservabilityRoutes } from './observability.ts';
 import { handleConfigRoutes } from './config/index.ts';
 import { handleDesktopRoutes } from './desktop.ts';
 import { handleEnvironmentRoutes } from './environment.ts';
@@ -34,6 +36,8 @@ import type { PetRouteDeps, RouteHandler } from './types.ts';
 
 /** Processor order: the earlier, the first to match; asset fallback must be at the end. */
 const HANDLERS: readonly RouteHandler[] = [
+  handleObservabilityRoutes,
+  handleComparisonRoutes,
   handleConfigRoutes,
   handleDesktopRoutes,
   handleMenuRoutes,

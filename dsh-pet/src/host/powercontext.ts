@@ -4,11 +4,15 @@ import type { ChatMemoryConfig } from '../shared/chat-memory-config.ts';
 import { memoryToken } from './powercontext-auth.ts';
 import { listRememberedFacts, inspectRememberedFact, changeRememberedFact } from './powercontext-library.ts';
 import type { MemoryChange, MemoryEvidence, MemoryPage } from '../shared/memory-library.ts';
+import type { TraceReference } from '../shared/observability.ts';
+import { referenceContext } from './observability/service.ts';
 
 export interface MemoryTurn {
   id: string;
   at: number;
   content: string;
+  /** Optional causal link for later delivery; never part of the captured Source content. */
+  observation?: TraceReference;
 }
 
 export interface MemorySyncState {
@@ -55,7 +59,13 @@ export function memoryState(entry: MemoryEntryState, config: ChatMemoryConfig): 
 }
 
 /** Store the exact payload before attempting any network write, so retries cannot change its identity. */
-export function queueMemoryTurn(state: MemorySyncState, user: string, assistant: string, at: number): void {
+export function queueMemoryTurn(
+  state: MemorySyncState,
+  user: string,
+  assistant: string,
+  at: number,
+  observation?: TraceReference,
+): void {
   const content = JSON.stringify({
     kind: 'dsh-pet-dialogue',
     occurred_at: new Date(at).toISOString(),
@@ -70,7 +80,7 @@ export function queueMemoryTurn(state: MemorySyncState, user: string, assistant:
     state.lastError = 'source_too_large';
     return;
   }
-  state.pending.push({ id: 'dsh-pet-turn:' + randomUUID(), at, content });
+  state.pending.push({ id: 'dsh-pet-turn:' + randomUUID(), at, content, ...(observation ? { observation } : {}) });
 }
 
 export class MemoryServiceError extends Error {
@@ -89,9 +99,11 @@ export function memoryErrorCode(error: unknown): string {
 export class PowerContextClient {
   declare private readonly config: ChatMemoryConfig;
   declare private readonly fetcher: typeof fetch;
-  constructor(config: ChatMemoryConfig, fetcher: typeof fetch = fetch) {
+  declare private readonly traceContext: TraceReference | undefined;
+  constructor(config: ChatMemoryConfig, fetcher: typeof fetch = fetch, traceContext?: TraceReference) {
     this.config = config;
     this.fetcher = fetcher;
+    this.traceContext = referenceContext(traceContext) ? traceContext : undefined;
   }
 
   private async request(
@@ -101,6 +113,7 @@ export class PowerContextClient {
     options: { method?: 'GET' | 'POST' | 'PUT'; headers?: Record<string, string> } = {},
   ): Promise<Record<string, unknown>> {
     const headers: Record<string, string> = { 'content-type': 'application/json', ...options.headers };
+    if (this.traceContext) headers.traceparent = this.traceContext.traceparent;
     const token = memoryToken(this.config.serverUrl);
     if (token) headers.authorization = 'Bearer ' + token;
     const response = await this.fetcher(this.config.serverUrl.replace(/\/+$/, '') + path, {
@@ -153,6 +166,46 @@ export class PowerContextClient {
     return changeRememberedFact(this.request.bind(this), scope, change, AbortSignal.timeout(10_000));
   }
 
+  /** Experiments never write to the companion or a DSH project scope. */
+  async createComparisonScope(id: string, signal: AbortSignal): Promise<string> {
+    const value = await this.request(
+      '/v1/scopes',
+      {
+        title: 'Context strategy comparison',
+        summary: 'Isolated user-requested context strategy experiment.',
+        idempotency_key: 'dsh-pet-comparison:' + id,
+      },
+      signal,
+    );
+    if (typeof value.scope_id !== 'string' || !value.scope_id || value.scope_id.length > 256)
+      throw new MemoryServiceError('invalid_response');
+    return value.scope_id;
+  }
+
+  async captureComparison(scope: string, id: string, content: string, signal: AbortSignal): Promise<void> {
+    const value = await this.request(
+      '/v1/sources/content',
+      {
+        scope_id: scope,
+        source_id: 'dsh-pet-comparison:' + id,
+        content,
+        metadata: { origin: 'dsh-pet', event: 'context-strategy-comparison' },
+      },
+      signal,
+    );
+    if (value.status !== 'accepted') throw new MemoryServiceError('source_not_accepted');
+  }
+
+  async flushComparison(scope: string, signal: AbortSignal): Promise<void> {
+    const value = await this.request('/v1/memory/flush', { scope_id: scope }, signal);
+    if (value.remaining_work === true || (typeof value.held_count === 'number' && value.held_count > 0))
+      throw new MemoryServiceError('memory_not_ready');
+  }
+
+  async comparisonStats(scope: string, signal: AbortSignal): Promise<unknown> {
+    return this.request('/v1/stats', { selection: { mode: 'exact', scope_ids: [scope] }, period: '30d' }, signal);
+  }
+
   async ensureScope(state: MemorySyncState, signal: AbortSignal): Promise<string> {
     if (state.scopeId) return state.scopeId;
     const response = await this.request(
@@ -169,8 +222,11 @@ export class PowerContextClient {
     return (state.scopeId = response.scope_id);
   }
 
-  async prepare(state: MemorySyncState, query: string): Promise<string | undefined> {
-    const signal = AbortSignal.timeout(this.config.timeoutMs);
+  async prepare(state: MemorySyncState, query: string, callerSignal?: AbortSignal): Promise<string | undefined> {
+    const signal = AbortSignal.any([
+      AbortSignal.timeout(this.config.timeoutMs),
+      ...(callerSignal ? [callerSignal] : []),
+    ]);
     const scope = await this.ensureScope(state, signal);
     const response = await this.request(
       '/v1/context/prepare',

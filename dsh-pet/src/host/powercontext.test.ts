@@ -11,11 +11,14 @@ import { boundedHistory } from './memory-context.ts';
 import { DEFAULT_CHAT_MEMORY, chatMemoryConfigValid } from '../shared/chat-memory-config.ts';
 import { readAllConfig } from './config.ts';
 import { registerChatMemoryProvider } from './chat-memory-provider.ts';
+import { PetObservability } from './observability/service.ts';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 
 /** Controlled HTTP boundary; generation is deliberately fake and is not a memory-quality benchmark. */
 async function fixture(backend: 'native' | 'powercontext' = 'powercontext') {
   const root = await mkdtemp(join(tmpdir(), 'dsh-pet-powercontext-'));
-  const calls: Array<{ path: string; body: Record<string, unknown> }> = [];
+  const calls: Array<{ path: string; body: Record<string, unknown>; traceparent?: string }> = [];
   const scopes = new Map<string, string>();
   const sources = new Map<string, string>();
   let failCapture = false;
@@ -30,7 +33,7 @@ async function fixture(backend: 'native' | 'powercontext' = 'powercontext') {
     request.on('data', (chunk: Buffer) => chunks.push(chunk));
     await once(request, 'end');
     const body = JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>;
-    calls.push({ path: request.url!, body });
+    calls.push({ path: request.url!, body, traceparent: request.headers.traceparent as string | undefined });
     response.setHeader('content-type', 'application/json');
     const reply = (value: unknown, status = 200) => {
       response.statusCode = status;
@@ -75,8 +78,9 @@ async function fixture(backend: 'native' | 'powercontext' = 'powercontext') {
   };
   await writeFile(configPaths.userFile, JSON.stringify(config));
   const requests: Array<Record<string, unknown>> = [];
-  const makeMemory = () =>
+  const makeMemory = (observability?: PetObservability) =>
     createChatMemory({
+      observability,
       environment: async () => ({}),
       ctx: {
         effect: (start: () => () => void) => {
@@ -139,6 +143,60 @@ async function fixture(backend: 'native' | 'powercontext' = 'powercontext') {
     },
   };
 }
+
+test('chat, private recall and deferred capture export correlated metadata without content', async (t) => {
+  const f = await fixture();
+  const observation = new PetObservability(f.root);
+  const spans: ReadableSpan[] = [];
+  t.mock.method(
+    OTLPTraceExporter.prototype,
+    'export',
+    (batch: ReadableSpan[], done: (result: { code: number }) => void) => {
+      spans.push(...batch);
+      done({ code: 0 });
+    },
+  );
+  try {
+    observation.configure({
+      enabled: true,
+      baseUrl: 'https://vision.example',
+      agentId: '11111111-1111-4111-8111-111111111111',
+      spaceId: '22222222-2222-4222-8222-222222222222',
+      spaceKey: 'observation-secret',
+      allowInsecureHttp: false,
+    });
+    const memory = f.makeMemory(observation);
+    assert.equal((await memory.chatWithPet('main', 'private-coffee-preference')).ok, true);
+    await memory.syncMemory('main');
+    assert.equal(f.sources.size, 1);
+    await observation.check();
+    const root = spans.find((span) => span.name === 'dsh_pet.chat')!;
+    const recall = spans.find((span) => span.name === 'dsh_pet.memory.recall')!;
+    const capture = spans.find((span) => span.name === 'dsh_pet.memory.capture')!;
+    assert.equal(recall.spanContext().traceId, root.spanContext().traceId);
+    assert.equal(
+      f.calls.find((call) => call.path === '/v1/context/prepare')?.traceparent,
+      `00-${recall.spanContext().traceId}-${recall.spanContext().spanId}-01`,
+    );
+    assert.equal(
+      f.calls.find((call) => call.path === '/v1/sources/content')?.traceparent,
+      `00-${capture.spanContext().traceId}-${capture.spanContext().spanId}-01`,
+    );
+    assert.equal(capture.links[0].context.traceId, root.spanContext().traceId);
+    assert.equal(capture.attributes['dsh_pet.memory.status'], 'accepted');
+    assert.doesNotMatch(
+      JSON.stringify(spans.map((span) => span.attributes)),
+      /private-coffee|无糖咖啡|observation-secret/,
+    );
+    assert.doesNotMatch([...f.sources.values()][0], /traceparent|conversationId|observation-secret/);
+    f.setFailPrepare(true);
+    assert.equal((await memory.chatWithPet('main', 'still answer')).ok, true);
+    await memory.syncMemory('main');
+  } finally {
+    await observation.shutdown();
+    await f.close();
+  }
+});
 
 test('The registered third-party memory backend is not called when PowerContext is explicitly selected.', async () => {
   const f = await fixture();

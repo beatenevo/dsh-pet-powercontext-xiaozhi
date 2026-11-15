@@ -1,6 +1,7 @@
 /**
  * English copy of the dialogue panel; the key set must be consistent with zh.
  */
+import { comparisonEn } from '../../comparison/locales.ts';
 import type { Key } from './zh.ts';
 
 import { robotEn } from '../../robot/locales.ts';
@@ -9,6 +10,7 @@ import { dshMemoryEn } from '../../dsh-memory-status.ts';
 
 export const en: Record<Key, string> = {
   ...dshMemoryEn,
+  ...comparisonEn,
   ...robotEn,
   factsSourceNumber: 'Source {n}',
   factsUser: 'You',

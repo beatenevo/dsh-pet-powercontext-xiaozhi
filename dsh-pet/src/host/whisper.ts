@@ -12,6 +12,7 @@
  */
 
 import { BlockAssembler, createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm';
+import type { PetObservability } from './observability/service.ts';
 import { PET_CALL_IDENTITY, noTextReason } from './llm-call.ts';
 import { supportsReasoningOff } from './llm-reasoning.ts';
 import { defaultLog } from './log-file.ts';
@@ -56,6 +57,7 @@ function userTextWithMeme(meme: { name: string; desc: string }): string {
 
 /** One-time generation request: persona is required, the rest are optional. The parameter change object is to no longer attach the fifth parameter to the function signature. */
 export interface WhisperRequest {
+  observability?: PetObservability;
   /** persona system prompt word (whisperPrompt). */
   system: string;
   /** Picture (passed in when turning on picture; default = plain text whisper). When the generation is successful, it will be brought back as it is, and the client will display the picture accordingly. */
@@ -92,7 +94,10 @@ export async function generateWhisper(
   // copy has the same origin as the failed branch to avoid literal drift between the two places.
   let last: WhisperGenerateResult = { ok: false, reason: 'generate-error', message: noTextReason(undefined) };
   for (const [i, sel] of candidates.entries()) {
-    const result = await generateWith(ctx, llm, sel, request);
+    const run = () => generateWith(ctx, llm, sel, request);
+    const result = request.observability
+      ? await request.observability.run('model', run, { model: sel, attempt: i + 1 })
+      : await run();
     if (result.ok) return result;
     last = result;
     // fallback should leave traces: when the configured model does not take effect, the reason can be seen in the log (otherwise "I clearly configured A, why do I still use B" cannot be checked)
@@ -146,6 +151,8 @@ async function generateWith(
   try {
     for await (const chunk of llm.stream(options)) {
       assembler.push(chunk as Parameters<BlockAssembler['push']>[0]);
+      if (chunk && typeof chunk === 'object' && 'type' in chunk && chunk.type === 'usage' && 'usage' in chunk)
+        request.observability?.usage(chunk.usage);
     }
   } catch (e) {
     return {

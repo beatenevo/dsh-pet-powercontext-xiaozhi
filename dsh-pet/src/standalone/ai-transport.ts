@@ -12,6 +12,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { randomUUID } from 'node:crypto';
 import type { StandaloneAiSettings } from './ai-config.ts';
 import { BUILTIN_SERVICES, sameEndpoint } from './services.ts';
+import { tokenCount, type ReportedTokenUsage } from '../shared/token-usage.ts';
 
 /** The shape of fetch is convenient for testing and replacement. */
 export type AiFetch = typeof globalThis.fetch;
@@ -25,8 +26,8 @@ export interface AiRequest {
   system: string;
   messages: AiTextMessage[];
 }
-/** Transfer event: only text increment and reject flag. */
-export type AiTransportEvent = { text?: string; refusal?: boolean };
+/** Transfer event: text, refusal, or usage reported by the provider. */
+export type AiTransportEvent = { text?: string; refusal?: boolean; usage?: ReportedTokenUsage };
 /** Silence logger for SDK to avoid writing request details to the log. */
 const quiet = { debug() {}, info() {}, warn() {}, error() {} };
 
@@ -133,13 +134,36 @@ export async function* sdkTextStream(
       ...request.messages,
     ];
     const stream = await client.chat.completions.create(
-      { model: settings.model, messages, stream: true, max_tokens: settings.maxTokens, n: 1 },
+      {
+        model: settings.model,
+        messages,
+        stream: true,
+        max_tokens: settings.maxTokens,
+        n: 1,
+      },
       { signal },
     );
     for await (const event of stream) {
       const delta = event.choices.find((choice) => choice.index === 0)?.delta;
       if (delta?.refusal) yield { refusal: true };
       if (delta?.content) yield { text: delta.content };
+      if (event.usage) {
+        const totalInput = tokenCount(event.usage.prompt_tokens);
+        const read = tokenCount(
+          event.usage.prompt_tokens_details?.cached_tokens ??
+            (event.usage as unknown as Record<string, unknown>).prompt_cache_hit_tokens,
+        );
+        const output = tokenCount(event.usage.completion_tokens);
+        yield {
+          usage: {
+            ...(totalInput !== undefined && (read === undefined || read <= totalInput)
+              ? { inputTokens: totalInput - (read ?? 0) }
+              : {}),
+            ...(read !== undefined ? { cacheReadTokens: read } : {}),
+            ...(output !== undefined ? { outputTokens: output } : {}),
+          },
+        };
+      }
     }
     return;
   }
@@ -162,11 +186,19 @@ export async function* sdkTextStream(
           { signal },
         )
       : await client.messages.create(parameters, { signal });
+  const usage: ReportedTokenUsage = {};
   for await (const event of stream) {
+    if (event.type === 'message_start') {
+      usage.inputTokens = tokenCount(event.message?.usage?.input_tokens);
+      usage.cacheReadTokens = tokenCount(event.message?.usage?.cache_read_input_tokens);
+      usage.cacheWriteTokens = tokenCount(event.message?.usage?.cache_creation_input_tokens);
+    }
+    if (event.type === 'message_delta') usage.outputTokens = tokenCount(event.usage?.output_tokens);
     if (event.type === 'message_delta' && event.delta.stop_reason === 'refusal') yield { refusal: true };
     // Only forward incremental text: Repeated forwarding of accumulated content and thinking blocks will cause the caller to get duplicate text.
     if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') yield { text: event.delta.text };
   }
+  if (Object.values(usage).some((value) => value !== undefined)) yield { usage };
 }
 
 /** Determine whether authentication failed. */

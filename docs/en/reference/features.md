@@ -20,15 +20,21 @@ The recent-round setting controls prompt context, not the lifetime of the local 
 
 Chat replies and manually requested whispers can be spoken. Automatic periodic whispers and to-do notifications have separate speech switches. Per-reply playback lets you replay a message manually even when automatic playback is disabled.
 
-The built-in synthesis uses online Edge voices. Available voices come from `/voice/voices`; volume is a 0–1 multiplier. The speech bubble waits for synthesis/playback, with a muted indicator on failure or timeout. Audio plays on one eligible surface; desktop takes priority when both displays are active, and hidden web pages do not speak.
+Built-in synthesis offers online Edge and DeepSeek voices. Available voices come from `/voice/voices`; volume is a 0–1 multiplier. The speech bubble waits for synthesis/playback, with a muted indicator on failure or timeout. Audio plays on one eligible surface; desktop takes priority when both displays are active, and hidden web pages do not speak.
 
-Speech input records audio and fills recognized text into the composer. Microphone access needs HTTPS or localhost and an available recognition service. DSH can provide recognition; standalone needs a compatible integration. [Cordis extensions](cordis.md) can replace synthesis and recognition independently.
+Speech input records audio and fills recognized text into the composer. Microphone access needs HTTPS or localhost and an available recognition service. Choose DSH or DeepSeek recognition in settings. DeepSeek needs an API key; standalone can save a dedicated speech key independently of the chat service. [Cordis extensions](cordis.md) can register additional synthesis and recognition providers.
 
 ## Balance
 
 Built-in balance sources include OpenCode Zen Go, Command Code and DeepSeek API/account paths. Unsupported providers display an explanation rather than a fabricated zero. Registered providers may supply money, points, usage windows or custom multi-page content.
 
 Balance can refresh periodically or manually through the menu or `/balance`. Animation bands reflect usage, with the final band reserved for exhaustion. Each pet can disable automatic balance behavior independently.
+
+## Weather and notifications
+
+The context menu can query city and weather and show them for the selected pet. Weather also supplies background to chat, whispers and sleep talk. Set `environmentCity` to override IP location; the settings detection action checks the current IP location without overwriting the city until saved. Queries prefer UAPI and fall back to IP location plus Open-Meteo. Missing results leave the unavailable fields out.
+
+`notifyWhenFocused` defaults to false. Enable it to receive system notifications and work-status speech while the page is visible and focused. Click a speech bubble to dismiss it with a pop animation.
 
 ## DSH work status
 

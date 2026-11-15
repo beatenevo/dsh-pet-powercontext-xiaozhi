@@ -14,10 +14,10 @@ export const HEAR_SAMPLE_RATE = 16000;
 /**
  * The upper limit of single recording (ms).
  *
- * 24 seconds × 32000 B/s ≈ 750 KB, base64 still falls in the request body of host 1 MiB (the upper limit is 768 KiB
- * audio); if it is longer, you must first find a way to fragment it, that is another thing.
+ * 200 秒 × 32000 B/s ≈ 6.25MB，base64 后落在宿主 10MiB 的请求体里（音频上限 7MiB）。
+ * 真正能用多久由识别实现决定，这里只是别让一次误按把内存吃光。
  */
-export const MAX_RECORD_MS = 24_000;
+export const MAX_RECORD_MS = 200_000;
 /** The peak threshold for judging silence (0..1): below it, it is considered that no sound is heard, and the recognition is not wasted. */
 export const SILENCE_PEAK = 0.002;
 /**

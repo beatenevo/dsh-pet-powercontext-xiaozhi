@@ -41,7 +41,7 @@ export type ParsedImage =
 /** Allowed media types; order used for error copy, keeping a fact with host attachment service's whitelist. */
 const MEDIA_TYPES: readonly PetImageMediaType[] = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
-/** base64 character upper limit: The upper limit of the request body is 1 MiB, leaving a margin for the text and JSON structures. */
+/** base64 字符上限：按对话配图本身的需要定，不随请求体上限放大。 */
 const MAX_BASE64_CHARS = 900_000;
 
 /**

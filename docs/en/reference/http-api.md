@@ -72,8 +72,9 @@ Renderer-only reports (`/pose/report`, `/playback/{id}/report`) are not the inte
 | `GET /character`            | Retrieve a reference character image; does not call an image model       |
 | `GET /logo`                 | Retrieve the packaged logo                                               |
 | `POST /pet-avatar`          | Upload an additional pack's avatar; built-in `main` is excluded          |
-| `POST /voice/speak`         | Synthesize MP3 from text, voice and rate                                 |
-| `POST /voice/hear`          | Transcribe base64 PCM16 mono 16 kHz WAV                                  |
+| `POST /voice/speak`         | Synthesize MP3/WAV using a qualified voice ID and rate                   |
+| `POST /voice/hear`          | Transcribe base64 PCM16 mono 16 kHz WAV (decoded limit 7 MiB)            |
+| `GET /voice/hear-providers` | List recognizers for the request provider or main.speechProvider         |
 | `GET /voice/voices`         | Discover available voice IDs                                             |
 | `GET, POST /todos`          | Read or create to-dos                                                    |
 | `PATCH, DELETE /todos/{id}` | Update or remove a to-do                                                 |
@@ -93,3 +94,9 @@ Standalone chat works after its model is configured. Balance and DSH session ser
 ## Astra Pro 2.0
 
 `GET /dsh-pet-7340/robot` reads cached state; JSON `POST` submits `configure`, `check`, `arm`, `disarm`, `execute`, `speak` or `stop`. Actions require a current session and explicit confirmation; `execute` also consumes one-shot authorization. Business failures use `ok: false`. Standalone requires session authentication for reads and writes. See the [setup and behavior guide](../guides/robot.md) and the `RobotRequest` / `RobotSnapshot` schemas in OpenAPI.
+
+## Environment queries
+
+`POST /environment` returns city and weather. Add `?pet=<id>&surface=web|desktop|both|any` to update `sections.env` for that pet; without a pet it only queries. `fresh=1` bypasses caches and `ip=1` ignores the configured city. Missing location/weather fields are omitted. The same optional pet/surface pair on `POST /balance` limits its bubble to one pet.
+
+Voice catalogs group qualified `provider/voice` IDs by provider. Omitted selections use `main.voiceName` and `main.speechProvider`; unknown selections return `bad-request`. See [Cordis services](cordis.md) for registration and timeout contracts.

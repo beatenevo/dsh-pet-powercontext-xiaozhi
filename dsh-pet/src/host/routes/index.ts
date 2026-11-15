@@ -20,6 +20,7 @@ import { handleMemorySetupRoutes } from './memory-setup.ts';
 import { handleRobotRoutes } from './robot.ts';
 import { handleConfigRoutes } from './config/index.ts';
 import { handleDesktopRoutes } from './desktop.ts';
+import { handleEnvironmentRoutes } from './environment.ts';
 import { handleInteractionRoutes } from './interaction.ts';
 import { handleMenuRoutes } from './menu.ts';
 import { handleMotionRoutes } from './motion.ts';
@@ -39,6 +40,7 @@ const HANDLERS: readonly RouteHandler[] = [
   handleStateRoutes,
   handleSessionRoutes,
   handleBalanceRoutes,
+  handleEnvironmentRoutes,
   handleInteractionRoutes,
   handleMotionRoutes,
   handlePlaybackRoutes,
@@ -70,6 +72,7 @@ function sleepGated(rest: string, method: string): boolean {
     rest === 'anim' ||
     rest === 'whisper' ||
     rest === 'balance' ||
+    rest === 'environment' ||
     rest === 'broadcast' ||
     rest === 'bubble/clear' ||
     rest === 'menu/click' ||

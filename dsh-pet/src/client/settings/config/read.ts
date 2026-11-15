@@ -22,6 +22,8 @@ export interface MainConfigPatch {
   /** Entry-level persona text, as a preview of instance persona "what to follow when left blank". */
   entryPrompt?: string;
   notificationsEnabled?: boolean;
+  /** 前台聚焦时也提醒；缺省表示这次响应里没有可信值。 */
+  notifyWhenFocused?: boolean;
   clickSoundEnabled?: boolean;
   whisperImageEnabled?: boolean;
   chatImageEnabled?: boolean;
@@ -31,7 +33,7 @@ export interface MainConfigPatch {
   trayEnabled?: boolean;
   /** Manual broadcast switch: manually triggered whisper and conversation reply; the default means there is no trusted value in this response. */
   voiceEnabled?: boolean;
-  /** Voice voice id (the host has been verified according to the whitelist, and the client displays it as it is). */
+  /** 语音音色（`provider/音色` 限定 id；宿主只验形态，客户端原样展示）。 */
   voiceName?: string;
   /** Playback volume coefficient (0–1); the default means there is no credible value in this response. */
   voiceVolume?: number;
@@ -41,6 +43,10 @@ export interface MainConfigPatch {
   voiceTodoEnabled?: boolean;
   /** Working status broadcast switch; the default indicates that there is no trusted value in this response. */
   voiceNotifyEnabled?: boolean;
+  /** 语音识别实现 id；缺省表示这次响应里没有可信值。 */
+  speechProvider?: string;
+  /** 天气城市覆盖；空串 = 跟随 IP 自动定位（与缺省不同，空串是可信值）。 */
+  environmentCity?: string;
   /** Physical parameters: The resolved value has been filled in according to "Built-in Default ← User Layer". If there are missing sub-keys, use the built-in default fallback again. */
   physics?: PhysicsParams;
   /** Font: Same as physical parameters. */
@@ -84,6 +90,7 @@ export function readMainConfig(merged: MergedConfig): MainConfigPatch | null {
   };
   if (typeof main.whisperPrompt === 'string') patch.entryPrompt = main.whisperPrompt;
   if (typeof main.notificationsEnabled === 'boolean') patch.notificationsEnabled = main.notificationsEnabled;
+  if (typeof main.notifyWhenFocused === 'boolean') patch.notifyWhenFocused = main.notifyWhenFocused;
   if (typeof main.clickSoundEnabled === 'boolean') patch.clickSoundEnabled = main.clickSoundEnabled;
   if (typeof main.whisperImageEnabled === 'boolean') patch.whisperImageEnabled = main.whisperImageEnabled;
   if (typeof main.chatImageEnabled === 'boolean') patch.chatImageEnabled = main.chatImageEnabled;
@@ -95,6 +102,8 @@ export function readMainConfig(merged: MergedConfig): MainConfigPatch | null {
   if (typeof main.voiceWhisperEnabled === 'boolean') patch.voiceWhisperEnabled = main.voiceWhisperEnabled;
   if (typeof main.voiceTodoEnabled === 'boolean') patch.voiceTodoEnabled = main.voiceTodoEnabled;
   if (typeof main.voiceNotifyEnabled === 'boolean') patch.voiceNotifyEnabled = main.voiceNotifyEnabled;
+  if (typeof main.speechProvider === 'string') patch.speechProvider = main.speechProvider;
+  if (typeof main.environmentCity === 'string') patch.environmentCity = main.environmentCity;
   if (main.physics && typeof main.physics === 'object') {
     patch.physics = { ...DEFAULT_PHYSICS, ...(main.physics as PhysicsParams) };
   }

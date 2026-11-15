@@ -22,6 +22,7 @@ import { createStandaloneContext, type RegisteredRoute, type StandaloneLogger } 
 import { createStandaloneLogger } from './logger.ts';
 import { configPathsFor, describePets, isDesktopVisible, parseArgs, USAGE } from './options.ts';
 import { listenStandaloneServer } from './server.ts';
+import { serviceLabel } from './services.ts';
 import { ROUTE_SEGMENT } from '../shared/constants.ts';
 import { createSetup, setupMemoryBinding } from './setup.ts';
 import { openSetup } from './open-setup.ts';
@@ -151,9 +152,9 @@ async function run(logger: StandaloneLogger, options: { port: number; setup: boo
     ai.isReady()
       ? '  AI          Local API enabled; automatic whispers follow the settings toggle'
       : '  AI          Not configured or disabled; no model requests. Open AI settings from the context menu',
-    ai.getSettings().balanceProvider
-      ? `  Balance     Provider: ${ai.getSettings().balanceProvider}; use Check balance in settings`
-      : '  Balance     Select a balance provider in AI settings',
+    ai.getSettings().service === 'custom'
+      ? '  余额        自定义服务商没有余额接口；要查余额就把服务商换成 DeepSeek 官方 / opencode Go / commandcode'
+      : `  余额        跟随服务商 ${serviceLabel(ai.getSettings().service)}，设置页点「查询余额」取数`,
     '  Unavailable DSH session work states / system notifications',
     '  Exit        Ctrl+C, POST /shutdown or Quit in the system tray menu',
     '',

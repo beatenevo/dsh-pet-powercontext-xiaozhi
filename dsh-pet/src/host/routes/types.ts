@@ -10,6 +10,7 @@
  */
 import type { ChatMemoryMessage } from '../chat.ts';
 import type { ConfigPaths } from '../config.ts';
+import type { EnvironmentFacts } from '../environment.ts';
 import type { RouteResult } from '../http.ts';
 import type { PetImageRef } from '../image-attachment.ts';
 import type { LockStore } from '../lock.ts';
@@ -149,8 +150,10 @@ export interface PetRouteDeps {
   readonly thumbUserRoot: string;
   /** User meme directory. */
   readonly memesUserRoot: string;
-  /** Refresh balance (manual indicates user active trigger). */
-  readonly refreshBalance: (manual?: boolean) => Promise<void>;
+  /** 刷新余额（manual 表示用户主动触发；petId 表示这次只让该宠物显示，缺省不写归属）。 */
+  readonly refreshBalance: (manual?: boolean, petId?: string) => Promise<void>;
+  /** 查此刻的环境（城市 + 天气）；fresh 为真时跳过缓存强制重查。 */
+  readonly environment: (opts?: { fresh?: boolean; city?: string }) => Promise<EnvironmentFacts>;
   /**
    * Generate a whisper using an explicit pool image when supplied; otherwise choose randomly or use text only
    * according to configuration.

@@ -80,6 +80,13 @@ export function routePathOf(baseURI: string | undefined): string {
 export const ROUTE_PATH = routePathOf(typeof document === 'undefined' ? undefined : document.baseURI);
 
 /**
+ * 是否给视频挂 1/255 alpha 修正滤镜。开着能去掉 WebM 背景那层淡灰矩形，但会掉帧：滤镜每帧
+ * 按视频尺寸重算，桌宠越大越明显，动起来会卡顿。灰框只在多只宠物重叠时才看得出来，单只基本
+ * 没差别，所以默认关闭。
+ */
+export const PET_ALPHA_FIX_ENABLED = false;
+
+/**
  * Play animation extension (centralized switch): The default . webm ( VP9-alpha ) can be played directly and
  * transparently at both ends; macOS’s Safari/WKWebView does not recognize webm alpha (rendering black background), and
  * needs to be changed to . mov ( HEVC-with-Alpha ) - asset from the warehouse Take the assets-mov tag of Release, put

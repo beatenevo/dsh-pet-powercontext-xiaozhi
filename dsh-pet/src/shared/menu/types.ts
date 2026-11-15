@@ -12,17 +12,14 @@ export interface MenuLeaf {
   label: string;
   /** Playback animation name (playback request action); action takes precedence over anim */
   anim?: string;
-  /**
-   * Custom actions: open website / check balance / whisper immediately / open conversation pop-up window / open to-do
-   * panel / return to initial position / reload configuration (exclusive for desktop, restart desktop Helper and
-   * rebuild the window according to the latest configuration) / change display position (see display for target value,
-   * injected from both ends) / third-party menu item (only report owner and label to register Party, it determines
-   * what to do specifically). Manual triggering is not affected by whisperEnabled - that field only turns off
-   * automatic polling.
-   */
+  /** 自定义动作：打开网站 / 查看余额 / 查询天气 / 立即碎碎念 / 打开对话弹窗 / 打开待办面板 / 回到初始位置 /
+   *  重载配置（桌面端专属，重启桌面 Helper 并按最新配置重建窗口）/ 改显示位置（目标值见 display，
+   *  两端都注入）/ 第三方菜单项（只把 owner 与 label 上报给注册方，具体做什么由它决定）。
+   *  手动触发均不受 whisperEnabled 影响——那个字段只关自动轮询。 */
   action?:
     | 'open-site'
     | 'show-balance'
+    | 'show-environment'
     | 'whisper'
     | 'chat'
     | 'todo'

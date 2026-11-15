@@ -1,8 +1,8 @@
 /**
  * Static asset: file retrieval and path guard for / font, / pic (including meme chain), / sound, / thumb.
  *
- * Does not determine asset ownership, only searches according to the given directory chain. Dependency (PetRouteDeps)
- * is passed in explicitly, and the module does not read global information or create status.
+ * 不决定素材归属，只按各 scope 的固定次序查找（用户层优先、包内兜底）。
+ * 依赖（PetRouteDeps）显式传入，模块内不读全局、不建状态。
  * @module dsh-pet/src/host/routes/assets
  */
 import { join } from 'node:path';
@@ -16,7 +16,7 @@ import type { RouteResult } from '../http.ts';
 
 /** Static asset field: undefined is returned on a miss and response is returned on a hit. */
 export async function handleAssetsRoutes(deps: PetRouteDeps, input: RouteInput): Promise<RouteResult | undefined> {
-  const { assetRootFor, memeDirsFor, petConfigDir, userRootFor } = deps;
+  const { assetRootFor, memeDirsFor, petConfigDir, userRoot, userRootFor } = deps;
   const { rest, url } = input;
 
   // Animation asset:/thumb/<asset root>/<file>, extension webm (default)/mov (macOS customized). Pets with
@@ -57,11 +57,11 @@ export async function handleAssetsRoutes(deps: PetRouteDeps, input: RouteInput):
     return { kind: 'file', file: fontFile, contentType: MIME[ext] ?? 'application/octet-stream' };
   }
 
-  // Notification icon: / pic /< file > → assets/pic in the package (square png, used for system notification icon).
-  // Meme: / pic/memes /<asset root>/<name>. png → According to the asset root, go to the directory chain
-  // of memeDirsFor, which has the same set of ownership semantics as / thumb; the name contains Chinese, and the URL
-  // segment has been decoded above. The old two-part form / pic/memes /<name>. png is retained and is equivalent to
-  // the directory chain of the asset root main.
+  // 通知图标、拖拽光标、玩法图：/pic/<file> → 用户层 $DSH_HOME/dsh-pet/pic/ 优先，包内 assets/pic 兜底。
+  // 用户层是为了自定义图标能活过插件升级——升级重装会把包内 assets 还原成内置那套。
+  // 表情包：/pic/memes/<素材根>/<名称>.png → 按素材根走 memeDirsFor 的目录链，与 /thumb 同一套
+  // 归属语义；名称含中文，URL 段已在上方解码。旧的两段形式 /pic/memes/<名称>.png 保留，
+  // 等价于素材根 main 的目录链。
   if (scope === 'pic') {
     if (restParts[0] === 'memes') {
       const segs = restParts.slice(1);
@@ -83,8 +83,10 @@ export async function handleAssetsRoutes(deps: PetRouteDeps, input: RouteInput):
       const ext = picFile.slice(picFile.lastIndexOf('.')).toLowerCase();
       return { kind: 'file', file: picFile, contentType: MIME[ext] ?? 'application/octet-stream' };
     }
-    const picRoot = join(PACKAGE_ROOT, 'assets', 'pic');
-    const picFile = resolveExisting(picRoot, restParts.join('/'));
+    const picRel = restParts.join('/');
+    // 两层同一道守卫：resolveExisting 只放行根目录内的相对路径，用户层不额外开口子
+    const picFile =
+      resolveExisting(join(userRoot, 'pic'), picRel) ?? resolveExisting(join(PACKAGE_ROOT, 'assets', 'pic'), picRel);
     if (picFile === undefined) return { kind: 'text', status: 404, body: 'dsh-pet: pic not found' };
     const ext = picFile.slice(picFile.lastIndexOf('.')).toLowerCase();
     return { kind: 'file', file: picFile, contentType: MIME[ext] ?? 'application/octet-stream' };

@@ -26,7 +26,7 @@ export interface StateLeaf {
  * `PUT /config` and `POST /config` return the updated aggregate directly and do not write the signal.
  * Manual configuration-file edits require a reload; the host does not poll file modification times.
  */
-export type SectionName = 'balance' | 'workStatus' | 'notify' | 'config' | 'menu' | 'focusSession';
+export type SectionName = 'balance' | 'workStatus' | 'notify' | 'config' | 'menu' | 'focusSession' | 'env';
 
 /**
  * Each pet segment (say = what to say; anim = the name of the animation to be played; position = the position to be
@@ -133,6 +133,9 @@ export class PollStateStore {
       // to the session accordingly. One-time signal: with ts, the consumer will judge the weight according to it, and
       // the page can still be replayed once when it is loaded later than written.
       focusSession: emptyLeaf(),
+      // 环境快照（`POST /environment`）：地点与天气一份，`petId` 决定哪只宠物点亮环境气泡。
+      // 与余额同一层：机器级事实，所有宠物读同一份。
+      env: emptyLeaf(),
     };
     this.pets = new Map();
     this.waiters = new Set();

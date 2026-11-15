@@ -10,7 +10,7 @@
  * @module dsh-pet/runtime/electron-helper/main/windows
  */
 const path = require('node:path');
-const { pointerZone, decideWindowIgnore } = require('../pointer-target.js');
+const { pointerZone, decideWindowIgnore, leavesBody } = require('../pointer-target.js');
 const { TOPMOST_WATCHDOG_ENABLED, TOPMOST_WATCHDOG_TICK_MS } = require('../topmost-watchdog.js');
 const { TASKBAR_WATCHDOG_TICK_MS, shouldRunTaskbarWatchdog } = require('../taskbar-watchdog.js');
 
@@ -59,6 +59,8 @@ function createWindows({
   const inputRegions = new Map();
   /** The continuous duration of "the cursor stops in the margin area and is not busy" in each window (ms): at the point where click-through is forced to resume by the fallback channel */
   const offBodyMs = new Map();
+  /** 每窗口上一拍的光标分区：识别「刚离开身体」，据此向渲染端补发收起悬浮提示的通知 */
+  const lastPointerZone = new Map();
   /** Collision between pets broker status: petId -> { x , y , vx , vy , size , bottomPad } */
   const petStates = new Map();
   /** Pausing the fallback pump during smoke: it flips by the real cursor, which interferes with smoke's assertion on the renderer channel */
@@ -172,6 +174,11 @@ function createWindows({
       const point = dpi.currentPointer();
       const margin = winMargins.get(win.id);
       const zone = pointerZone(bounds, point, margin);
+      // 提示只在渲染端的 mousemove 里收起；宠物自己走开或窗口被别的窗口接走时没有 mousemove，
+      // 由这一拍补发通知。busy（拖拽/菜单/弹窗）期间提示本就不该显示，不发，免得松手瞬间误收。
+      const prevZone = lastPointerZone.get(win.id);
+      lastPointerZone.set(win.id, zone);
+      if (!busy && leavesBody(prevZone, zone)) win.webContents.send('pet:pointer-left');
       const nextMs = !busy && zone === 'margin' ? (offBodyMs.get(win.id) ?? 0) + POINTER_POLL_MS : 0;
       offBodyMs.set(win.id, nextMs);
       const next = decideWindowIgnore(bounds, point, ignoring, busy, nextMs, inputRegions.get(win.id), margin);
@@ -270,6 +277,7 @@ function createWindows({
       inputBusy.delete(win.id);
       inputRegions.delete(win.id);
       offBodyMs.delete(win.id);
+      lastPointerZone.delete(win.id);
     });
     win.loadFile(path.join(helperDir, 'index.html'), { query: windowQuery(pet, geo, scale) }).catch((error) => {
       console.error(`[dsh-pet-desktop-helper] page load failed (${pet.id}):`, error);
@@ -313,10 +321,8 @@ function createWindows({
   /**
    * Close all current pet windows.
    *
-   * Only used for rebuilding in application mode: there is no "restart helper process" in the same process. To change
-   * the display position, you can only close the window and rebuild it; if you don't close it first, the old window
-   * will remain on the desktop (only the reference is overwritten in Map). Dual-process mode achieves the same goal by
-   * restarting the process without adjusting it.
+   * 不先关掉的话旧窗口会留在桌面上（Map 里被覆盖的只是引用）。两种模式都调它：应用模式改显示
+   * 位置时重建一次，主屏缩放自查发现缓存过期时也重建一次。
    */
   function closeAllPetWindows() {
     for (const win of windows.values()) {

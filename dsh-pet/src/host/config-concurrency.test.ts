@@ -59,7 +59,7 @@ before(async () => {
     plugins: [{ name: 'standalone-test-shims', resolveId: (id) => aliases[id] }],
   });
   const entry = join(pkg, 'lib/host.mjs');
-  await bundle.write({ format: 'esm', file: entry });
+  await bundle.write({ format: 'esm', file: entry, inlineDynamicImports: true });
   await bundle.close();
   const home = join(dir, 'home');
   process.env.DSH_HOME = home;

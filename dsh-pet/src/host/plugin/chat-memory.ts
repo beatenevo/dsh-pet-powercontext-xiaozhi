@@ -12,6 +12,7 @@ import { generateChat, type ChatMemoryMessage } from '../chat.ts';
 import { chatActionNames } from '../chat-action.ts';
 import { mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { currentEnvironment, type EnvironmentFacts } from '../environment.ts';
 import { composeSystemPrompt, petPersona } from '../persona.ts';
 import { findPetInstance, readAllConfig, removeRoundsByTs, sliceMemoryRounds } from '../config.ts';
 import type { PetImageRef } from '../image-attachment.ts';
@@ -283,12 +284,13 @@ export function createChatMemory(deps: ChatMemoryInput) {
    * is written to the share of the corresponding entry. assemble in ./persona (pure function): persona text + name
    * declaration + one line of time background, time is calculated each time; the conversation path is passed to
    * `{ historyTimes: true }` , and the [history] description is appended. Whisper has no history and is not passed.
+   * City and weather are shared by chat, whispers and sleep talk through the optional env field.
    * Collect the hit result of `findPetInstance` instead of (petId, cfg): The caller has been parsed, and if you check
    * again, there will only be one more unreachable branch of "fallback main if not found".
    */
   const petSystemPrompt = (
     found: { conf: Record<string, unknown>; pet: Record<string, unknown> },
-    options: { historyTimes?: boolean } = {},
+    options: { historyTimes?: boolean; env?: EnvironmentFacts } = {},
   ): string =>
     composeSystemPrompt({
       prompt: petPersona(found.conf, found.pet),
@@ -296,6 +298,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       id: String(found.pet.id ?? ''),
       now: new Date(),
       ...(options.historyTimes === true ? { historyTimes: true } : {}),
+      ...(options.env !== undefined ? { env: options.env } : {}),
     });
 
   /**
@@ -327,7 +330,6 @@ export function createChatMemory(deps: ChatMemoryInput) {
     try {
       const timeout = new Promise<undefined>((resolve) => {
         timer = setTimeout(() => resolve(undefined), RECALL_TIMEOUT_MS);
-        timer.unref?.();
       });
       const result = await Promise.race([Promise.resolve(recall.call(provider, { petId, ...content })), timeout]);
       if (!result || typeof result !== 'object') return undefined;
@@ -414,7 +416,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     const manualVoiceOn = cfg.main?.voiceEnabled === true;
     const voiceOff = kind === 'whisper' ? !whisperVoiceOn : !manualVoiceOn;
     const target = voiceOff ? undefined : (voiceTo ?? voiceTargetFor(found.pet));
-    const system = petSystemPrompt(found);
+    const system = petSystemPrompt(found, { env: await currentEnvironment() });
     // The pool is only counted once: the named picture and the randomly drawn picture share the same one (including file existence determination).
     const pool = readMemePool(found.conf.memes, memeDirsFor(found.entry));
     // I called the name but missed = the configuration was wrongly written or the picture has been deleted: the clear failed, do not silently change to another one (if you click A but see B, you will think it is broken).
@@ -467,7 +469,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     const cfg = readAllConfig(configPaths);
     const found = findPetInstance(cfg, petId);
     if (!found) return false;
-    const system = petSystemPrompt(found);
+    const system = petSystemPrompt(found, { env: await currentEnvironment() });
     const result = await generateWhisper(ctx, {
       system,
       preferred: configuredModel(found.conf, 'whisperModel'),
@@ -501,8 +503,10 @@ export function createChatMemory(deps: ChatMemoryInput) {
   ): Promise<
     | { ok: true; text: string; image?: string }
     | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
-  > =>
-    withMemoryLock(async () => {
+  > => {
+    // 环境（城市 + 天气）在锁外查：它是网络往返，压进 withMemoryLock 会把别的对话一起堵住
+    const env = await currentEnvironment();
+    return withMemoryLock(async () => {
       const cfg = readAllConfig(configPaths);
       const found = findPetInstance(cfg, petId);
       // The pet was deleted between the "verification reading" and here - this function also needs to queue the serial
@@ -582,7 +586,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       // persona: instance level whisperPrompt takes priority, and the entry of fallback is not written (the same
       // assemble as whisper). Only add the [History] paragraph when there is history: When there is no history, that
       // paragraph is describing a prefix that does not exist, which will only mislead the model.
-      const system = petSystemPrompt(found, { historyTimes: list.length > 0 });
+      const system = petSystemPrompt(found, { historyTimes: list.length > 0, env });
       // Only the size and number of bytes of the image are recorded (base64 is not recorded): When the model does not support image reading, dsh-llm will project it into a placeholder text, and rely on this line of logs to locate it.
       if (image !== undefined) {
         log.info(
@@ -669,6 +673,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       // The same text is brought out with the return value (the leaves are written as written, not one of the two)
       return { ok: true as const, text: generated.text, ...(generated.image ? { image: generated.image } : {}) };
     });
+  };
 
   /**
    * Delete the dialogue memory of a certain pet: `ts` default = clear all, given ts = only delete the hit round (two

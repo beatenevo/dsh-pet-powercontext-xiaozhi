@@ -28,7 +28,7 @@ if (state) console.log(state.counter, state.pets.main?.say?.data);
 
 ## Host service
 
-The host service exposes `balance`, `voice`, `speech` and `memory`. Each group offers `register(definition)` and `list()`. Lists contain `{ builtin, external }` IDs. Registration returns a disposer; collect it with the plugin lifecycle:
+The host service exposes `balance`, `voice`, `speech` and `memory`. Each group offers `register(definition)` and `list()`. Balance and memory lists contain `{ builtin, external }` IDs; voice and speech return provider catalogs. Registration returns a disposer; collect it with the plugin lifecycle:
 
 ```js
 export const inject = ["petApi7340"];
@@ -80,15 +80,17 @@ See the [probe plugin](../../../tools/cordis-probe/README.md) for built-in-shape
 
 ## Speech synthesis
 
-`voice.register({ id, name, synthesize })` installs one active external implementation; later registrations replace earlier ones. IDs cannot use the built-in `edge` name. A disposer clears the slot only if it still owns that slot.
+`voice.register({ id, name, voices, synthesize, format?, timeoutMs? })` registers a unique provider. Multiple providers coexist; duplicate IDs are rejected. Each voice declares `{ id, name, tag? }` within its provider. Registration returns a disposer that removes only its own registration.
 
-`synthesize({ text, rate })` returns MP3 bytes as `Uint8Array`. Voice selection belongs to your implementation; the request's voice is still validated but not forwarded to it. The host enforces a 15-second synthesis limit. Empty bytes, thrown errors and timeouts fail; there is no silent fallback to Edge after an external implementation is selected. `voiceEnabled` controls automatic playback, not the synthesis provider.
+`voice.list()` returns `{ providers: [{ id, name, voices }] }`, with each voice ID qualified as `provider/voice`. Select one through `main.voiceName` or the HTTP request's `voice`. Unknown selections return `bad-request`; there is no implicit fallback.
+
+`synthesize({ text, voice, rate, signal })` receives the provider-local voice ID and numeric rate, and returns audio bytes as `Uint8Array`. `format` is `mp3` by default or `wav`; the response Content-Type matches it. The default timeout is 15 seconds, overridable by a validated `timeoutMs`. Empty bytes, exceptions and timeouts fail. Honor the abort signal. `voiceEnabled` controls playback, not provider registration.
 
 ## Speech recognition
 
-`speech.register({ id, name, transcribe })` follows the same single-slot ownership rule; `dsh` is reserved. `transcribe({ audio, language }, signal)` receives raw PCM16 mono 16 kHz WAV bytes and returns text. Empty text is a successful “no speech” result; a non-string is a failure.
+`speech.register({ id, name, transcribe, timeoutMs? })` also registers a unique provider without replacing others. `speech.list()` returns `{ providers: [{ id, name }] }`. Select an ID through `main.speechProvider` or the request's `provider`; unknown selections fail explicitly.
 
-The host stops waiting after 30 seconds or client cancellation. Implementations should honor the signal and manage their own concurrency. Recognition is not cached and does not fall back to DSH after an external implementation fails.
+`transcribe({ audio, signal })` receives raw PCM16 mono 16 kHz WAV bytes and returns text. Empty text is a successful no-speech result. The default timeout is 30 seconds, overridable by the provider. Recognition honors client cancellation, has no cache and does not switch providers after a failure. Built-in registrations include DSH and DeepSeek; missing host capability or credentials returns `unsupported`.
 
 ## Memory providers
 
@@ -97,4 +99,4 @@ The host stops waiting after 30 seconds or client cancellation. Implementations 
 - `recall({ petId, system, history, userText })` may return replacements for `system`, `history` or `userText`; omitted fields remain unchanged. History entries contain `role`, `content` and `ts`. Undefined, failure or timeout leaves the original content available for the reply.
 - `capture({ petId, userText, replyText, action?, image?, ts })` runs after local persistence. It receives names/references, not image bodies. The reply does not wait for it; failures are logged.
 
-When a pet explicitly selects PowerContext, the built-in PowerContext path owns recall/capture and bypasses this external slot. Switching to native mode permits registered hooks again. See the source [provider contract](../../../dsh-pet/src/host/chat-memory-provider.ts) for types.
+When a pet explicitly selects independent or DSH-shared PowerContext, the built-in PowerContext path owns recall/capture and bypasses this external slot. Switching to native mode permits registered hooks again. See the source [provider contract](../../../dsh-pet/src/host/chat-memory-provider.ts) for types.

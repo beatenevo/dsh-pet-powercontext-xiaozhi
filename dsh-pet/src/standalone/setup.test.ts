@@ -41,7 +41,11 @@ test('incompatible embedding changes are rejected before replacing a working cha
       throw new Error('must not contact provider');
     },
   });
-  await ai.saveSettings({ baseUrl: draft.baseUrl, model: 'working', apiKey: 'working-key' });
+  await ai.saveSettings({
+    service: 'custom',
+    keys: { CUSTOM_API_KEY: 'working-key' },
+    profiles: { custom: { protocol: 'openai-compatible', baseUrl: draft.baseUrl, model: 'working' } },
+  });
   const setup = createSetup(home, ai, {
     matches: async () => false,
     save: async () => {},
@@ -113,7 +117,11 @@ test('a failed connection preserves previous chat settings and redacts provider 
   const ai = createStandaloneAi(home, silent, {
     fetch: async () => new Response('synthetic-setup-key provider secret', { status: 401 }),
   });
-  await ai.saveSettings({ baseUrl: 'https://old.example/v1', model: 'old', apiKey: 'old-key' });
+  await ai.saveSettings({
+    service: 'custom',
+    keys: { CUSTOM_API_KEY: 'old-key' },
+    profiles: { custom: { protocol: 'openai-compatible', baseUrl: 'https://old.example/v1', model: 'old' } },
+  });
   const before = readFileSync(join(home, 'dsh-pet/standalone-ai.json'), 'utf8');
   const setup = createSetup(home, ai, {
     matches: async () => false,
@@ -201,7 +209,11 @@ test('saved chat credentials can enable setup only at their original endpoint', 
       });
     },
   });
-  await ai.saveSettings({ baseUrl: draft.baseUrl, model: draft.model, apiKey: draft.apiKey });
+  await ai.saveSettings({
+    service: 'custom',
+    keys: { CUSTOM_API_KEY: draft.apiKey },
+    profiles: { custom: { protocol: 'openai-compatible', baseUrl: draft.baseUrl, model: draft.model } },
+  });
   const setup = createSetup(home, ai, binding);
   t.after(async () => {
     await setup.dispose();
@@ -263,7 +275,11 @@ test(
     const ai = createStandaloneAi(home, silent, {
       fetch: async () => new Response('secret provider detail', { status: 401 }),
     });
-    await ai.saveSettings({ baseUrl: draft.baseUrl, model: draft.model, apiKey: draft.apiKey });
+    await ai.saveSettings({
+      service: 'custom',
+      keys: { CUSTOM_API_KEY: draft.apiKey },
+      profiles: { custom: { protocol: 'openai-compatible', baseUrl: draft.baseUrl, model: draft.model } },
+    });
     const setup = createSetup(home, ai, binding);
     t.after(async () => {
       await setup.dispose();
@@ -311,7 +327,11 @@ test('cancelling a model check settles promptly and preserves the existing chat 
       });
     },
   });
-  await ai.saveSettings({ baseUrl: draft.baseUrl, model: draft.model, apiKey: draft.apiKey });
+  await ai.saveSettings({
+    service: 'custom',
+    keys: { CUSTOM_API_KEY: draft.apiKey },
+    profiles: { custom: { protocol: 'openai-compatible', baseUrl: draft.baseUrl, model: draft.model } },
+  });
   const setup = createSetup(home, ai, binding);
   t.after(async () => {
     await setup.dispose();
@@ -398,7 +418,11 @@ test(
     fakeInstalledRuntime(memory.directory);
     await memory.dispose();
     const ai = createStandaloneAi(home, silent);
-    await ai.saveSettings({ baseUrl: draft.baseUrl, model: draft.model, apiKey: draft.apiKey });
+    await ai.saveSettings({
+      service: 'custom',
+      keys: { CUSTOM_API_KEY: draft.apiKey },
+      profiles: { custom: { protocol: 'openai-compatible', baseUrl: draft.baseUrl, model: draft.model } },
+    });
     let backend = 'native';
     const setup = createSetup(home, ai, {
       matches: async () => false,
@@ -460,7 +484,11 @@ for (const saveFails of [false, true])
           });
         },
       });
-      await ai.saveSettings({ baseUrl: draft.baseUrl, model: draft.model, apiKey: draft.apiKey });
+      await ai.saveSettings({
+        service: 'custom',
+        keys: { CUSTOM_API_KEY: draft.apiKey },
+        profiles: { custom: { protocol: 'openai-compatible', baseUrl: draft.baseUrl, model: draft.model } },
+      });
       let backend = 'native';
       const setup = createSetup(home, ai, {
         matches: async () => false,
@@ -547,3 +575,47 @@ test(
     assert.equal(managed.ready, false);
   },
 );
+
+test('onboarding updates one provider profile and preserves other saved keys across reload', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'pet-setup-profiles-'));
+  const ai = createStandaloneAi(home, silent, {
+    fetch: async () =>
+      new Response('data: {"choices":[{"index":0,"delta":{"content":"hello"}}]}\n\ndata: [DONE]\n\n', {
+        headers: { 'content-type': 'text/event-stream' },
+      }),
+  });
+  await ai.saveSettings({
+    service: 'deepseek-official',
+    keys: { DEEPSEEK_API_KEY: 'saved-deepseek-key' },
+    profiles: {
+      'deepseek-official': { protocol: 'openai-compatible', baseUrl: 'https://api.deepseek.com', model: 'saved-model' },
+    },
+  });
+  const setup = createSetup(home, ai, {
+    matches: async () => false,
+    checkpoint: async () => async () => {},
+    save: async () => {
+      throw new Error('memory must stay disabled');
+    },
+  });
+  t.after(async () => {
+    await setup.dispose();
+    ai.dispose();
+    rmSync(home, { recursive: true, force: true });
+  });
+  setup.submit(draft);
+  for (let i = 0; i < 100 && (setup.status() as { busy: boolean }).busy; i++) await delay(20);
+  assert.equal((setup.status() as { stage: string }).stage, 'ready');
+  assert.equal(ai.getSettings().service, 'custom');
+  assert.equal(ai.getSettings().model, draft.model);
+  const reloaded = createStandaloneAi(home, silent);
+  try {
+    assert.equal(reloaded.connectionForSetup().apiKey, draft.apiKey);
+    await reloaded.saveSettings({ service: 'deepseek-official' });
+    assert.equal(reloaded.getSettings().model, 'saved-model');
+    assert.equal(reloaded.connectionForSetup().apiKey, 'saved-deepseek-key');
+    assert.ok(!JSON.stringify(setup.status()).includes('saved-deepseek-key'));
+  } finally {
+    reloaded.dispose();
+  }
+});

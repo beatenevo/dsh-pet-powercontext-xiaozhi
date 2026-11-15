@@ -34,6 +34,8 @@ export interface ConfigMeta {
 export interface SaveFields {
   pets: readonly Pet[];
   notificationsEnabled: boolean;
+  /** 前台聚焦时也提醒：默认 false，只在 main 顶层生效。 */
+  notifyWhenFocused: boolean;
   clickSoundEnabled: boolean;
   whisperImageEnabled: boolean;
   chatImageEnabled: boolean;
@@ -43,8 +45,8 @@ export interface SaveFields {
   trayEnabled: boolean;
   /** Manual broadcast switch: manually triggered whisper and conversation reply. */
   voiceEnabled: boolean;
-  /** Voice tone id (one of the four in the white list). */
-  voiceName: string;
+  /** 语音音色（`provider/音色` 限定 id）；缺省表示不提交这一项，服务端保留原值。 */
+  voiceName?: string;
   /** Playback volume coefficient: 0–1 decimal, 1 = maximum volume, 0 = mute. */
   voiceVolume: number;
   /** Do you want to read the cycle whisper? */
@@ -53,6 +55,10 @@ export interface SaveFields {
   voiceTodoEnabled: boolean;
   /** Do you need to read out the work status report (read a configuration line when the task is completed/error/waiting for confirmation). */
   voiceNotifyEnabled: boolean;
+  /** 语音识别实现 id；缺省表示不提交这一项，服务端保留原值。 */
+  speechProvider?: string;
+  /** 天气城市覆盖：空串 = 跟随 IP 自动定位，是有效值，所以必填而不是可选（清空必须能写回）。 */
+  environmentCity: string;
   physics: PhysicsParams;
   whisperModel: ModelSelection;
   chatModel: ModelSelection;
@@ -82,6 +88,7 @@ export function buildSaveBody(fields: SaveFields): Record<string, unknown> {
   return {
     pets: fields.pets,
     notificationsEnabled: fields.notificationsEnabled,
+    notifyWhenFocused: fields.notifyWhenFocused,
     clickSoundEnabled: fields.clickSoundEnabled,
     whisperImageEnabled: fields.whisperImageEnabled,
     chatImageEnabled: fields.chatImageEnabled,
@@ -94,6 +101,8 @@ export function buildSaveBody(fields: SaveFields): Record<string, unknown> {
     voiceWhisperEnabled: fields.voiceWhisperEnabled,
     voiceTodoEnabled: fields.voiceTodoEnabled,
     voiceNotifyEnabled: fields.voiceNotifyEnabled,
+    speechProvider: fields.speechProvider,
+    environmentCity: fields.environmentCity,
     physics: fields.physics,
     whisperModel: fields.whisperModel,
     chatModel: fields.chatModel,

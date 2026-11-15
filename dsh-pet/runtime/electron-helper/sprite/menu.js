@@ -33,6 +33,8 @@ Object.assign(PetSprite.prototype, {
       },
       // "Check Balance" is displayed unconditionally: balanceEnabled pets can also click it if it is turned off. Manual requests are not restricted by the switch. If you click it, you will definitely get a reply.
       { label: '查看余额', action: 'show-balance' },
+      // 「查询天气」与余额同一类：宿主强制刷新并写 sections.env，气泡由 /state 驱动。
+      { label: '查询天气', action: 'show-environment' },
       // "To-do items" is the only entry point of the to-do panel (clicking the pet will no longer pop up the panel), ranking after the balance.
       { label: '待办事项', action: 'todo', hint: S.TODO_HOTKEY_HINT },
       { label: '碎碎念', action: 'whisper' },
@@ -127,6 +129,10 @@ Object.assign(PetSprite.prototype, {
       this.showBalanceFromMenu(); // Pull the balance immediately and display it (no need to wait for 1 s to trigger polling, the display path is consistent with the periodic trigger)
       return;
     }
+    if (leaf.action === 'show-environment') {
+      this.showEnvironmentFromMenu(); // 强制刷新并展示（绕过宿主缓存，理由见该方法注释）
+      return;
+    }
     if (leaf.action === 'sleep' || leaf.action === 'wake') {
       // Only send requests, and the screen will not move until the sleep leaf comes back: the three segment names and timing are determined by the host / renderer state machine (see setSleep)
       this.postSleepAction(leaf.action);
@@ -190,13 +196,27 @@ Object.assign(PetSprite.prototype, {
   // releases the pending long poll, which displays the result through the usual path.
   // State S remains the sole data source; the menu only requests a refresh. Manual requests bypass balanceEnabled so a
   // disabled periodic balance feature still supports explicit checks.
+  // 带 pet：这次只让被点的那只弹（宿主写进叶子的归属）；surface=desktop = 本窗口就是桌面端。
   showBalanceFromMenu() {
-    S.postAction(BALANCE_URL)
+    S.postAction(BALANCE_URL + '?pet=' + encodeURIComponent(this.pet.id) + '&surface=desktop')
       .then((ok) => {
         if (!ok) console.warn('[dsh-pet] Balance refresh from the context menu failed');
       })
       .catch((e) => {
         console.error('[dsh-pet] Balance context-menu action threw an error', e);
+      });
+  },
+
+  // 「查询天气」菜单：与余额同一条路——POST 动作让宿主强制刷新并写 sections.env，
+  // 本端什么都不用做，叶子变了由轮询分发到 showEnvNow。fresh=1 是用户点这个按钮的唯一意义：
+  // 平时对话走缓存（天气 1 小时），手动查必须拿现在的。
+  showEnvironmentFromMenu() {
+    S.postAction(ENVIRONMENT_URL + '?pet=' + encodeURIComponent(this.pet.id) + '&surface=desktop&fresh=1')
+      .then((ok) => {
+        if (!ok) console.warn('[dsh-pet] 菜单查询天气：刷新动作未成功 pet=' + this.pet.id);
+      })
+      .catch((e) => {
+        console.error('[dsh-pet] 菜单查询天气异常', e);
       });
   },
 

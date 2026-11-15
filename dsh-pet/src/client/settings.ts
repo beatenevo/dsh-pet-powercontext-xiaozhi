@@ -22,6 +22,7 @@ import { type Feedback, makeActions } from './settings/actions.ts';
 import { petBridge } from './settings/bridge.ts';
 import { type MergedConfig, readConfigEntries, readMainConfig } from './settings/config/index.ts';
 import { type DialogState, makeDialog } from './settings/dialog.ts';
+import { makeEnvironmentCard } from './settings/environment-card.ts';
 import { makeFontCard } from './settings/font-card.ts';
 import { makeGlobalCard, type GlobalFlagKey, type GlobalFlags } from './settings/global-card.ts';
 import { makeLoadStatus } from './settings/load-status.ts';
@@ -84,6 +85,7 @@ export function makePetConfigSection(
   const KindTabs = makeKindTabs({ h, t });
   const PetCard = makePetCard(rt);
   const GlobalCard = makeGlobalCard(rt);
+  const EnvironmentCard = makeEnvironmentCard(rt);
   const VoiceCard = makeVoiceCard(rt, VoicePicker);
   const FontCard = makeFontCard(rt);
   const ModelCard = makeModelCard(
@@ -135,12 +137,36 @@ export function makePetConfigSection(
     useEffect(() => attachTipLayer(), []);
 
     // Tone list: a one-time pull that has nothing to do with the configuration. If it fails, just leave it blank (the pull-down will only display the current value).
+    // 宿主按 provider 分组返回；这里拍平成一维并带上组名，由下拉渲染成 optgroup 式的分隔标题。
     useEffect(() => {
       let alive = true;
       void fetch(ROUTE_PATH + '/voice/voices')
         .then((response) => (response.ok ? response.json() : null))
-        .then((body: { voices?: VoiceOption[] } | null) => {
-          if (alive && body && Array.isArray(body.voices)) setVoiceOptions(body.voices);
+        .then((body: { providers?: { name?: string; voices?: VoiceOption[] }[] } | null) => {
+          if (!alive || !body || !Array.isArray(body.providers)) return;
+          setVoiceOptions(
+            body.providers.flatMap((group) =>
+              (Array.isArray(group.voices) ? group.voices : []).map((voice) => ({
+                ...voice,
+                ...(group.name === undefined ? {} : { providerName: group.name }),
+              })),
+            ),
+          );
+        })
+        .catch(() => undefined);
+      return () => {
+        alive = false;
+      };
+    }, []);
+
+    // 识别实现列表：与音色列表同构的一次性拉取，失败留空即可。
+    useEffect(() => {
+      let alive = true;
+      void fetch(ROUTE_PATH + '/voice/hear-providers')
+        .then((response) => (response.ok ? response.json() : null))
+        .then((body: { providers?: { id: string; name: string }[] } | null) => {
+          if (!alive || !body || !Array.isArray(body.providers)) return;
+          setSpeechProviders(body.providers);
         })
         .catch(() => undefined);
       return () => {
@@ -154,6 +180,8 @@ export function makePetConfigSection(
     // corner). The engine reread is placed after the save is successful (persist is called reloadNotifications), and
     // it takes effect immediately after saving without refreshing.
     const [notifyEnabled, setNotifyEnabled] = useState(true);
+    // 前台聚焦时也提醒：默认关（维持「不打扰」），与通知开关相邻，随「保存」整包写入。
+    const [notifyWhenFocused, setNotifyWhenFocused] = useState(false);
     // Click the sound effect switch: Same as the notification switch, the entire package is written with "Save"; the initial value true is the built-in default, and the loading effect will be overwritten with the resolved value value.
     const [clickSound, setClickSound] = useState(true);
     // Emoji package image switch (global): The switch only changes the local status and is submitted with "Save".
@@ -165,9 +193,10 @@ export function makePetConfigSection(
     const [confineScreen, setConfineScreen] = useState(false);
     // System system tray switch (global): Submit together with "Save"; the host side will decide based on this whether to build a system tray and whether it is worth resident Helper when there is no desktop pet.
     const [trayEnabled, setTrayEnabled] = useState(true);
-    // Voice broadcast switch and voice (global default): written in the entire package with "Save"; the initial value is the built-in default, and will be overwritten with the resolved value value after loading.
+    // 语音播报开关与音色（全局默认）：随「保存」整包写入；音色初值留空，加载后由成品值覆盖。
     const [voiceEnabled, setVoiceEnabled] = useState(false);
-    const [voiceName, setVoiceName] = useState('zh-CN-XiaoyiNeural');
+    // 不在前端写默认音色：空串表示「还没拿到成品值」，保存时这一项不提交，免得用本地猜的 id 覆盖配置
+    const [voiceName, setVoiceName] = useState('');
     // Playback volume (global coefficient 0–1): The initial value 1 is the built-in default (maximum volume), which will be overwritten by the resolved value value after loading.
     const [voiceVolume, setVoiceVolume] = useState(1);
     // The other three types of voice switches (periodic whisper/to-do reminder/working status broadcast): are on the same level as voice broadcast, and the initial value false is the built-in default.
@@ -176,6 +205,12 @@ export function makePetConfigSection(
     const [voiceNotifyEnabled, setVoiceNotifyEnabled] = useState(false);
     // Optional voice: from host / voice/voices, if not available, leave it blank - the drop-down will only display the current value, never hard-code the voice id.
     const [voiceOptions, setVoiceOptions] = useState<VoiceOption[]>([]);
+    // 语音识别实现：请求没带 provider 时用它；空串表示「还没拿到成品值」，保存时该项不提交。
+    const [speechProvider, setSpeechProvider] = useState('');
+    // 可选识别实现：来自宿主 /voice/hear-providers，拉不到就留空（下拉只显示当前值）。
+    const [speechProviders, setSpeechProviders] = useState<{ id: string; name: string }[]>([]);
+    // 天气城市覆盖（全局，只读 main）：空串是有效值 = 跟随 IP 自动定位，所以初值就是空串。
+    const [environmentCity, setEnvironmentCity] = useState('');
     // Physical parameters (global): Only the local status is changed, and the entire package is written with "Save"; the initial value is only a placeholder, and editing and saving are allowed only after the resolved value is loaded successfully.
     const [physics, setPhysics] = useState<PhysicsParams>({ ...DEFAULT_PHYSICS });
     // Font (global default): The same set of semantics as physics; the initial value is only a placeholder, and editing and saving are allowed only after the resolved value is loaded successfully.
@@ -204,6 +239,7 @@ export function makePetConfigSection(
         if (entries === null || patch === null) throw new Error('Invalid config response');
         replace(entries);
         if (patch.notificationsEnabled !== undefined) setNotifyEnabled(patch.notificationsEnabled);
+        if (patch.notifyWhenFocused !== undefined) setNotifyWhenFocused(patch.notifyWhenFocused);
         if (patch.clickSoundEnabled !== undefined) setClickSound(patch.clickSoundEnabled);
         if (patch.whisperImageEnabled !== undefined) setWhisperImage(patch.whisperImageEnabled);
         if (patch.chatImageEnabled !== undefined) setChatImage(patch.chatImageEnabled);
@@ -216,6 +252,8 @@ export function makePetConfigSection(
         if (patch.voiceWhisperEnabled !== undefined) setVoiceWhisperEnabled(patch.voiceWhisperEnabled);
         if (patch.voiceTodoEnabled !== undefined) setVoiceTodoEnabled(patch.voiceTodoEnabled);
         if (patch.voiceNotifyEnabled !== undefined) setVoiceNotifyEnabled(patch.voiceNotifyEnabled);
+        if (patch.speechProvider !== undefined) setSpeechProvider(patch.speechProvider);
+        if (patch.environmentCity !== undefined) setEnvironmentCity(patch.environmentCity);
         if (patch.physics !== undefined) setPhysics(patch.physics);
         if (patch.font !== undefined) setFont(patch.font);
         if (patch.animationWeights !== undefined) setWeights(patch.animationWeights);
@@ -280,6 +318,7 @@ export function makePetConfigSection(
     // The current values of the seven top-level switches: each card recognizes its own several items, and the key name has the same name as the resolved configuration field.
     const globalFlags: GlobalFlags = {
       notificationsEnabled: notifyEnabled,
+      notifyWhenFocused,
       clickSoundEnabled: clickSound,
       confineToScreen: confineScreen,
       trayEnabled,
@@ -295,6 +334,7 @@ export function makePetConfigSection(
     // mapping from key name to setter is write-only once, and the card only returns the key name.
     const flagSetters: Record<GlobalFlagKey | ChatFlagKey, (value: boolean) => void> = {
       notificationsEnabled: (value) => void toggleNotify(value),
+      notifyWhenFocused: setNotifyWhenFocused,
       clickSoundEnabled: setClickSound,
       confineToScreen: setConfineScreen,
       trayEnabled: setTrayEnabled,
@@ -323,6 +363,7 @@ export function makePetConfigSection(
         // PUT /config write-only User master configuration: Only main layer instances can be submitted, and pack instances go to POST /pet-config.
         pets: mainPets,
         notificationsEnabled: notifyEnabled,
+        notifyWhenFocused,
         clickSoundEnabled: clickSound,
         whisperImageEnabled: whisperImage,
         chatImageEnabled: chatImage,
@@ -330,11 +371,16 @@ export function makePetConfigSection(
         confineToScreen: confineScreen,
         trayEnabled,
         voiceEnabled,
-        voiceName,
+        // 空串 = 还没加载到成品值：不提交，免得用一个本地猜的音色覆盖配置
+        ...(voiceName === '' ? {} : { voiceName }),
         voiceVolume,
         voiceWhisperEnabled,
         voiceTodoEnabled,
         voiceNotifyEnabled,
+        // 空串 = 还没加载到成品值：不提交，免得用一个本地猜的识别实现覆盖配置
+        ...(speechProvider === '' ? {} : { speechProvider }),
+        // 城市覆盖与上面两项不同：空串是有效值（= 恢复自动定位），必须照常提交
+        environmentCity,
         physics,
         whisperModel,
         chatModel,
@@ -423,6 +469,9 @@ export function makePetConfigSection(
           whisperEnabled: voiceWhisperEnabled,
           todoEnabled: voiceTodoEnabled,
           notifyEnabled: voiceNotifyEnabled,
+          speechProvider,
+          speechProviders,
+          onSpeechProviderChange: setSpeechProvider,
           onToggle: setVoiceEnabled,
           onVoiceChange: setVoiceName,
           onVolumeChange: setVoiceVolume,
@@ -461,6 +510,7 @@ export function makePetConfigSection(
         h(PhysicsCard, { busy, physics, onChange: patchPhysics }),
         h(MotionCard, { busy, weights, onChange: setWeights }),
         h(MobileCard, { busy, physics, onChange: patchPhysics }),
+        h(EnvironmentCard, { busy, city: environmentCity, onChange: setEnvironmentCity }),
         h(Actions, {
           busy,
           msg,

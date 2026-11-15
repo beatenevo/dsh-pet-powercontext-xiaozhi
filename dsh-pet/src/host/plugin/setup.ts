@@ -11,8 +11,8 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths';
 import { listBalanceProviders, registerBalanceProvider } from '../balance/index.ts';
-import { listVoiceProviders, registerVoiceProvider } from '../voice/registry.ts';
-import { listSpeechProviders, registerSpeechProvider } from '../voice/speech-registry.ts';
+import { listCatalog, registerVoiceProvider } from '../voice/registry.ts';
+import { listSpeechCatalog, registerSpeechProvider } from '../voice/speech-registry.ts';
 import { listChatMemoryProviders, registerChatMemoryProvider } from '../chat-memory-provider.ts';
 import { migrateUserConfig, type ConfigPaths } from '../config.ts';
 import { createFileLogger, isFileLogger, setDefaultLogger, type FileLogger, type LoggerLike } from '../log-file.ts';
@@ -66,6 +66,8 @@ export interface HostSetup {
   readonly standaloneAiPolicy: () => StandaloneWhisperPolicy | undefined;
   /** Balance voucher in standalone mode; DSH host is undefined → the balance is currentSelection and credential store. */
   readonly standaloneAiBalance: () => StandaloneBalanceAuth | undefined;
+  /** 独立模式单独保存的 DeepSeek 语音密钥；DSH 模式下为 undefined。 */
+  readonly standaloneDeepseekKey: () => string | undefined;
   /** polling snapshot */
   readonly state: PollStateStore;
   /** Third-party menu register table */
@@ -144,6 +146,13 @@ export function createHostSetup(ctx: HostSetupContext): HostSetup {
     return service?.balanceAuth?.();
   };
 
+  /** 独立模式单独保存的 DeepSeek 语音密钥：对话与语音可以用不同服务商。 */
+  const standaloneDeepseekKey = (): string | undefined => {
+    const service = optionalService('standaloneAi') as { deepseekKey?: () => string } | undefined;
+    const key = service?.deepseekKey?.();
+    return key ? key : undefined;
+  };
+
   // User main configuration (editable layer) and file pet directory; configuration reading/merging goes to
   // readAllConfig (./config). The main configuration is JSONC (main-config.jsonc) - the same name and format as the
   // default config.jsonc in the package: "Synchronization" writes the original text with annotations, and the
@@ -210,12 +219,12 @@ export function createHostSetup(ctx: HostSetupContext): HostSetup {
     // given, but unregister is not given.
     voice: {
       register: registerVoiceProvider,
-      list: listVoiceProviders,
+      list: listCatalog,
     },
     // Identification: A slot that is symmetrical to synthesis; after registering / voice/hear, just use it and no longer look at the speechToText that comes with the host.
     speech: {
       register: registerSpeechProvider,
-      list: listSpeechProviders,
+      list: listSpeechCatalog,
     },
     // Memory: The third party registers its own long-term memory backend (single slot); only gives register and list, logs out and returns the value.
     memory: {
@@ -257,6 +266,7 @@ export function createHostSetup(ctx: HostSetupContext): HostSetup {
     optionalService,
     standaloneAiPolicy,
     standaloneAiBalance,
+    standaloneDeepseekKey,
     state,
     menuRegistry,
     playback,

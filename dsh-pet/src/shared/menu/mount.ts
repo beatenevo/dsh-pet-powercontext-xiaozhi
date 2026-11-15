@@ -12,17 +12,13 @@ function isBranchNode(n: MenuNode): n is MenuBranch {
   return 'children' in n && Array.isArray((n as MenuBranch).children);
 }
 
-/**
- * Mount a system-style right-click menu (cascading submenu) to document.body, and the position is the viewport
- * coordinates. Structure: The root container has zero size, each level of panel is mounted horizontally, and is
- * positioned next to the screen position of the trigger item (prioritizes the right side of the parent panel, flips to
- * the left side of the parent panel if it cannot fit, and does not overlap with any expanded panels). Cascading: The
- * pointer will never automatically close up in the menu tree, and the entire menu will be closed only when the entire
- * menu leaves (root mouseleave, soft 200 ms). clamp: The rectangle allowed to be occupied (local coordinates of the
- * viewport); the desktop passes "Window ∩ Workspace" - when the pet is attached to the edge, the extended part of the
- * window will be cut off by OS, and it can be fully displayed when constrained in, with zero movement of the window
- * and the pet.
- */
+/** 挂载一个系统风格右键菜单（级联子菜单）到 document.body，位置为视口坐标。
+ *  结构：根容器零尺寸，每级面板平级挂载、按触发项屏幕位置贴边定位（优先父面板右侧，
+ *  放不下翻到父面板左侧，且不与任何已展开面板重叠）。
+ *  级联：悬停分支展开子面板，移到同面板的非分支项收起子面板；指针在菜单树内移动不关闭整棵菜单，
+ *  整体离开（root mouseleave，软 200ms）才关闭。
+ *  clamp：允许占用的矩形（视口局部坐标）；桌面传「窗口 ∩ 工作区」——宠物贴边时窗口外扩的部分
+ *  会被 OS 裁掉，约束进去即可完整显示，窗口与宠物零移动。 */
 export function mountContextMenu(opts: {
   tree: MenuNode[];
   x: number;
@@ -125,6 +121,11 @@ export function mountContextMenu(opts: {
           showPanel(childPanel, item);
         });
       } else {
+        // 叶子项不展开子菜单；进入时收起同面板已展开的子面板链，否则它会一直挂着
+        item.addEventListener('mouseenter', () => {
+          const prev = openChild.get(panel);
+          if (prev) hideChain(prev);
+        });
         // The thumbnail must be before label: the menu item is the flex line, with the image on the left and the text
         // immediately following. Only add thumb to the picture leaf, and the structure of the other items remains
         // unchanged (no space occupied, no line height change).

@@ -18,11 +18,12 @@ import assert from 'node:assert/strict';
 import { MAX_STATE_WAIT_MS, parseStateWaitQuery, PollStateStore } from './state.ts';
 
 describe('PollStateStore——Initial form', () => {
-  test('The six global leaves are { counter:0 , data:null } (0 = never written, the first pull of the front end is used as the baseline)', () => {
+  test('七个全局叶子都是 {counter:0, data:null}（0 = 从未写过，前端首拉当基线）', () => {
     const s = new PollStateStore().read();
     assert.deepEqual(Object.keys(s.sections).sort(), [
       'balance',
       'config',
+      'env',
       'focusSession',
       'menu',
       'notify',

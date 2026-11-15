@@ -18,6 +18,7 @@ import {
   flattenCounters,
   readAnim,
   readBalance,
+  readEnv,
   readLock,
   readPosition,
   readSay,
@@ -31,6 +32,7 @@ import { fontStackOf } from '../../shared/fonts.ts';
 import type { Pet } from '../../shared/types.ts';
 import type { BalanceState } from '../../shared/balance/index.ts';
 import type {
+  EnvState,
   LockState,
   PetFacing,
   PetLeafName,
@@ -79,14 +81,20 @@ export function createPetMulti(
     const [balanceNoticeTick, setBalanceNoticeTick] = useState(0);
     // Is the current balance requested manually by the user? If the manual request is unconditional, the switch can only be turned off automatically.
     const [balanceManual, setBalanceManual] = useState(false);
+    // 本次余额「给谁看」：右键菜单点的那只。undefined = 不带归属（周期刷新 / 命令），所有开了余额的都弹。
+    const [balancePetId, setBalancePetId] = useState<string | undefined>(undefined);
+    // 环境结果：机器级一份，`petId` 决定哪只宠物点亮环境气泡。
+    const [env, setEnv] = useState<EnvState | null>(null);
+    const [envTick, setEnvTick] = useState(0);
     // The last reason for unavailability has been prompted. Automatic polling will only be done when the reason changes.
     const noticeKeyRef = useRef<string | null>(null);
     // The balance results are unified entry point; ref is saved to keep the dependency of / state effect [ ready ].
     // explicit indicates whether to trigger manually this time.
-    const applyBalanceRef = useRef<(state: BalanceState, explicit: boolean) => void>(() => {});
-    applyBalanceRef.current = (state, explicit) => {
+    const applyBalanceRef = useRef<(state: BalanceState, explicit: boolean, petId?: string) => void>(() => {});
+    applyBalanceRef.current = (state, explicit, petId) => {
       setBalance(state);
-      setBalanceManual(explicit); // Manual marking is delivered together with this data and will be overwritten every time it arrives.
+      setBalanceManual(explicit); // 手动标记随本次数据一起下发，每次到达都覆盖。
+      setBalancePetId(petId); // 归属同样每次覆盖：带 pet 的那次只让该宠物弹，不带则恢复全员
       if (state.ok) {
         setBalanceTick((t) => t + 1); // Success: Play the state animation and pop the balance bubble.
         return;
@@ -222,7 +230,7 @@ export function createPetMulti(
             return;
           case 'balance': {
             const hit = readBalance(leaf);
-            if (hit) applyBalanceRef.current(hit.state, hit.manual);
+            if (hit) applyBalanceRef.current(hit.state, hit.manual, hit.petId);
             return;
           }
           case 'workStatus': {
@@ -232,6 +240,16 @@ export function createPetMulti(
               setWorkStatusTick((t) => t + 1); // Triggered by any change, including returning to idle. Work status report: same level as system notification, also
               // only sounds on the web page; do not write say leaf.
               speakWorkStatus(snap);
+            }
+            return;
+          }
+          case 'env': {
+            // 用户点了「查询天气」：叶子带 petId，只有那只宠物点亮气泡。
+            // 不是状态而是事件——首拉不补（页面重新加载不该重放一次查询）。
+            const hit = readEnv(leaf);
+            if (hit) {
+              setEnv(hit);
+              setEnvTick((t) => t + 1);
             }
             return;
           }
@@ -367,6 +385,10 @@ export function createPetMulti(
             balanceTick,
             balanceNoticeTick,
             balanceManual,
+            balancePetId,
+            // 环境是机器级一份：只有 petId 对得上的那只宠物收到，其余传 undefined 不弹气泡
+            env: env !== null && env.petId === p.id ? env : undefined,
+            envTick,
             workStatus: workOn ? workStatus : null,
             workStatusTick: workOn ? workStatusTick : 0,
             onFocusSession: jumpToSession,

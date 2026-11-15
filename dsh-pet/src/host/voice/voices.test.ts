@@ -1,20 +1,24 @@
 /**
- * Behavioral test of voice whitelist (src/host/voice/voices.ts). Only verify the contract "Verify that it has the
- * same origin as the list": the default sound must actually be in the list.
+ * 内置音色清单的行为测试（src/host/voice/voices.ts）。
+ * 只钉住「默认音色必须真的在清单里且唯一标记」这条契约。
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { DEFAULT_VOICE, VOICES, isKnownVoice } from './voices.ts';
+import { DEFAULT_VOICE, VOICES } from './voices.ts';
 
-test('isKnownVoice: id in the whitelist hits, any string does not hit', () => {
-  assert.equal(isKnownVoice('zh-CN-XiaoxiaoNeural'), true);
-  assert.equal(isKnownVoice('zh-CN-MadeUpNeural'), false);
-  assert.equal(isKnownVoice(''), false);
-});
-
-test('DEFAULT_VOICE: must be in the list, and there is exactly one default', () => {
-  assert.equal(isKnownVoice(DEFAULT_VOICE), true, 'The default tone cannot fall outside the white list');
+test('DEFAULT_VOICE：必须在清单里，且恰好一个 default', () => {
+  assert.equal(
+    VOICES.some((voice) => voice.id === DEFAULT_VOICE),
+    true,
+    '默认音色不能落在清单外',
+  );
   const defaults = VOICES.filter((voice) => voice.default);
   assert.equal(defaults.length, 1, 'default tag must be unique');
   assert.equal(defaults[0]?.id, DEFAULT_VOICE);
+});
+
+test('清单里的音色 id 不含 provider 前缀：前缀由注册表统一加', () => {
+  for (const voice of VOICES) {
+    assert.equal(voice.id.includes('/'), false, `音色 id 不能自带前缀: ${voice.id}`);
+  }
 });

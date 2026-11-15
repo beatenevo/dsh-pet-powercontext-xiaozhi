@@ -271,6 +271,9 @@ export interface FontConfig {
 export interface ClientConfig {
   /** System notification master switch: true = Dialog completed / Generation failed / Output truncation / Permission application / Pop-up notification when user selects; missing means configuration error */
   notificationsEnabled: boolean;
+  /** 前台聚焦时也提醒：true = 页面可见且持有焦点时照常弹通知、照常播报工作状态语音；
+   *  false（默认）= 只在走开或被遮住时提醒。缺这个键按 false 处理，旧配置行为不变。 */
+  notifyWhenFocused: boolean;
   /**
    * Click the sound effect switch: true = play the built-in click-duck.wav when clicking the pet (volume 0.5,
    * deduplicate within 100 ms), false = mute. Built-in default false (default silent, no raid on existing users). This

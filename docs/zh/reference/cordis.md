@@ -7,7 +7,7 @@
 本文是**完整契约**（参数、返回字段、边界与示例）；只要成员的一句话预览，见 [`CORDIS-API.md`](cordis.md)。
 
 ```js
-ctx.get(../../../'petApi7340')
+ctx.get("petApi7340");
 ```
 
 拿不到对应分组 = 你在另一半，或 dsh-pet 未启用 / 版本过旧。
@@ -35,7 +35,7 @@ ctx.get(../../../'petApi7340')
 `null`：这一页没有这只宠物。
 
 ```js
-ctx.get(../../../'petApi7340').pose(../../../'main');
+ctx.get("petApi7340").pose("main");
 // { x: 0.8467, y: 0.2438, facing: 'left' }
 ```
 
@@ -61,7 +61,7 @@ ctx.get(../../../'petApi7340').pose(../../../'main');
 `null`：这一页没有这只宠物。
 
 ```js
-ctx.get(../../../'petApi7340').progress(../../../'main');
+ctx.get("petApi7340").progress("main");
 // { playbackId: 'pb_1755...', anim: 'walk', currentTime: 3.42, duration: 10.09, paused: false, buffering: false }
 ```
 
@@ -87,9 +87,9 @@ ctx.get(../../../'petApi7340').progress(../../../'main');
 - 零请求：读的是内存，可以在渲染或 `requestAnimationFrame` 里按需读。
 
 ```js
-const s = ctx.get(../../../'petApi7340').getState();
-if (../../../s) {
-  console.log('版本', s.counter, '这只宠物最近说：', s.pets.main?.say?.data);
+const s = ctx.get("petApi7340").getState();
+if (s) {
+  console.log("版本", s.counter, "这只宠物最近说：", s.pets.main?.say?.data);
 }
 ```
 
@@ -113,10 +113,10 @@ if (../../../s) {
 **读取即消费**：读走后所有标记清回 `null`，下一次读到的是之后的新点击；连续点同一条只留最后一次。这个 owner 在本页没有可见项（没注册、已清除，或只注册给 `desktop`）时回 `unknown-owner`。
 
 ```js
-const res = ctx.get(../../../'petApi7340').menuEvents(../../../'my-plugin');
-if (../../../res.ok) {
-  for (const [label, petId] of Object.entries(../../../res.events)) {
-    if (petId !== null) console.log(label, '被点了，点在', petId);
+const res = ctx.get("petApi7340").menuEvents("my-plugin");
+if (res.ok) {
+  for (const [label, petId] of Object.entries(res.events)) {
+    if (petId !== null) console.log(label, "被点了，点在", petId);
   }
 }
 ```
@@ -150,17 +150,28 @@ if (../../../res.ok) {
 | `custom`  | 节点树：`{ views: CustomNode[], percent? }` 或 `{ rows: CustomNode, detailRows?: CustomNode, percent? }`，见下 |
 
 ```js
-export const inject = ['petApi7340'];
+export const inject = ["petApi7340"];
 
-export function apply(../../../ctx) {
-  ctx.effect(../../../() =>
-    ctx.get(../../../'petApi7340').balance.register({
-      id: 'my-gateway',
+export function apply(ctx) {
+  ctx.effect(() =>
+    ctx.get("petApi7340").balance.register({
+      id: "my-gateway",
       async fetch({ provider }) {
-        const res = await fetch('http://127.0.0.1:8080/v1/credits', { signal: AbortSignal.timeout(../../../20_000) });
-        if (../../../!res.ok) throw new Error('HTTP ' + res.status);
+        const res = await fetch("http://127.0.0.1:8080/v1/credits", {
+          signal: AbortSignal.timeout(20_000),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
         const j = await res.json();
-        return { ok: true, provider, shape: 'points', data: { unit: '积分', total: String(../../../j.remaining), full: String(../../../j.limit) } };
+        return {
+          ok: true,
+          provider,
+          shape: "points",
+          data: {
+            unit: "积分",
+            total: String(j.remaining),
+            full: String(j.limit),
+          },
+        };
       },
     }),
   );
@@ -197,26 +208,29 @@ export function apply(../../../ctx) {
 失败口径：`fetch` 抛错 → 气泡显示 `fetch-error`；`shape: 'custom'` 但任一页非法 → 这一拍整份跳过，不出现「前几页正常、翻到后面崩」的半坏状态。
 
 ```js
-ctx.effect(../../../() =>
-  ctx.get(../../../'petApi7340').balance.register({
-    id: 'my-gateway',
+ctx.effect(() =>
+  ctx.get("petApi7340").balance.register({
+    id: "my-gateway",
     async fetch({ provider }) {
       return {
         ok: true,
         provider,
-        shape: 'custom',
+        shape: "custom",
         data: {
           percent: 42,
           views: [
             {
-              tag: 'div',
-              style: { display: 'flex', gap: '6px' },
+              tag: "div",
+              style: { display: "flex", gap: "6px" },
               children: [
-                { tag: 'span', text: '积分' },
-                { tag: 'b', text: '420 / 1000' },
+                { tag: "span", text: "积分" },
+                { tag: "b", text: "420 / 1000" },
               ],
             },
-            { tag: 'div', children: [{ tag: 'span', text: '下次刷新 5 分钟后' }] },
+            {
+              tag: "div",
+              children: [{ tag: "span", text: "下次刷新 5 分钟后" }],
+            },
           ],
         },
       };
@@ -239,51 +253,60 @@ ctx.effect(../../../() =>
 | `external` | string[] | 第三方已注册 id |
 
 ```js
-ctx.get(../../../'petApi7340').balance.list();
+ctx.get("petApi7340").balance.list();
 // { builtin: ['opencode-go', 'commandcode', 'deepseek-official', 'deepseek-account'], external: ['my-gateway'] }
 ```
 
 ### voice.register
 
-第三方插件注册自己的语音合成实现。注册后 `POST /voice/speak` 改走它；没注册时走内置实现。
+第三方插件注册自己的语音合成实现。可以注册多个，各自出现在 `GET /voice/voices` 的目录里；用户选中的音色决定走哪一个。
 
 **参数**
 
-| 名称         | 类型     | 说明                                                                     |
-| ------------ | -------- | ------------------------------------------------------------------------ |
-| `id`         | string   | 唯一标识；参与缓存键，换实现不会命中旧音频。不能与内置实现同名（`edge`） |
-| `name`       | string   | 展示名，只用于排障                                                       |
-| `synthesize` | function | 入参 `{ text, rate }`，返回 mp3 字节（`Uint8Array`）                     |
+| 名称         | 类型     | 说明                                                                    |
+| ------------ | -------- | ----------------------------------------------------------------------- |
+| `id`         | string   | 唯一标识，kebab-case；参与缓存键，重复注册抛错、不覆盖                  |
+| `name`       | string   | 展示名，设置页用作分组标题                                              |
+| `voices`     | array    | 本实现支持的音色，至少一个：`{ id, name, tag? }`；`id` 只在实现内唯一   |
+| `format`     | string?  | 输出格式 `mp3` / `wav`，缺省 `mp3`；决定缓存扩展名与应答 `Content-Type` |
+| `timeoutMs`  | number?  | 单次合成超时（ms），缺省 15000                                          |
+| `synthesize` | function | 入参 `{ text, voice, rate, signal }`，返回音频字节（`Uint8Array`）      |
+
+`synthesize` 收到的 `voice` 是**去掉 provider 前缀**的音色 id，保证在本实现的 `voices` 里；`rate` 是数字百分比（`0` 原速、`-10` 慢 10%，范围 -50..100）。
 
 **返回**：`() => void`，注销函数。配合 `ctx.effect` 使用，插件卸载时自动注销。
 
-**抛错**：定义不是对象、`id` 为空、`id` 与内置实现同名、`synthesize` 不是函数。
+**抛错**：定义不是对象、`id` 不是 kebab-case、`name` 为空、`voices` 为空或组内 id 重复、`format` 不是 mp3/wav、`timeoutMs` 不是正数、`synthesize` 不是函数、`id` 已被注册。
 
 **行为**
 
-- 同一时刻只有一个实现生效，**后注册的覆盖先注册的**；注销只清「仍是自己那份」，迟到的注销不会顶掉后来者。
-- 注册后 `POST /voice/speak` 的 `voice` 参数不生效（音色由实现自己决定），但校验口径不变：非法值仍按 `bad-request` 拒绝。
-- 不接收音色与配置：`voiceEnabled` 只控制端上要不要播，与本实现无关。
+- **多实现并存**：每个 `id` 一份，互不覆盖；注销只清「仍是自己那份」，迟到的注销不会顶掉后来者。
+- 配置里存的是 `providerId/音色` 限定 id；解析不到按 `bad-request` 拒绝，不会换一个音色。
+- 缓存键是「限定音色 + 语速 + 文本」，换实现或换音色都不会命中旧音频。
 - 失败必须 `throw`：宿主归一成 `generate-error` 并记日志；返回空字节同样按失败处理。
-- 单次合成上限 15 秒，超时按失败处理。
-- **不回落**：注册了就不会退到内置实现——第三方坏了就是没声音，不会静默改用 edge。
+- 超过 `timeoutMs` 按失败处理，同时 abort `signal`。
 
 ```js
-export const inject = ['petApi7340'];
+export const inject = ["petApi7340"];
 
-export function apply(../../../ctx) {
-  ctx.effect(../../../() =>
-    ctx.get(../../../'petApi7340').voice.register({
-      id: 'my-tts',
-      name: '我的语音',
-      async synthesize({ text, rate }) {
-        const res = await fetch('http://127.0.0.1:9000/speak', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ text, rate }),
-          signal: AbortSignal.timeout(../../../15_000),
+export function apply(ctx) {
+  ctx.effect(() =>
+    ctx.get("petApi7340").voice.register({
+      id: "my-tts",
+      name: "我的语音",
+      voices: [
+        { id: "female", name: "女声", tag: "柔和" },
+        { id: "male", name: "男声" },
+      ],
+      timeoutMs: 20_000,
+      async synthesize({ text, voice, rate, signal }) {
+        const res = await fetch("http://127.0.0.1:9000/speak", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text, voice, rate }),
+          signal,
         });
-        if (../../../!res.ok) throw new Error('HTTP ' + res.status);
+        if (!res.ok) throw new Error("HTTP " + res.status);
         return new Uint8Array(await res.arrayBuffer());
       },
     }),
@@ -295,62 +318,57 @@ export function apply(../../../ctx) {
 
 **参数**：无。
 
-**返回**：`{ builtin, external }`
-
-| 字段       | 类型     | 说明                                  |
-| ---------- | -------- | ------------------------------------- |
-| `builtin`  | string[] | 内置实现 id（目前只有 `edge`）        |
-| `external` | string[] | 当前生效的第三方 id；没注册则为空数组 |
+**返回**：`{ providers: [{ id, name, voices }] }`，与 `GET /voice/voices` 是同一份数据；`voices[].id` 是限定形态（`providerId/音色`）。
 
 ```js
-ctx.get(../../../'petApi7340').voice.list();
-// { builtin: ['edge'], external: ['my-tts'] }
+ctx.get("petApi7340").voice.list();
+// { providers: [{ id: 'edge', name: 'Edge', voices: [{ id: 'edge/zh-CN-XiaoyiNeural', name: '晓伊', tag: '女 · 活泼' }] }] }
 ```
 
 ### speech.register
 
-第三方插件注册自己的语音识别实现。注册后 `POST /voice/hear` 改走它；没注册时走 DSH 宿主自带的识别能力。
+第三方插件注册自己的语音识别实现。可以注册多个，各自出现在 `GET /voice/hear-providers` 里；用户选中哪个就走哪个。内置的 `dsh` 也只是一个普通实现，没有特权。
 
 **参数**
 
-| 名称         | 类型     | 说明                                                        |
-| ------------ | -------- | ----------------------------------------------------------- |
-| `id`         | string   | 唯一标识；不能与内置来源同名（`dsh`）                       |
-| `name`       | string   | 展示名，只用于排障                                          |
-| `transcribe` | function | 入参 `{ audio, language }` 与可选中止信号，返回识别出的文字 |
+| 名称         | 类型     | 说明                                       |
+| ------------ | -------- | ------------------------------------------ |
+| `id`         | string   | 唯一标识，kebab-case；重复注册抛错、不覆盖 |
+| `name`       | string   | 展示名，设置页下拉里的文字                 |
+| `timeoutMs`  | number?  | 单次识别超时（ms），缺省 30000             |
+| `transcribe` | function | 入参 `{ audio, signal }`，返回识别出的文字 |
 
 **返回**：`() => void`，注销函数。配合 `ctx.effect` 使用，插件卸载时自动注销。
 
-**抛错**：定义不是对象、`id` 为空、`id` 与内置来源同名、`transcribe` 不是函数。
+**抛错**：定义不是对象、`id` 不是 kebab-case、`name` 为空、`transcribe` 不是函数、`timeoutMs` 不是正数、`id` 已被注册。
 
 **行为**
 
-- 同一时刻只有一个实现生效，**后注册的覆盖先注册的**；注销只清「仍是自己那份」，迟到的注销不会顶掉后来者。
-- **不回落**：注册了就不会退到 DSH 自带识别——第三方坏了就是识别失败，不会静默改用别人。
-- `audio` 是**原始 WAV 字节**（16kHz / 单声道 / PCM16）；宿主不做格式校验，格式不合规由实现自己抛错。
+- **多实现并存**：每个 `id` 一份，互不覆盖；注销只清「仍是自己那份」，迟到的注销不会顶掉后来者。
+- 配置里存的是 provider id（如 `dsh`）；解析不到按 `bad-request` 拒绝，不会回落到别的实现。
+- `audio` 是**原始 WAV 字节**（16kHz / 单声道 / PCM16）；宿主只挡明显不合法的输入与 7 MiB 上限，格式由实现自己校验。
 - 返回**空串表示这段没人说话**，属于成功，不是失败——与合成的「空字节即失败」相反。
-- 失败必须 `throw`：宿主归一成 `generate-error`，原始 message 回给调用方。
-- 返回非字符串按失败处理，不会把对象塞进 `text` 字段。
-- 单次识别上限 30 秒；调用方断开时信号会被 abort，实现可以选择不理，但宿主会立即停止等待。
-- **宿主不排队**：并发由实现自己决定；DSH 自带识别有自己的队列（约 4 个），第三方没有。
-- 识别**不缓存**：同一段音频每次都会重新走实现。
+- 失败必须 `throw`：宿主归一成 `generate-error`，原始 message 回给调用方。`unsupported` 只由宿主自己的能力缺失产生（如内置 `dsh` 没装识别插件），第三方实现无法主动返回它。
+- 超过 `timeoutMs` 按失败处理，同时 abort `signal`。
+- 语言由实现自己检测，请求不带语言参数。
+- **宿主不排队、不缓存**：并发由实现自己决定，同一段音频每次都会重新走实现。
 
 ```js
-export const inject = ['petApi7340'];
+export const inject = ["petApi7340"];
 
-export function apply(../../../ctx) {
-  ctx.effect(../../../() =>
-    ctx.get(../../../'petApi7340').speech.register({
-      id: 'my-asr',
-      name: '我的识别',
-      async transcribe({ audio, language }, signal) {
-        const res = await fetch('http://127.0.0.1:9001/asr', {
-          method: 'POST',
-          headers: { 'content-type': 'application/octet-stream' },
+export function apply(ctx) {
+  ctx.effect(() =>
+    ctx.get("petApi7340").speech.register({
+      id: "my-asr",
+      name: "我的识别",
+      async transcribe({ audio, signal }) {
+        const res = await fetch("http://127.0.0.1:9001/asr", {
+          method: "POST",
+          headers: { "content-type": "application/octet-stream" },
           body: audio,
           signal,
         });
-        if (../../../!res.ok) throw new Error('HTTP ' + res.status);
+        if (!res.ok) throw new Error("HTTP " + res.status);
         return (await res.json()).text;
       },
     }),
@@ -362,16 +380,11 @@ export function apply(../../../ctx) {
 
 **参数**：无。
 
-**返回**：`{ builtin, external }`
-
-| 字段       | 类型     | 说明                                  |
-| ---------- | -------- | ------------------------------------- |
-| `builtin`  | string[] | 内置来源 id（目前只有 `dsh`）         |
-| `external` | string[] | 当前生效的第三方 id；没注册则为空数组 |
+**返回**：`{ providers: [{ id, name }] }`，与 `GET /voice/hear-providers` 是同一份数据。
 
 ```js
-ctx.get(../../../'petApi7340').speech.list();
-// { builtin: ['dsh'], external: ['my-asr'] }
+ctx.get("petApi7340").speech.list();
+// { providers: [{ id: 'dsh', name: 'DSH 语音插件' }] }
 ```
 
 ## memory.register 与 memory.list
@@ -382,4 +395,4 @@ ctx.get(../../../'petApi7340').speech.list();
 - `capture({ petId, userText, replyText, action?, image?, ts })` 在本地落盘后接收问答。动作和图片是名称或引用，不包含图片本体；回复不等待该钩子，失败记录日志。
 - `memory.list()` 返回 `{ builtin, external }`，用于检查当前实现。
 
-宠物明确选择 PowerContext 时，由内置路径独占召回与采集，不再调用此第三方槽。切回原生模式后，已注册的钩子才重新参与。类型定义见[注册契约](../../../dsh-pet/src/host/chat-memory-provider.ts)。
+宠物明确选择独立或 DSH 共享 PowerContext 时，由内置路径独占召回与采集，不再调用此第三方槽。切回原生模式后，已注册的钩子才重新参与。类型定义见[注册契约](../../../dsh-pet/src/host/chat-memory-provider.ts)。

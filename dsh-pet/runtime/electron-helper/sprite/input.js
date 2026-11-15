@@ -245,23 +245,21 @@ Object.assign(PetSprite.prototype, {
   /**
    * Does this window have to remain interactive (= I am using mouse input in this window).
    *
-   * The source is dragging / right-click menu is open / dialogue or to-do pop-up window is open (plus clickable
-   * balance bubble): they are all driven by window-level mouse events, and the input chain is broken as soon as the
-   * window changes back to click-through (no one reports pointerup when dragging freezes or letting go). This is the
-   * proprietary knowledge of the renderer and cannot be inferred by the main process; at the same time, the control
-   * rectangle is reported, and click-through continues outside the menu/chat box.
+   * 来源是拖拽中 / 右键菜单开着 / 对话或待办弹窗开着（外加可点的余额、工作与说话气泡）：它们都靠窗口级鼠标事件驱动，
+   * 窗口一变回穿透输入链就断（拖拽定格、松手也没人报 pointerup）。
+   * 这是渲染端专有的知识，主进程无从推断；同时上报控件矩形，菜单/聊天框外仍继续穿透。
    */
   inputBusy() {
-    // Clickable bubbles (balance page flipping, work bubble jumping session) are also from the same source: they grow
-    // in the window and are triggered by window-level click, but they hang in the margin area of normal click-through.
-    // It is necessary to borrow busy + control rectangle to encircle them.
+    // 可点的气泡（余额翻页、工作气泡跳会话、说话气泡戳破）同样是来源：它们长在窗口里、靠窗口级 click 触发，
+    // 却悬在平时穿透的余量区，正需要借 busy + 控件矩形把它们圈出来。
     return (
       this.dragState.active ||
       this.menuOpen ||
       this.chatOpen ||
       this.todoOpen ||
       this.balanceClickable() ||
-      this.workClickable()
+      this.workClickable() ||
+      this.whisperClickable()
     );
   },
 
@@ -280,6 +278,11 @@ Object.assign(PetSprite.prototype, {
   /** Is the work bubble clickable at the moment: it is occupying the bubble slot and has a jumpable session. */
   workClickable() {
     return this.bubbleSlot === 'work' && !!this.workSessionId;
+  },
+
+  /** 说话气泡此刻是否可点：它正占着气泡槽就有内容，点下去是戳破。 */
+  whisperClickable() {
+    return this.bubbleSlot === 'whisper' && !!this.whisperView;
   },
 
   /**

@@ -97,6 +97,9 @@ export function saveUserConfig(
   }
   const ne = o.notificationsEnabled;
   if (ne !== undefined && typeof ne !== 'boolean') return null;
+  // 前台聚焦时也提醒（全局布尔，与 notificationsEnabled 同语义）：传了必须是布尔，没传走透传保留
+  const nwf = o.notifyWhenFocused;
+  if (nwf !== undefined && typeof nwf !== 'boolean') return null;
   // Click the sound effect switch (global Boolean, the same semantics as notificationsEnabled): if it is passed, it must be Boolean, if it is not passed, it will be retained through transparent transmission.
   const cse = o.clickSoundEnabled;
   if (cse !== undefined && typeof cse !== 'boolean') return null;
@@ -109,13 +112,19 @@ export function saveUserConfig(
   if (cae !== undefined && typeof cae !== 'boolean') return null;
   const cts = o.confineToScreen;
   if (cts !== undefined && typeof cts !== 'boolean') return null;
-  // Voice broadcast switch and voice (global): The same semantics as the above booleans; the voice must fall in the
-  // white list, and the verification directly reuses topFieldValid on the reading side, reading and writing the same
-  // rule.
+  // 语音播报开关与音色（全局）：与上面几个布尔同语义；音色只验 `provider/音色` 形态，
+  // 校验直接复用读取侧的 topFieldValid，读写同一份规则。
   const ve = o.voiceEnabled;
   if (ve !== undefined && typeof ve !== 'boolean') return null;
   const vn = o.voiceName;
   if (vn !== undefined && !topFieldValid('voiceName', vn)) return null;
+  // 识别实现（全局）：只验形态，存在性由 hear 解析时判——配置校验拿不到运行时注册表
+  const sp = o.speechProvider;
+  if (sp !== undefined && !topFieldValid('speechProvider', sp)) return null;
+  // 天气城市覆盖（全局，只读 main）：空串是有效值（= 跟随 IP 自动定位），
+  // 因此这里与其它可选字段不同——判的是 undefined 而不是真值，清空输入框必须能写回空串。
+  const ec = o.environmentCity;
+  if (ec !== undefined && !topFieldValid('environmentCity', ec)) return null;
   // Playback volume (global coefficient, 0–1): The same set of semantics as above - if it is passed, it must be valid, if it is not passed, it will be retained through transparent transmission.
   const vv = o.voiceVolume;
   if (vv !== undefined && !topFieldValid('voiceVolume', vv)) return null;
@@ -192,6 +201,7 @@ export function saveUserConfig(
   // created out of thin air)
   const outConfig: { pets: unknown[]; [key: string]: unknown } = { pets: out };
   if (ne !== undefined) outConfig.notificationsEnabled = ne;
+  if (nwf !== undefined) outConfig.notifyWhenFocused = nwf;
   if (cse !== undefined) outConfig.clickSoundEnabled = cse;
   if (wie !== undefined) outConfig.whisperImageEnabled = wie;
   if (cie !== undefined) outConfig.chatImageEnabled = cie;
@@ -203,6 +213,8 @@ export function saveUserConfig(
   if (vwe !== undefined) outConfig.voiceWhisperEnabled = vwe;
   if (vte !== undefined) outConfig.voiceTodoEnabled = vte;
   if (vne !== undefined) outConfig.voiceNotifyEnabled = vne;
+  if (sp !== undefined) outConfig.speechProvider = sp;
+  if (ec !== undefined) outConfig.environmentCity = String(ec).trim();
   if (te !== undefined) outConfig.trayEnabled = te;
   if (ph !== undefined) outConfig.physics = ph;
   if (aw !== undefined) outConfig.animationWeights = cleanWeights(aw as Record<string, unknown>);
@@ -221,6 +233,7 @@ export function saveUserConfig(
   // caller called by the whole package misses a field and will quietly erase the user's existing settings to default.
   const bodyOwned = new Set(['pets']);
   if (ne !== undefined) bodyOwned.add('notificationsEnabled');
+  if (nwf !== undefined) bodyOwned.add('notifyWhenFocused');
   if (cse !== undefined) bodyOwned.add('clickSoundEnabled');
   if (wie !== undefined) bodyOwned.add('whisperImageEnabled');
   if (cie !== undefined) bodyOwned.add('chatImageEnabled');
@@ -232,6 +245,8 @@ export function saveUserConfig(
   if (vwe !== undefined) bodyOwned.add('voiceWhisperEnabled');
   if (vte !== undefined) bodyOwned.add('voiceTodoEnabled');
   if (vne !== undefined) bodyOwned.add('voiceNotifyEnabled');
+  if (sp !== undefined) bodyOwned.add('speechProvider');
+  if (ec !== undefined) bodyOwned.add('environmentCity');
   if (te !== undefined) bodyOwned.add('trayEnabled');
   if (ph !== undefined) bodyOwned.add('physics');
   if (aw !== undefined) bodyOwned.add('animationWeights');

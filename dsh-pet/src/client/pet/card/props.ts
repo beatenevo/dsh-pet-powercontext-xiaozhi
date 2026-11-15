@@ -8,7 +8,7 @@
 import type * as ReactNS from 'react';
 import type { BalanceState } from '../../../shared/balance/index.ts';
 import type { PetCollisionSlot } from '../../../shared/physics.ts';
-import type { LockState, PositionMode, SayCue, PetFacing, SleepState } from '../../../shared/state.ts';
+import type { LockState, PositionMode, SayCue, PetFacing, SleepState, EnvState } from '../../../shared/state.ts';
 import type { MenuMoreItem } from '../../../shared/menu.ts';
 import type { WorkStatusSnapshot } from '../../../shared/work-status.ts';
 import type { RuntimePet } from '../types.ts';
@@ -25,6 +25,12 @@ export interface PetCardProps {
   balanceNoticeTick: number;
   /** Is this balance requested manually by the user? The manual request will be answered even if balanceEnabled is closed. */
   balanceManual: boolean;
+  /** 本次余额「给谁看」：有值且不是本宠物时只更新数据、不弹气泡；缺省 = 不分组。 */
+  balancePetId?: string;
+  /** 最近一次环境结果；只有 petId 与本宠物相符时容器才传（环境是机器级事实，一只一份气泡）。 */
+  env?: EnvState;
+  /** 环境叶子变化次数。 */
+  envTick: number;
   /** Working status snapshot. */
   workStatus: WorkStatusSnapshot | null;
   /** Number of working status changes. */

@@ -17,15 +17,13 @@
 export const HOST_WORK_STATUS_STATES = ['thinking', 'working', 'result', 'waiting', 'success', 'error'] as const;
 export type HostWorkStatusState = (typeof HOST_WORK_STATUS_STATES)[number];
 
-/**
- * Reason for end of round → Gear: completed → success, error system (error / max-tokens / timeout) → error, blocked →
- * waiting; the rest (aborted, etc.) → null, by caller Clean up the session and return it to idle - the remaining
- * previous state will cause the round to be stuck at working forever after it is interrupted.
- */
+/** 回合结束原因 → 档位；null = 该会话回合已结束，由调用方清理回空闲——残留上一档会让回合被
+ *  打断后永远卡在 working。 */
 function turnEndState(kind: string): HostWorkStatusState | null {
   if (kind === 'completed') return 'success';
   if (kind === 'error' || kind === 'max-tokens' || kind === 'timeout') return 'error';
-  if (kind === 'blocked') return 'waiting';
+  // blocked 是回合进入 step 前被前置检查拒绝：没有可展示的载荷，也没有后续事件来收尾，
+  // 给它一个档位会永久占住展示。与 aborted 同归 null。
   return null;
 }
 
@@ -92,7 +90,7 @@ export function reduceWorkStatus(
     case 'approval/asked':
       return 'waiting';
     case 'turn/end': {
-      // completed → success, error system → error, blocked → waiting; the rest (aborted, etc.) → null = Clear the session and return it to idle
+      // completed→success、错误系→error；其余（aborted / blocked 等）→null＝清该会话回空闲
       const reason = turnEndState(String(event?.data?.reason?.kind ?? ''));
       // Does the completion of this round mean that the entire task is completed and handed over to completedState (goal does not celebrate the middle round of the continuation round)
       if (reason === 'success') return completedState(turn);

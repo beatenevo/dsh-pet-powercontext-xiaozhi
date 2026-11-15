@@ -7,6 +7,7 @@
  * @module dsh-pet/src/client/settings/voice-card
  */
 import type { FunctionComponent } from 'react';
+import { makeSelect } from './panel/select.ts';
 import type { VoiceOption, VoicePickerProps } from './picker/voice-picker.ts';
 import type { SettingsRuntime } from './runtime.ts';
 import { makeUiKit, numberInputProps } from './ui.ts';
@@ -43,6 +44,12 @@ export interface VoiceCardProps {
   readonly onTodoToggle: (value: boolean) => void;
   /** Switch working status broadcast. */
   readonly onNotifyToggle: (value: boolean) => void;
+  /** 当前语音识别实现 id。 */
+  readonly speechProvider: string;
+  /** 可选识别实现；为空时下拉只显示当前值（列表还没拉回来或拉取失败）。 */
+  readonly speechProviders: readonly { readonly id: string; readonly name: string }[];
+  /** 选择语音识别实现。 */
+  readonly onSpeechProviderChange: (providerId: string) => void;
 }
 
 /**
@@ -59,16 +66,16 @@ export function makeVoiceCard(
 ): FunctionComponent<VoiceCardProps> {
   const { h, t } = rt;
   const { cardHead, field, toggleCell } = makeUiKit({ h, t });
+  // 识别下拉单层、无副标题，直接复用通用下拉；与音色选择器分开造，两者布局不同
+  const Select = makeSelect(rt);
 
   return function VoiceCard(props: VoiceCardProps) {
     return h('div', {
       className: 'dsh-pet-cfg__card',
       children: [
         cardHead(t('voiceTitle'), t('voiceHint')),
-        // Four switches in the first row: one for each of the four types of voices, which must be adjacent and read as
-        // "the same type"; two inputs in the second row: voice and volume. There is no text label or question mark
-        // attached to the voice: pulling down the current value "Xiao Yi (female, lively)" itself explains what it
-        // is.
+        // 第一行四个开关：四类语音各一个，必须相邻，读得出是「同一类」；
+        // 后两行是音色、音量与识别实现——每格都要可见标签，只显示当前值读者猜不出是什么。
         h('div', {
           className: 'dsh-pet-cfg__grid4',
           children: [
@@ -81,13 +88,17 @@ export function makeVoiceCard(
         h('div', {
           className: 'dsh-pet-cfg__grid2',
           children: [
-            h(picker, {
-              label: t('voiceNameLabel'),
-              value: props.voiceName,
-              options: props.voices,
-              disabled: props.busy,
-              onChange: props.onVoiceChange,
-            }),
+            field(
+              t('voiceNameLabel'),
+              h(picker, {
+                label: t('voiceNameLabel'),
+                value: props.voiceName,
+                options: props.voices,
+                disabled: props.busy,
+                onChange: props.onVoiceChange,
+              }),
+              t('voiceNameHint'),
+            ),
             field(
               t('voiceVolumeLabel'),
               h(
@@ -100,6 +111,23 @@ export function makeVoiceCard(
                 }),
               ),
               t('voiceVolumeHint'),
+            ),
+          ],
+        }),
+        // 识别实现：一层选择，与上面的播报设置分开一行——它决定「谁来听」，不是「说不说」
+        h('div', {
+          className: 'dsh-pet-cfg__grid2',
+          children: [
+            field(
+              t('speechProviderLabel'),
+              h(Select, {
+                label: t('speechProviderLabel'),
+                value: props.speechProvider,
+                options: props.speechProviders.map((item) => ({ id: item.id, label: item.name })),
+                disabled: props.busy,
+                onChange: props.onSpeechProviderChange,
+              }),
+              t('speechProviderHint'),
             ),
           ],
         }),

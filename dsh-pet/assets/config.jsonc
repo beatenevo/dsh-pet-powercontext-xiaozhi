@@ -1,17 +1,20 @@
-// dsh-pet configuration (JSONC supports line and block comments).
-// The browser reads the merged configuration from /dsh-pet-7340/config, without a filename extension.
-// Missing structural fields use defaults silently; explicitly invalid values produce warnings.
-// Field ownership:
-// - Per instance in pets[]: name, id, size, balanceEnabled, whisperEnabled, workStatusEnabled,
-//   fixedEnabled, display, position, and an optional whisperPrompt that replaces the entry's persona.
-// - Global defaults, overridable by each pet/<name>-config.json entry: physics, font, confineToScreen,
-//   whisperImageEnabled, chatImageEnabled, chatAnimationEnabled, chatMemoryRounds, whisperModel,
-//   chatModel, and eventsRefreshSec.
-// - Per entry (main or a custom pet type): whisperPrompt, memes, workStatusTexts, animations,
-//   and animationWeights.
-// - Read only from main: notificationsEnabled and eventsRefreshSec.balance.
-// Top-level objects are replaced as a whole, not merged recursively. Consumers apply their own
-// fallbacks for omitted nested keys (for example, 1,800 seconds for balance and 300 for whispers).
+// dsh-pet 配置（JSONC：允许 // 和 /* */ 注释）
+// 说明：浏览器端启动时通过 /dsh-pet-7340/config 拉取（本文件名是 config.jsonc，宿主路由不带后缀）；字段缺失/写错会取内置默认值并告警
+//       （结构性缺失静默、显式写错告警），返回给消费端的永远是填满的成品。
+// 字段归属（三层，改配置前先看这里）：
+//   · 实例级（写在 pets[] 里，每只独立）：name / id / size / balanceEnabled / whisperEnabled /
+//     workStatusEnabled / fixedEnabled / display / position，外加可选的 whisperPrompt（人设）——
+//     写了就取代所属条目顶层那一份，留空则跟随条目（设置页有输入框）
+//   · 全局默认（本文件是默认值；用户在 main-config.jsonc 里写一次就对**所有宠物**生效，
+//     含 pet/<名>-config.json 定义的种类；种类文件自己写了则覆盖自己那份）：
+//     physics / font / confineToScreen / whisperImageEnabled / chatImageEnabled / chatAnimationEnabled /
+//     chatMemoryRounds / whisperModel / chatModel / eventsRefreshSec
+//   · 条目级（每个条目一份：main 一份、每个种类各一份；种类文件顶层可覆盖）：
+//     whisperPrompt / memes / workStatusTexts / animations / animationWeights
+//   · 只读 main（写了也只认 main 条目那份）：notificationsEnabled / eventsRefreshSec.balance /
+//     environmentCity（天气城市覆盖）
+// 合并口径：所有顶层字段都是**整段替换**——写了就整段用自己的，缺的子键不会从本文件补回来
+//   （消费端各自兜底：余额周期读不到按 1800、碎碎念按 300）。
 {
   // Persona for whispers and chat (per entry; a custom pet file can override it).
   // When pets[].whisperEnabled is true, the current provider generates a short bubble at the
@@ -20,11 +23,13 @@
   // Write only the persona here. The model's system message also includes the pet's name and current
   // time context (date, weekday, time of day, weekend/working day and holidays). There is no length cap.
   "whisperPrompt": "你是主人桌面上的Q版蓝发小女仆，会时不时碎碎念一句。说话要自然随意、短短一句（20字以内），温柔乖巧带点俏皮，说人话不啰嗦，不要解释你自己，不要提你是AI。",
-  // Sleep talk uses this entry's whisperPrompt and runs at eventsRefreshSec.sleepTalk intervals.
-  // Sleep-specific instructions live in code. Sleep talk displays a bubble without animation or speech.
-  // Sleep refusal lines (per entry): while asleep, requests to speak, chat, check balance, play an
-  // animation or show a bubble are refused with a random line below. Use a nonempty string array;
-  // missing or invalid arrays fall back to the built-in refusal lines.
+  // ===================== 说梦话（条目级——每个种类一份） =====================
+  // 睡觉期间按 eventsRefreshSec.sleepTalk 周期说一句梦话：发给模型的 system 就是上面的 whisperPrompt（人设）。
+  // 与碎碎念同一个开关：宠物关掉碎碎念（pets[].whisperEnabled = false）或配置上不显示时不说梦话。
+  // 「你在睡觉、说梦话」这类功能指令写在代码里（与碎碎念的指令同一处），不在这里配；只弹气泡、不播动画、不念。
+  // ===================== 睡觉时被叫醒前的拒绝台词（条目级——每个种类一份） =====================
+  // 睡着期间用户或第三方想让它说话、聊天、查余额、播动画、弹气泡时，不执行，只随机挑一句下面的话弹气泡。
+  // 非空字符串数组；整段缺失/非法则用内置三句（「我在睡觉，别烦我……」之类）。
   "sleepRefuseTexts": [
     "我在睡觉，别烦我……",
     "唔……让我再睡一会儿。",
@@ -71,14 +76,16 @@
   // Use a nonnegative integer: default 20; 0 sends every candidate. This does not affect whispers,
   // which include only the selected image description.
   "chatImageLimit": 20,
-  // Speech output (global default, overridable per entry).
-  // Read manual whispers (menu/slash command) and chat replies aloud. Disabled by default.
-  // Bubbles, memory and notifications are unaffected. The chat speaker button can always request
-  // playback of a single reply independently of this setting.
+  // ===================== 语音：播报（合成）与输入（识别）（全局默认；种类文件 pet/<名>-config.json 顶层可覆盖） =====================
+  // 手动播报：右键菜单、斜杠命令触发的碎碎念，以及对话回复，是否用语音念出来。默认关闭——不是所有人都希望桌宠出声。
+  // 只影响「说不说」：气泡、记忆与通知都不受影响。对话面板的喇叭按钮是单句点播，随时可点。
   "voiceEnabled": false,
-  // Voice ID from /voice/voices (the supported Chinese voices).
-  // An empty or unknown ID produces a warning and falls back to zh-CN-XiaoyiNeural.
-  "voiceName": "zh-CN-XiaoyiNeural",
+  // 用哪个音色念：`provider/音色` 形态，取值见 /voice/voices（内置的是 edge/<音色>）。
+  // 写错或留空即解析不到 → 合成失败并告警，不会替你换一个嗓子。
+  "voiceName": "edge/zh-CN-XiaoyiNeural",
+  // 语音输入用哪个实现转写：取值见 GET /voice/hear-providers（内置的是 dsh）。
+  // 写错或留空即解析不到 → 识别失败并告警，不会替你换一个实现。
+  "speechProvider": "dsh",
   // Global playback volume: a number from 0 (muted) to 1 (full volume), shared by all speech categories.
   // Changing volume affects playback only and does not trigger another TTS request.
   "voiceVolume": 1,
@@ -130,7 +137,14 @@
   // permission request or a request for user selection. Set false to disable notifications.
   // main-config.jsonc can override this top-level field; saving pets in settings preserves it.
   // Refresh or restart after changing it.
+  // 前台聚焦时是否也提醒，见下面 notifyWhenFocused。
   "notificationsEnabled": true,
+  // ===================== 前台聚焦时也提醒 =====================
+  // false（默认）= 维持「不打扰」：页面可见且持有焦点时不弹、不念，只在走开或被遮住时提醒。
+  // true = 前台聚焦也照常弹系统通知、照常播报工作状态语音（设置页「全局开关」里
+  //   「前台聚焦时也提醒」写的就是它）。
+  // 缺这个键、或不是布尔，一律按 false 处理，旧配置升级后行为不变。
+  "notifyWhenFocused": false,
   // Click sound (required boolean, default true).
   // Play assets/sound/click-duck.wav at volume 0.5 when a pet is clicked. Clicks within 100 ms share
   // one sound, including across pets. false mutes click sounds. The global settings switch writes
@@ -150,6 +164,13 @@
   // The global settings switch writes main-config.jsonc. Saving restarts the desktop helper and
   // recreates its pet windows so the tray change takes effect.
   "trayEnabled": true,
+  // ===================== 环境：天气查哪个城市（只读 main 条目） =====================
+  // 留空（默认）= 按出口 IP 自动定位，IP 归属地库认为你在哪就查哪。
+  // 填了就用它：交给她名接口按城市名查天气，不再走 IP 定位——IP 库把家宽标到省会或邻市时，
+  // 手动填真实城市即可修正。填城市名，不要填省份（「江苏省」会被当成城市、落到省会南京）；
+  // 「扬州」「扬州市」两种写法都可以，上游会自己归一化。清空 = 恢复自动定位。
+  // 设置页「环境与定位」卡的输入框与「检测」按钮写的就是它（检测按钮取当前 IP 定位结果回填）。
+  "environmentCity": "",
   // Work-state bubble lines (per entry, overridable by a custom pet file).
   // Shown with events.workStatus animations when pets[].workStatusEnabled is true.
   // Outer indexes must match the animation states; do not insert a state in the middle:
@@ -367,6 +388,8 @@
   // balance: read only from main because the host shares one balance timer; fallback 1800 seconds.
   //   Refresh immediately on startup as well.
   // Invalid values (nonpositive or nonnumeric) warn and replace the whole object with defaults.
+  // 上限 2147483 秒（约 24.9 天）：超过它的周期按它算——再大的延时会被 setTimeout 当成 1 ms，
+  // 反而变成每秒一次。
   "eventsRefreshSec": {
     "balance": 1800,
     "whisper": 300,

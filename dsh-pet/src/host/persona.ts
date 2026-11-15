@@ -10,7 +10,7 @@
  * configuration for the name and time, otherwise it will equal the appearance of a second assemble point.
  * @module dsh-pet/src/host/persona
  */
-import { timeContextOf } from './time-context.ts';
+import { timeContextOf, type TimeContextEnv } from './time-context.ts';
 
 /**
  * Description of historical time: user messages in history are appended with the `[月日 时:分]` prefix to let the model
@@ -51,6 +51,8 @@ export interface SystemPromptParts {
   now: Date;
   /** Whether the historical message has a time prefix; the default is false (whisper has no history, and the [history] segment should not appear) */
   historyTimes?: boolean;
+  /** 时间行附带的环境事实（城市与天气）；缺省 = 只写时间，与加入环境前一致 */
+  env?: TimeContextEnv;
 }
 
 /**
@@ -66,7 +68,7 @@ export function composeSystemPrompt(parts: SystemPromptParts): string {
   const name = String(parts.name || parts.id);
   const nameLine = name ? '你的名字是“' + name + '”。' : '';
   const lines = [parts.prompt, nameLine].filter((line) => line !== '');
-  const time = timeContextOf(parts.now);
+  const time = timeContextOf(parts.now, parts.env);
   if (time) {
     lines.push(time);
     // [History] Follow the time background: The whole sentence refers to "now", which does not hold true without time background.

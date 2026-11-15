@@ -119,11 +119,12 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 
 ## 九、语音
 
-| 接口                             | 功能                                                                         |
-| -------------------------------- | ---------------------------------------------------------------------------- |
-| `POST /dsh-pet-7340/voice/speak` | 合成并返回 mp3：`{ text, voice?, rate? }`；同一输入命中缓存，队列最多排 3 个 |
-| `POST /dsh-pet-7340/voice/hear`  | 识别音频回文字：`{ audio }`，16kHz/单声道/PCM16 WAV 的 base64                |
-| `GET /dsh-pet-7340/voice/voices` | 可用音色列表；前端拿它渲染选择器，不要硬编码 id                              |
+| 接口                                     | 功能                                                                                                                               |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /dsh-pet-7340/voice/speak`         | 合成并返回音频：`{ text, voice?, rate? }`；`voice` 是 `provider/音色` 限定 id，缺省用配置；命中缓存不再合成，队列最多排 3 个       |
+| `POST /dsh-pet-7340/voice/hear`          | 识别音频回文字：`{ audio, provider? }`，16kHz/单声道/PCM16 WAV 的 base64，解码后上限 7 MiB；`provider` 缺省用配置 `speechProvider` |
+| `GET /dsh-pet-7340/voice/voices`         | 音色目录：按 provider 分组，音色 `id` 是 `provider/音色` 限定形态；前端拿它渲染选择器，不要硬编码 id                               |
+| `GET /dsh-pet-7340/voice/hear-providers` | 识别实现目录：`{ providers: [{ id, name }] }`，即 `/voice/hear` 的 `provider` 取值来源                                             |
 
 ## 十、待办事项
 
@@ -191,3 +192,7 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 ## Astra Pro 2.0
 
 `GET /dsh-pet-7340/robot` 读取缓存状态；JSON `POST` 提交 `configure`、`check`、`arm`、`disarm`、`execute`、`speak` 或 `stop`。动作需要当前会话和显式确认，`execute` 还会消耗单次授权。业务失败返回 `ok: false`。独立版读写均需要会话认证。安装与行为见[机器人指南](../guides/robot.md)，完整字段见 OpenAPI 的 `RobotRequest` / `RobotSnapshot`。
+
+## 环境查询
+
+`POST /environment` 返回城市和天气；加 `?pet=<id>&surface=web|desktop|both|any` 会为这只桌宠更新 `sections.env`，不传 pet 时只查询。`fresh=1` 跳过缓存，`ip=1` 忽略配置城市；不可用的字段直接省略。`POST /balance` 同样支持 pet/surface，只让被选中的宠物显示余额气泡。

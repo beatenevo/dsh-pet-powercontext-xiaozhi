@@ -12,8 +12,15 @@
 
 /** The enumerations and default values required by the script fragment are all injected from source code constants by the assembly entry point. */
 export interface ScriptConsts {
-  /** Tone whitelist (from host/voice/voices.ts). */
-  readonly voices: readonly { readonly id: string; readonly name: string; readonly tag: string }[];
+  /** 可选音色（来自语音注册表的内置实现，id 已是限定 id；provider 是分组标题）。 */
+  readonly voices: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly tag: string;
+    readonly provider: string;
+  }[];
+  /** 出厂默认音色；配置里没写这一项时页面显示它。 */
+  readonly defaultVoice: string;
   /** Font preset id (from shared/fonts.ts). */
   readonly fonts: readonly string[];
   /** Display file (from shared/config.ts). */
@@ -41,6 +48,7 @@ const TOKEN = new URLSearchParams(location.hash.slice(1)).get('token') || '';
 history.replaceState(null, '', location.pathname);
 const API = ${JSON.stringify(routePath)};
 const VOICES = ${JSON.stringify(consts.voices)};
+const DEFAULT_VOICE_ID = ${JSON.stringify(consts.defaultVoice)};
 const FONT_IDS = ${JSON.stringify(consts.fonts)};
 const DISPLAYS = ${JSON.stringify(consts.displays)};
 const CORNERS = ${JSON.stringify(consts.corners)};
@@ -48,7 +56,7 @@ const FALLBACK_PHYSICS = ${JSON.stringify(consts.physics)};
 const FALLBACK_FONT = ${JSON.stringify(consts.font)};
 const FALLBACK_WEIGHTS = ${JSON.stringify(consts.weights)};
 const FALLBACK_INTERVAL_SEC = 300;
-const state = { config: null, meta: null, globals: null, pets: {}, prompts: {}, entry: 'main', petIndex: 0, dirty: false };
+const state = { config: null, meta: null, globals: null, pets: {}, prompts: {}, entry: 'main', petIndex: 0, dirty: false, voiceOptions: null, speechProviders: null };
 
 function byId(id) {
   return document.getElementById(id);

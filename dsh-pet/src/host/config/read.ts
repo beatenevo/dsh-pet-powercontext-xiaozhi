@@ -14,6 +14,7 @@ import type { ConfigPaths } from './constants.ts';
 import { effectiveUserFile, readJsonc } from './jsonc.ts';
 import { mergeEntry, packBase } from './merge.ts';
 import { DEFAULT_CHAT_MEMORY } from '../../shared/chat-memory-config.ts';
+import { VOICES } from '../voice/voices.ts';
 
 /**
  * One-time migration for old users: main-config.json → main-config.jsonc (renamed, the content remains unchanged). Why
@@ -71,6 +72,13 @@ export function readPetConfigEntry(
   return hit ? { path: hit.path, raw: readJsonc(hit.path) } : undefined;
 }
 
+/** Qualify legacy built-in voices in memory; leave user files untouched until the next save. */
+function migrateVoiceName(config: Record<string, unknown> | undefined): void {
+  if (config && VOICES.some((voice) => voice.id === config.voiceName)) {
+    config.voiceName = 'edge/' + config.voiceName;
+  }
+}
+
 /**
  * The only read function: built-in default + user master configuration + file pet field-by-field merged finished
  * product aggregate. Each entry is the original file structure and the fields are filled. The consumer reads it
@@ -89,6 +97,7 @@ export function readAllConfig(paths: ConfigPaths): Record<string, Record<string,
   // main entry: built-in default ← main-config.jsonc (editable layer; old users before migration fallback to main-config.json)
   const userFile = effectiveUserFile(paths);
   const mainOverlay = userFile ? readJsonc(userFile) : undefined;
+  migrateVoiceName(mainOverlay);
   if (userFile && !mainOverlay) {
     warnOnce(
       'file:' + userFile,
@@ -107,6 +116,7 @@ export function readAllConfig(paths: ConfigPaths): Record<string, Record<string,
       warnOnce('file:' + file.path, 'Pet-pack configuration could not be parsed; skipping:' + file.path);
       continue;
     }
+    migrateVoiceName(parsed);
     out[file.prefix] = mergeEntry(filePetBase, parsed, file.prefix + '-config.json', basePets, seenIds);
   }
   return out;

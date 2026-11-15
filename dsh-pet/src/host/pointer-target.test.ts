@@ -35,6 +35,7 @@ const {
   spriteHitRect,
   pointerZone,
   decideWindowIgnore,
+  leavesBody,
 } = require(helper + 'pointer-target.js');
 
 /** Source code of files in the package (for guarding; relative to src/host / parsing) */
@@ -138,6 +139,21 @@ describe('decideWindowIgnore - Determination rules for fallback channel (issue #
   test('The window size has not been settled (renderer before the first frame is reported). No misjudgment: no "interactive" is generated in a very small rectangle.', () => {
     const tiny = { x: 0, y: 0, width: 4, height: 4 };
     assert.equal(decideWindowIgnore(tiny, { x: 0, y: 0 }, true), true);
+  });
+});
+
+describe('leavesBody —— 悬浮提示的补发收起条件（issue #333）', () => {
+  test('身体 → 余量区/窗外：算离开，主进程据此通知渲染端收起提示', () => {
+    assert.equal(leavesBody('body', 'margin'), true);
+    assert.equal(leavesBody('body', 'outside'), true);
+  });
+
+  test('其余翻转都不算离开：仍在身体内、余量区/窗外的互相翻转、首拍没有上一拍', () => {
+    assert.equal(leavesBody('body', 'body'), false);
+    assert.equal(leavesBody('margin', 'outside'), false);
+    assert.equal(leavesBody('outside', 'body'), false);
+    assert.equal(leavesBody(undefined, 'body'), false);
+    assert.equal(leavesBody(undefined, 'outside'), false);
   });
 });
 

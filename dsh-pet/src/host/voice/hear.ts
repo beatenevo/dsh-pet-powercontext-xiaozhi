@@ -1,19 +1,16 @@
 /**
- * Speech recognition service: Give a piece of WAV to the host's `speechToText` , and converge the conclusion into
- * "text or failure reason".
+ * 语音识别服务：校验输入、按 provider id 选实现、跑转写，把结论收敛成「文字或失败原因」。
  *
- * The audio format (16 kHz/mono/PCM16 WAV) is verified by host provider: Do not write a copy of the same rule in two
- * places, otherwise if you change one side, it will not match the other side. Only obviously invalid input is blocked
- * here to avoid wasted reasoning. Not responsible for recording and transmission - what comes in is the entire decoded
- * audio bytes.
+ * 音频格式（16kHz/单声道/PCM16 WAV）由实现自己校验：同一规则不在两处各写一份，
+ * 否则改一边就会和另一边对不上。这里只挡明显不合法的输入，避免白跑一次推理。
+ * 不负责录音与传输——进来的是已经解码的整段音频字节。
  * @module dsh-pet/src/host/voice/hear
  */
-import { activeSpeechProvider } from './speech-registry.ts';
+import { listSpeechCatalog, resolveSpeechProvider } from './speech-registry.ts';
+import { DEFAULT_SPEECH_TIMEOUT_MS, SpeechUnavailableError, type SpeechCatalog } from './speech-types.ts';
 
-/** The upper limit of audio for single recognition (bytes): The audio is stuffed into 1 MiB request body via base64, which is about 786 KiB after decoding. */
-export const MAX_AUDIO_BYTES = 768 * 1024;
-/** Recognition timeout (milliseconds): Local CPU reasoning, one sentence is much lower than this; if it exceeds, give up, not infinite. */
-export const TRANSCRIBE_TIMEOUT_MS = 30_000;
+/** 单次识别的音频上限（字节）：base64 后仍落在 10 MiB 请求体内，约合 200 秒 16kHz 单声道。 */
+export const MAX_AUDIO_BYTES = 7 * 1024 * 1024;
 
 /** Reason for failure; route layer is mapped to reason of result.ts as it is. */
 export type HearFailure = 'bad-request' | 'unsupported' | 'generate-error';
@@ -21,31 +18,18 @@ export type HearFailure = 'bad-request' | 'unsupported' | 'generate-error';
 /** Recognition results: text if successful, classification if failed, and instructions that can be directly returned to the caller. */
 export type HearResult = { ok: true; text: string } | { ok: false; reason: HearFailure; message: string };
 
-/** Speech recognition service: The route layer only relies on this method. */
+/** 语音识别服务：路由层只依赖这两个方法。 */
 export interface HearService {
   /** Recognize a piece of audio; stop waiting when `signal` aborts (caller has been disconnected). */
   hear(raw: unknown, signal?: AbortSignal): Promise<HearResult>;
+  /** 当前可用的实现目录（由注册表提供）。 */
+  list(): SpeechCatalog;
 }
 
 /** Verified identification input. */
 interface HearInput {
   readonly audio: Uint8Array;
-  readonly language?: string;
-}
-
-/** The resolved value of one-time recognition: the text is an empty string, which means there is no voice in this paragraph. */
-interface Transcript {
-  readonly text: string;
-}
-
-/** The minimum shape of host `ctx.speechToText`: only three things are used: registration table, sequencing and transcoding. */
-interface SpeechToTextLike {
-  /** Registered recognizers; an empty array indicates that the host does not enable the voice input plugin. */
-  listProviders(): readonly unknown[];
-  /** Pin a recording to a certain recognizer. */
-  resolve(request: { audio: Uint8Array; language?: string }): unknown;
-  /** Perform identification. */
-  transcribe(spec: unknown, signal: AbortSignal): Promise<Transcript>;
+  readonly provider?: string;
 }
 
 /** base64 Literal value: `Buffer.from` The decoding is very loose. First, the dirty data is blocked according to the alphabet and completion rules. */
@@ -55,7 +39,7 @@ const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/;
 type ParseResult = { ok: true; value: HearInput } | { ok: false; message: string };
 
 /**
- * Verify the request body; only recognize the two fields `audio` and `language` , and ignore the rest.
+ * 校验请求体；只认 `audio` 与 `provider` 两个字段，其余忽略。
  *
  * @param raw - The parsed request body.
  * @returns decoded audio bytes; if any field is invalid, a description will be given that can be directly returned to
@@ -73,45 +57,54 @@ function parseHearInput(raw: unknown): ParseResult {
   if (audio.byteLength > MAX_AUDIO_BYTES) {
     return { ok: false, message: `audio too large (max ${MAX_AUDIO_BYTES} bytes)` };
   }
-  const language = body.language;
-  if (language !== undefined && (typeof language !== 'string' || language.trim() === '')) {
-    return { ok: false, message: 'language must be a non-empty string' };
+  const provider = body.provider;
+  if (provider !== undefined && (typeof provider !== 'string' || provider.trim() === '')) {
+    return { ok: false, message: 'provider must be a non-empty string' };
   }
   return {
     ok: true,
-    value: { audio, ...(language === undefined ? {} : { language: (language as string).trim() }) },
+    value: { audio, ...(provider === undefined ? {} : { provider: (provider as string).trim() }) },
   };
 }
+
+/** 一次识别的结论；`unavailable` 用来区分「能力缺失」与「识别失败」。 */
+type DeadlineResult<T> = { ok: true; value: T } | { ok: false; unavailable: boolean; message: string };
 
 /**
  * Add a timeout and caller termination to a recognition, and converge the conclusion into "a value or a description".
  *
- * Both sources (third party, host) only recognize one signal, so they are merged here and there is no need to write
- * caller again.
- *
- * @param signal - caller abort signal (connection disconnected).
- * @param timeoutMs - Timeout limit.
- * @param task - the function that actually performs the recognition.
- * @returns The value given to the task if it succeeds; if it times out or throws an error, the original error
- * description will be given.
+ * @param signal - 调用方中止信号（连接断开）。
+ * @param timeoutMs - 超时上限。
+ * @param task - 真正执行识别的函数。
+ * @returns 成功给任务的值；超时、抛错或能力缺失给分类后的说明。
  */
 async function withDeadline<T>(
   signal: AbortSignal | undefined,
   timeoutMs: number,
   task: (signal: AbortSignal) => Promise<T>,
-): Promise<{ ok: true; value: T } | { ok: false; message: string }> {
+): Promise<DeadlineResult<T>> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-  timer.unref();
   const onAbort = (): void => controller.abort();
   signal?.addEventListener('abort', onAbort, { once: true });
+  let onDeadline: (() => void) | undefined;
+  // 与实现赛跑：它不理 signal 时超时也必须生效，否则这里会一直等下去
+  const deadline = new Promise<never>((_, reject) => {
+    onDeadline = () => reject(new Error('speech transcription aborted'));
+    controller.signal.addEventListener('abort', onDeadline, { once: true });
+  });
   try {
-    return { ok: true, value: await task(controller.signal) };
+    return { ok: true, value: await Promise.race([task(controller.signal), deadline]) };
   } catch (error) {
-    // Most of the errors thrown by the implementation are that the audio is not what it wants (format/duration): normalized to generate-error, the original text is given to the caller.
-    return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    // 能力缺失（插件没装、没配 key）要回 unsupported：让用户知道是环境问题，而不是录音有问题
+    return {
+      ok: false,
+      unavailable: error instanceof SpeechUnavailableError,
+      message: error instanceof Error ? error.message : String(error),
+    };
   } finally {
     clearTimeout(timer);
+    if (onDeadline !== undefined) controller.signal.removeEventListener('abort', onDeadline);
     signal?.removeEventListener('abort', onAbort);
   }
 }
@@ -119,47 +112,40 @@ async function withDeadline<T>(
 /**
  * Manufacturing identification service.
  *
- * @param options.speechToText - Lazy access to the host service; it returns undefined when the voice input plugin is
- * not enabled.
- * @param options.timeoutMs - Single recognition timeout; default {@link TRANSCRIBE_TIMEOUT_MS} , use a small value for
- * testing.
- * @returns only exposes the services of `hear` .
+ * @param options.configuredProvider - 请求没带 provider 时用的 id；缺省视为没有配置。
+ * @param options.timeoutMs - 单次识别超时；缺省 {@link DEFAULT_SPEECH_TIMEOUT_MS}，测试用小值。
+ * @returns 只暴露 `hear` 与 `list` 的服务。
  */
-export function createHearService(options: { speechToText: () => unknown; timeoutMs?: number }): HearService {
-  const timeoutMs = options.timeoutMs ?? TRANSCRIBE_TIMEOUT_MS;
+export function createHearService(options: {
+  configuredProvider?: () => string | undefined;
+  timeoutMs?: number;
+}): HearService {
   return {
+    list: listSpeechCatalog,
     async hear(raw, signal) {
       const parsed = parseHearInput(raw);
       if (!parsed.ok) return { ok: false, reason: 'bad-request', message: parsed.message };
 
-      // Third-party priority: If it is registered, just use it, no longer look at the host (the same semantics as "no fallback" of synthesis).
-      const provider = activeSpeechProvider();
-      if (provider !== null) {
-        const run = await withDeadline(signal, timeoutMs, (inner) => provider.transcribe(parsed.value, inner));
-        if (!run.ok) return { ok: false, reason: 'generate-error', message: run.message };
-        // The third-party return value is not trustworthy: if it is not a character string, it will be treated as a failure. Avoid stuffing the object into the text field and sending it out.
-        if (typeof run.value !== 'string') {
-          return { ok: false, reason: 'generate-error', message: 'invalid transcript from provider' };
-        }
-        return { ok: true, text: run.value };
+      // 唯一的「默认」来源：请求显式给的，或者用户配置里那个值。查不到就是查不到，不替他挑。
+      const providerId = parsed.value.provider ?? options.configuredProvider?.();
+      if (!providerId) return { ok: false, reason: 'bad-request', message: 'provider is required' };
+      const provider = resolveSpeechProvider(providerId);
+      if (!provider) {
+        return { ok: false, reason: 'bad-request', message: `provider not found: ${providerId}` };
       }
 
-      const speech = options.speechToText() as SpeechToTextLike | undefined;
-      if (speech === undefined || typeof speech.transcribe !== 'function') {
-        return { ok: false, reason: 'unsupported', message: 'host has no speech-to-text service' };
-      }
-      // Empty registration table = The plugin is not enabled or provider is not started: the transcoding must fail, give a clear reason in advance instead of waiting for it to throw an error.
-      if (speech.listProviders().length === 0) {
-        return { ok: false, reason: 'unsupported', message: 'host has no speech provider enabled' };
-      }
-
-      // The host returns the finished object (text + duration). Only the text is taken here, and the duration is left to the person who needs it to adjust it again.
-      const run = await withDeadline(
-        signal,
-        timeoutMs,
-        async (inner) => (await speech.transcribe(speech.resolve(parsed.value), inner)).text,
+      // 实现最清楚自己需要多久：它声明了就用它的，服务级只是缺省与测试注入
+      const timeoutMs = provider.timeoutMs ?? options.timeoutMs ?? DEFAULT_SPEECH_TIMEOUT_MS;
+      const run = await withDeadline(signal, timeoutMs, (inner) =>
+        provider.transcribe({ audio: parsed.value.audio, signal: inner }),
       );
-      if (!run.ok) return { ok: false, reason: 'generate-error', message: run.message };
+      if (!run.ok) {
+        return { ok: false, reason: run.unavailable ? 'unsupported' : 'generate-error', message: run.message };
+      }
+      // 实现返回值不可信：不是字符串就当失败，避免把对象塞进 text 字段发出去
+      if (typeof run.value !== 'string') {
+        return { ok: false, reason: 'generate-error', message: 'invalid transcript from provider' };
+      }
       return { ok: true, text: run.value };
     },
   };

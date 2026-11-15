@@ -1,11 +1,8 @@
 /**
- * Instruction processing: There is one consumption function for each of the seven instructions of balance, balance
- * unavailable, working status, talk, playback request, position, and throw. It is not responsible for determining
- * conventions (balance state, working status index, and playback branch belong to shared and animation chain
- * respectively), nor does it hold the driver. Depends on the card running time and the current frame props; each
- * instruction comes with a guard of "whether this beat has been consumed". Invariant: Only when the counter changes
- * does it take action; when the occupancy lock takes effect, the whole shot is automatically discarded, and explicit
- * instructions are not blocked.
+ * 指令处理：余额、余额不可用、环境、工作状态、说话、点播、位置、抛掷八条指令各一个消费函数。
+ * 不负责判定口径（余额档位、工作状态索引、播完分支分别属于 shared 与动画链），也不持有驱动。
+ * 依赖卡运行时与当帧 props；每条指令自带「这一拍是否已消费」的守卫。
+ * 不变量：只有计数器变化才动手；占用锁生效时自动来源整拍丢弃，显式指令不挡。
  * @module dsh-pet/src/client/pet/card/cue-effects
  */
 import { balanceEventIndex, balancePercent } from '../../../shared/balance/index.ts';
@@ -43,11 +40,14 @@ export function createCueEffects(rt: CueEffectsRuntime) {
 
   return function useCueEffects(hub: CardHub, props: PetCardProps): void {
     const { balance, balanceManual, balanceNoticeTick, balanceTick } = props;
+    const { balancePetId } = props;
+    const { env, envTick } = props;
     const { animCue, animCueTick, posCue, posCueTick, say, sayTick, throwCue, throwCueTick } = props;
     const { workStatus, workStatusTick } = props;
 
     const prevBalanceRef = useRef(0);
     const prevNoticeRef = useRef(0);
+    const prevEnvRef = useRef(0);
     const prevWorkRef = useRef(0);
     // Debug log: Previous state, null means idle, undefined means it has not been triggered after startup.
     const prevWorkStateRef = useRef<string | null | undefined>(undefined);
@@ -66,6 +66,9 @@ export function createCueEffects(rt: CueEffectsRuntime) {
       const card = hub.card;
       if (balanceTick === 0 || balanceTick === prevBalanceRef.current) return;
       prevBalanceRef.current = balanceTick;
+      // 归属过滤：这次刷新点名了别的宠物 → 本宠物只更新数据，不弹气泡也不播档位动画。
+      // 先消费 tick 再判：归属期过去后这一拍不再补播（事件是瞬时的）。
+      if (balancePetId !== undefined && balancePetId !== cfg.id) return;
       // Occupied lock: automatic balance is not checked, manual request is as usual; tick will be judged after consumption, and the period of occupation will be regarded as past.
       if (hub.ownAnim.isFrozen() && !balanceManual) return;
       // One-vote veto for sleeping: no broadcast will be played while sleeping, and sleeping postures will not be interrupted by manual requests (same conventions as the desktop).
@@ -102,11 +105,24 @@ export function createCueEffects(rt: CueEffectsRuntime) {
       if (!cfg.balanceEnabled && !balanceManual) return; // Automatic polling is subject to the gating switch, and manual requests pass unconditionally.
       if (balanceNoticeTick === 0 || balanceNoticeTick === prevNoticeRef.current) return;
       prevNoticeRef.current = balanceNoticeTick;
+      // 归属过滤：不可用说明也只说给被点的那只（缺省则照旧全员）
+      if (balancePetId !== undefined && balancePetId !== hub.cfg().id) return;
       // Occupied lock: automatic source is not viewed, manual request is normal; sleep is vetoed, manual request is not played.
       if (hub.ownAnim.isFrozen() && !balanceManual) return;
       if (hub.sleeping()) return;
       if (!balance || balance.ok) return;
       hub.bubbles.showBalance();
+    };
+
+    /** 环境结果：用户点「查询天气」后宿主写叶子，这里点亮环境气泡。
+     *  睡着不弹（不打断睡姿）；占用锁不挡——它是用户主动点的一次性查询。 */
+    const consumeEnv = (): void => {
+      if (envTick === 0 || envTick === prevEnvRef.current) return;
+      prevEnvRef.current = envTick;
+      // 环境是机器级一份，叶子里的 petId 决定谁弹；对不上的宠物整拍丢弃
+      if (env === undefined || env.petId !== hub.cfg().id) return;
+      if (hub.sleeping()) return;
+      hub.bubbles.showEnv();
     };
 
     /** Working status linkage: play the animation according to the state and pop up the text bubble; when idle, close the bubble and stop after playing. */
@@ -232,13 +248,14 @@ export function createCueEffects(rt: CueEffectsRuntime) {
     useEffect(() => {
       consumeBalance();
       consumeBalanceNotice();
+      consumeEnv();
       consumeWorkStatus();
       consumeSay();
       consumeAnimCue();
       consumePosCue();
       consumeThrowCue();
-      // Guards are recreated each render but read refs and current props; adding them would rerun all seven guards each render.
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- Only these seven counters trigger updates.
-    }, [balanceTick, balanceNoticeTick, workStatusTick, sayTick, animCueTick, posCueTick, throwCueTick]);
+      // 守卫函数每渲染重建，但只读 ref 与当拍的 props；进依赖会让每个渲染都重跑八个守卫。
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- 变化原因只有这八个计数器
+    }, [balanceTick, balanceNoticeTick, envTick, workStatusTick, sayTick, animCueTick, posCueTick, throwCueTick]);
   };
 }

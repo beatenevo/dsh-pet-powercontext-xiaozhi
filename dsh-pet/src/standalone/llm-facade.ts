@@ -24,6 +24,13 @@ export interface StandaloneModelService {
    * mixed together, the model parser will not be able to recognize its own provider.
    */
   balanceAuth(): { provider: string; apiKey: string };
+  /**
+   * 单独保存的 DeepSeek 语音密钥；空串表示没单独配。
+   *
+   * 对话密钥属于用户选的任意服务商，只有它恰好是 DeepSeek 时才能给语音用；
+   * 这个字段让「对话走别家、语音仍用 DeepSeek」成立。
+   */
+  deepseekKey(): string;
   dispose(): void;
 }
 

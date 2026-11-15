@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { PACKAGE_ROOT } from '../paths.ts';
 import { queryBalance } from '../balance/index.ts';
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
+import { clampPeriodSec } from './period.ts';
 import type { ChatMemory } from './chat-memory.ts';
 import type { HostSetup } from './setup.ts';
 import type { HostContext } from './context.ts';
@@ -38,8 +39,7 @@ export function createBalancePoll(deps: BalancePollInput) {
   /** Balance refresh period (seconds): eventsRefreshSec.balance of resolved value main entry (the combiner has filled in the default; invalid fallback 1800) */
   const balancePeriodSec = (cfg: Record<string, Record<string, unknown>>): number => {
     const ers = cfg.main?.eventsRefreshSec as Record<string, unknown> | undefined;
-    const n = Number(ers?.balance);
-    return Number.isFinite(n) && n > 0 ? n : 1800;
+    return clampPeriodSec(ers?.balance, 1800);
   };
 
   /**
@@ -49,8 +49,7 @@ export function createBalancePoll(deps: BalancePollInput) {
    */
   const whisperPeriodSec = (conf: Record<string, unknown>): number => {
     const ers = conf.eventsRefreshSec as Record<string, unknown> | undefined;
-    const n = Number(ers?.whisper);
-    return Number.isFinite(n) && n > 0 ? n : 300;
+    return clampPeriodSec(ers?.whisper, 300);
   };
 
   /**
@@ -79,11 +78,20 @@ export function createBalancePoll(deps: BalancePollInput) {
    * the mark is written with the data
    * Leaf, based on which the front end decides whether the text description must be played when the balance is
    * unavailable (the periodic refresh only plays once when the reason changes).
+   * @param petId - 这次刷新「给谁看」（右键菜单点的那只）。缺省 = 不写归属，
+   *   所有开了余额的宠物都照常显示；周期刷新与 /balance 命令都走这条。
    */
-  const refreshBalance = async (manual = false): Promise<void> => {
-    // Start + Result each have one line: Otherwise, neither "Has it been checked" nor "Checked but the balance has not changed" can be seen in logs.txt.
-    log.info(`[dsh-pet] Balance refresh started (${manual ? 'manual' : 'scheduled'})`);
-    const mark = <T>(v: T): T | (T & { manual: true }) => (manual ? { ...v, manual: true } : v);
+  const refreshBalance = async (manual = false, petId?: string): Promise<void> => {
+    // 开始 + 结果各一行：否则 logs.txt 里既看不出「有没有查」，也看不出「查了但余额没变」。
+    log.info(
+      `[dsh-pet] Balance refresh started (${manual ? 'manual' : 'scheduled'}${petId === undefined ? '' : ' pet=' + petId})`,
+    );
+    // manual 与 petId 都只在有时才补键：叶子形状是对外契约，多余的 undefined 键会被严格比对打回
+    const mark = <T>(v: T): T & { manual?: true; petId?: string } => ({
+      ...v,
+      ...(manual ? { manual: true as const } : {}),
+      ...(petId === undefined ? {} : { petId }),
+    });
     try {
       // In standalone mode, you choose the balance service provider and hold the key yourself: its provider is not
       // the one used for chatting, and it cannot be parsed by DSH’s credential store, so the certificate handed over

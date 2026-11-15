@@ -34,6 +34,8 @@ export interface ModelDiscoveryInput {
   protocol?: string;
   baseUrl?: string;
   apiKey?: string;
+  /** 显式清单地址：内置服务的清单与对话地址不同级时由装配根给出，优先于按 baseUrl 推导。 */
+  modelsUrl?: string;
 }
 
 /** An optional model for endpoint declarations. */
@@ -89,7 +91,7 @@ export interface StandaloneAiService {
   /** Get the current settings after desensitization. */
   getSettings(): StandaloneAiPublicSettings;
   /** Internal setup transaction only; includes credentials and must never be serialized in HTTP responses. */
-  connectionForSetup(): Pick<StandaloneAiSettings, 'protocol' | 'baseUrl' | 'model' | 'apiKey'>;
+  connectionForSetup(): Pick<StandaloneAiSettings, 'service' | 'protocol' | 'baseUrl' | 'model' | 'apiKey'>;
   /** Verify and save the settings. After success, the suspension caused by authentication failure will be released. */
   saveSettings(input: unknown): Promise<StandaloneAiPublicSettings>;
   /** Verify address, model and key with one minimum request. */
@@ -100,6 +102,8 @@ export interface StandaloneAiService {
   queryBalance(): Promise<BalanceResult>;
   /** The service provider and key used for balance query; it is used for balance polling on the host side and does not enter the external setting view. */
   balanceAuth(): { provider: string; apiKey: string };
+  /** 单独保存的 DeepSeek 语音密钥；空串表示没单独配。 */
+  deepseekKey(): string;
   /** Are all conditions for initiating the request met? */
   isReady(): boolean;
   /** Terminate in-flight request and release service. */

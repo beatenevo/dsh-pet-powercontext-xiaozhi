@@ -34,6 +34,8 @@ Balance can refresh periodically or manually through the menu or `/balance`. Ani
 
 The context menu can query city and weather and show them for the selected pet. Weather also supplies background to chat, whispers and sleep talk. Set `environmentCity` to override IP location; the settings detection action checks the current IP location without overwriting the city until saved. Queries prefer UAPI and fall back to IP location plus Open-Meteo. Missing results leave the unavailable fields out.
 
+Chat, whispers and sleep talk wait at most one second for optional weather context and continue without it on timeout or failure. Explicit weather queries keep their own network timeout.
+
 `notifyWhenFocused` defaults to false. Enable it to receive system notifications and work-status speech while the page is visible and focused. Click a speech bubble to dismiss it with a pop animation.
 
 ## DSH work status

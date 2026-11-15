@@ -73,6 +73,8 @@ function voiceTargetFor(pet: Record<string, unknown>): VoiceTarget | undefined {
 export type ChatMemoryInput = {
   /** host context (the one apply received). */
   ctx: HostContext;
+  /** Optional environment lookup; tests provide local facts instead of calling public weather services. */
+  environment?: () => Promise<EnvironmentFacts>;
 } & Pick<HostSetup, 'configPaths'> &
   Pick<HostSetup, 'log'> &
   Pick<HostSetup, 'memeDirsFor'> &
@@ -85,6 +87,22 @@ export type ChatMemoryInput = {
  */
 export function createChatMemory(deps: ChatMemoryInput) {
   const { ctx, configPaths, log, memeDirsFor, playback, state, userRoot } = deps;
+  /** Weather enriches replies but must not delay offline chat. Late results may still populate the shared cache. */
+  const environmentForPrompt = async (): Promise<EnvironmentFacts> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        Promise.resolve().then(() => (deps.environment ?? currentEnvironment)()),
+        new Promise<EnvironmentFacts>((resolve) => {
+          timer = setTimeout(() => resolve({}), 1000);
+        }),
+      ]);
+    } catch {
+      return {};
+    } finally {
+      clearTimeout(timer);
+    }
+  };
   // Command "current desktop pet" (/pet selected, /chat used): global single value regardless of session; in-process memory, restart back to the default first pet
   let activePetId = '';
   const sharedRecall = new Map<string, { bindingId?: string; sessionId?: string; status: string; error?: string }>();
@@ -416,7 +434,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     const manualVoiceOn = cfg.main?.voiceEnabled === true;
     const voiceOff = kind === 'whisper' ? !whisperVoiceOn : !manualVoiceOn;
     const target = voiceOff ? undefined : (voiceTo ?? voiceTargetFor(found.pet));
-    const system = petSystemPrompt(found, { env: await currentEnvironment() });
+    const system = petSystemPrompt(found, { env: await environmentForPrompt() });
     // The pool is only counted once: the named picture and the randomly drawn picture share the same one (including file existence determination).
     const pool = readMemePool(found.conf.memes, memeDirsFor(found.entry));
     // I called the name but missed = the configuration was wrongly written or the picture has been deleted: the clear failed, do not silently change to another one (if you click A but see B, you will think it is broken).
@@ -469,7 +487,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     const cfg = readAllConfig(configPaths);
     const found = findPetInstance(cfg, petId);
     if (!found) return false;
-    const system = petSystemPrompt(found, { env: await currentEnvironment() });
+    const system = petSystemPrompt(found, { env: await environmentForPrompt() });
     const result = await generateWhisper(ctx, {
       system,
       preferred: configuredModel(found.conf, 'whisperModel'),
@@ -504,8 +522,8 @@ export function createChatMemory(deps: ChatMemoryInput) {
     | { ok: true; text: string; image?: string }
     | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
   > => {
-    // 环境（城市 + 天气）在锁外查：它是网络往返，压进 withMemoryLock 会把别的对话一起堵住
-    const env = await currentEnvironment();
+    // Query optional weather outside the journal lock so it does not block other conversations.
+    const env = await environmentForPrompt();
     return withMemoryLock(async () => {
       const cfg = readAllConfig(configPaths);
       const found = findPetInstance(cfg, petId);

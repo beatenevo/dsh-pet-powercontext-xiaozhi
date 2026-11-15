@@ -81,8 +81,10 @@ function createMemory(
   },
   captured?: Record<string, unknown>[],
   getService?: (name: string) => unknown,
+  environment: ChatMemoryInput['environment'] = async () => ({}),
 ) {
   return createChatMemory({
+    environment,
     ctx: { ...(fakeCtx(reply, captured) as object), ...(getService ? { get: getService } : {}) },
     configPaths: ws.configPaths,
     log: { info: () => {}, warn: () => {}, error: () => {} },
@@ -712,4 +714,50 @@ describe('optional DSH project memory', () => {
       rmSync(ws.dir, { recursive: true, force: true });
     }
   });
+});
+
+test('available environment facts are included in the chat prompt', async () => {
+  const ws = tempWorkspace();
+  const captured: Record<string, unknown>[] = [];
+  try {
+    const memory = createMemory('hello', ws, undefined, undefined, captured, undefined, async () => ({
+      city: 'TestCity',
+    }));
+    assert.equal((await memory.chatWithPet('main', 'hello')).ok, true);
+    assert.match(JSON.stringify(captured[0].system), /TestCity/);
+  } finally {
+    rmSync(ws.dir, { recursive: true, force: true });
+  }
+});
+
+test('unavailable weather cannot block a reply or local memory persistence', { timeout: 5000 }, async () => {
+  const ws = tempWorkspace();
+  try {
+    const memory = createMemory(
+      'still here',
+      ws,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => new Promise(() => {}),
+    );
+    const result = await memory.chatWithPet('main', 'hello offline');
+    assert.equal(result.ok, true);
+    assert.equal(readMessages(ws.userRoot).slice(-1)[0]?.content, 'still here');
+  } finally {
+    rmSync(ws.dir, { recursive: true, force: true });
+  }
+});
+
+test('failed environment lookup still generates a reply', async () => {
+  const ws = tempWorkspace();
+  try {
+    const memory = createMemory('still here', ws, undefined, undefined, undefined, undefined, async () => {
+      throw new Error('weather offline');
+    });
+    assert.equal((await memory.chatWithPet('main', 'hello')).ok, true);
+  } finally {
+    rmSync(ws.dir, { recursive: true, force: true });
+  }
 });

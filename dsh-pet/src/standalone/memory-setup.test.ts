@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createServer } from 'node:http';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -122,6 +122,63 @@ process.stdin.resume(); process.stdin.on('end', () => server.close());
     assert.equal(resumed.memoryReady, true);
   },
 );
+
+test('first-time failed checks retain private retry credentials without claiming they are saved', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'pet-dsh-memory-retry-'));
+  let generationAllowed = false;
+  const requests: Array<{ url: string; authorization: string }> = [];
+  const server = createServer((req, res) => {
+    requests.push({ url: req.url ?? '', authorization: req.headers.authorization ?? '' });
+    const ok = generationAllowed && req.url?.endsWith('/chat/completions');
+    res.statusCode = ok ? 200 : 401;
+    res.setHeader('content-type', 'application/json');
+    res.end(
+      JSON.stringify(ok ? { choices: [{ message: { content: 'hello' } }] } : { error: 'provider-private-error' }),
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const baseUrl = `http://127.0.0.1:${(server.address() as { port: number }).port}/v1`;
+  const setup = createSetup(
+    home,
+    undefined,
+    memoryConfigBinding({
+      read: async () => ({ chatMemory: { ...DEFAULT_CHAT_MEMORY }, chatMemoryRounds: 4 }),
+      update: async () => assert.fail('failed preflight must not change memory bindings'),
+    }),
+  );
+  t.after(async () => {
+    await setup.dispose();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    rmSync(home, { recursive: true, force: true });
+  });
+  setup.submit({
+    action: 'start',
+    memory: true,
+    baseUrl,
+    model: 'fixture',
+    apiKey: 'generation-draft',
+    embeddingBaseUrl: baseUrl,
+    embeddingModel: 'fixture-vector',
+    embeddingApiKey: 'embedding-draft',
+    embeddingDimension: 3,
+  });
+  const first = await settled(setup);
+  assert.equal(first.errorCode, 'chat_authentication');
+  assert.equal(first.configured, false);
+  assert.equal(first.retryDraft, true);
+  assert.equal(existsSync(join(home, 'dsh-pet/powercontext/settings.json')), false);
+  generationAllowed = true;
+  setup.submit({ action: 'retry' });
+  const second = await settled(setup);
+  assert.equal(second.errorCode, 'embedding_authentication');
+  assert.equal(second.configured, false);
+  assert.equal(requests[requests.length - 1]?.authorization, 'Bearer embedding-draft');
+  assert.equal(requests[1].authorization, 'Bearer generation-draft');
+  for (const secret of ['generation-draft', 'embedding-draft', 'provider-private-error']) {
+    assert.ok(!JSON.stringify(first).includes(secret));
+    assert.ok(!JSON.stringify(second).includes(secret));
+  }
+});
 
 test('pausing a local service preserves an unrelated external memory binding', async () => {
   const main = {

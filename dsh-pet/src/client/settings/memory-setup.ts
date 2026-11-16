@@ -12,12 +12,16 @@ export function makeMemorySetup(rt: SettingsRuntime) {
   return function MemorySetup(props: MemorySetupCallbacks & { disabled: boolean }) {
     const { status, error, pending, send } = useMemorySetup(rt, props);
     const [draft, setDraft] = useState(EMPTY_MEMORY_DRAFT);
+    const [submitted, setSubmitted] = useState(false);
     const filled = useRef(false);
     const modelSnapshot = useRef('');
     useEffect(() => {
       if (!status?.available || status.busy) return;
+      // An accepted background job has not saved credentials yet. Clear them only after it completes.
+      const saved = submitted && status.stage === 'ready' && status.memoryReady && status.configured;
+      if (submitted) setSubmitted(false);
       const serialized = JSON.stringify(status.models ?? null);
-      if (filled.current && serialized === modelSnapshot.current) return;
+      if (filled.current && serialized === modelSnapshot.current && !saved) return;
       filled.current = true;
       modelSnapshot.current = serialized;
       if (status.models)
@@ -27,11 +31,11 @@ export function makeMemorySetup(rt: SettingsRuntime) {
           embeddingDimension: String(status.models.embeddingDimension),
           embeddingSendDimensions: status.models.embeddingSendDimensions !== false,
         });
-    }, [status]);
+    }, [status, submitted]);
     if (status?.available === false) return null;
     const blocked = props.disabled || pending || !!status?.busy || !status || !!error;
-    const run = async (body: unknown) => {
-      if (await send(body)) setDraft((old) => ({ ...old, apiKey: '', embeddingApiKey: '' }));
+    const run = async (body: { action: string; [key: string]: unknown }) => {
+      if ((await send(body)) && (body.action === 'start' || body.action === 'retry')) setSubmitted(true);
     };
     const button = (action: string, label: string, disabled = false) =>
       h('button', {

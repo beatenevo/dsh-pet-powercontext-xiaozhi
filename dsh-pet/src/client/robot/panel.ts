@@ -164,7 +164,7 @@ export function makeRobotPanel(rt: RobotRuntime) {
                                 ? 'robotFailed'
                                 : 'robotRunning',
                         )}`,
-                        h('br'),
+                        h('br', {}),
                         item.message,
                       ],
                     }),

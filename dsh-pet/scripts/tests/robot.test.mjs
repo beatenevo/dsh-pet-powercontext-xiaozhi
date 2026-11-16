@@ -14,11 +14,12 @@ before(async () => {
     JSON.stringify(fileURLToPath(new URL(`../../src/client/robot/${name}.ts`, import.meta.url)));
   const code = `import React from ${JSON.stringify(require.resolve('react'))};
 import { createRoot } from ${JSON.stringify(require.resolve('react-dom/client'))};
+import { jsx } from ${JSON.stringify(require.resolve('react/jsx-runtime'))};
 import { makeRobotPanel } from ${modulePath('panel')};
 import { robotEn } from ${modulePath('locales')};
 import { ROBOT_CSS } from ${modulePath('styles')};
 document.head.appendChild(document.createElement('style')).textContent=ROBOT_CSS;
-const Panel=makeRobotPanel({h:React.createElement,useState:React.useState,useEffect:React.useEffect,useRef:React.useRef,t:(key)=>robotEn[key]});
+const Panel=makeRobotPanel({h:jsx,useState:React.useState,useEffect:React.useEffect,useRef:React.useRef,t:(key)=>robotEn[key]});
 createRoot(document.getElementById('root')).render(React.createElement(Panel,{petId:'main'}));`;
   const bundle = await rolldown({
     input: 'virtual:robot',
@@ -122,6 +123,10 @@ after(async () => {
 });
 async function open(t) {
   const page = await browser.newPage();
+  page.setDefaultTimeout(5000);
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  t.after(() => assert.deepEqual(errors, [], 'The DSH JSX runtime must render robot controls without errors'));
   t.after(() => page.close());
   await page.goto(origin);
   await page.getByText('Astra Pro 2.0 robot', { exact: true }).click();
@@ -148,6 +153,8 @@ test('opening controls sends no motion; each selected action requires explicit o
   assert.match(requests[1].id, /^[a-f0-9-]{36}$/);
   await page.getByText('Recent requests', { exact: true }).click();
   await page.getByText(/Greeting: Controller reported success/).waitFor();
+  await page.getByText('Synthetic controller response', { exact: false }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Stop robot', exact: true }).isEnabled(), true);
 });
 
 test('stop stays available during an unresolved execute request and partial acknowledgement stays visible', async (t) => {

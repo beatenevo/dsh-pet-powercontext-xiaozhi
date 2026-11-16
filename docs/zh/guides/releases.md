@@ -2,7 +2,7 @@
 
 [English](../../en/guides/releases.md) · 简体中文 · [文档首页](../README.md)
 
-包名为 `dsh-pet-powercontext`。当前源码配置的发布版本为 **`0.1.0`**，属于使用 npm **`latest`** 通道的正式版本。[Release workflow](../../../.github/workflows/release.yml)对 PR 和手动运行做验证，只有推送 `v*` 标签才进入发布。仅修改或合并版本号不会发布。
+包名为 `dsh-pet-powercontext`。当前源码配置的发布版本为 **`0.1.0`**，属于使用 npm **`latest`** 通道的正式版本。[Release workflow](../../../.github/workflows/release.yml)仅由推送 `v*` 标签或手动操作触发。普通 PR 和分支推送不会触发打包。只有推送 `v*` 标签才进入发布；仅修改或合并版本号不会发布。
 
 ## 发布准备
 
@@ -32,7 +32,9 @@ git push origin v0.1.0
 | 创建 GitHub Release | 自动生成说明，附上归档和校验文件                                                                             |
 | 桌面构建            | 调用 Windows workflow，将 `dsh-pet-powercontext-<version>-desktop-windows-x64-standard.zip` 挂到同一 Release |
 
-`alpha.N`、`beta.N`、`rc.N` 分别使用对应 npm 通道，并创建 GitHub 预发布；正式版本使用 `latest`。PR 和 **Run workflow** 即使选择标签也不会发布。
+`alpha.N`、`beta.N`、`rc.N` 分别使用对应 npm 通道，并创建 GitHub 预发布；正式版本使用 `latest`。手动运行 **Release** 只验证和打包，即使选择标签也不会发布。进入 **Actions → Release → Run workflow**，可选填 `ref` 来检查指定分支、标签或 PR 引用。
+
+独立的 **Robot slim bundles** 流水线也由推送 `v*` 标签或手动操作触发。它将各平台安装包保存为 Actions artifacts，不会上传到 GitHub Release 或发布到 npm。
 
 ## 失败后怎样处理
 

@@ -2,7 +2,7 @@
 
 English · [简体中文](../../zh/guides/releases.md) · [Documentation](../README.md)
 
-The package is `dsh-pet-powercontext`. The release version configured in this source tree is **`0.1.0`**, a stable release that uses the npm **`latest`** channel. The [Release workflow](../../../.github/workflows/release.yml) validates PRs and manual runs; only a pushed `v*` tag enters publication. Updating or merging the version alone does not publish it.
+The package is `dsh-pet-powercontext`. The release version configured in this source tree is **`0.1.0`**, a stable release that uses the npm **`latest`** channel. The [Release workflow](../../../.github/workflows/release.yml) runs only for pushed `v*` tags or manual dispatches. Pull requests and ordinary branch pushes do not trigger packaging. Only a pushed `v*` tag enters publication; updating or merging the version alone does not publish it.
 
 ## Prepare
 
@@ -32,7 +32,9 @@ Use a new version/tag for later releases. The workflow checks the committed vers
 | Create GitHub Release   | Generate notes and attach the archive and checksum                                                                     |
 | Build desktop           | Call the Windows workflow and attach `dsh-pet-powercontext-<version>-desktop-windows-x64-standard.zip` to that release |
 
-Versions ending in `alpha.N`, `beta.N` or `rc.N` use that npm dist-tag and a GitHub prerelease. Stable versions use `latest`. PRs and **Run workflow**, even when selecting a tag, do not publish.
+Versions ending in `alpha.N`, `beta.N` or `rc.N` use that npm dist-tag and a GitHub prerelease. Stable versions use `latest`. Manual runs of **Release** validate and package without publishing, even when selecting a tag. Use **Actions → Release → Run workflow** and optionally supply `ref` to check a branch, tag, or PR ref.
+
+The separate **Robot slim bundles** workflow also runs on pushed `v*` tags or manual dispatches. It produces platform packages as Actions artifacts without uploading them to a GitHub Release or publishing to npm.
 
 ## Failure and retry
 

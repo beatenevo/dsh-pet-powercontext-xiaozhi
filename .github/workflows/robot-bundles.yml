@@ -3,7 +3,7 @@ name: Robot slim bundles
 on:
   workflow_dispatch:
   push:
-    branches: ["codex/astra-v2-robot-bridge"]
+    tags: ["v*"]
   workflow_call:
 
 permissions:

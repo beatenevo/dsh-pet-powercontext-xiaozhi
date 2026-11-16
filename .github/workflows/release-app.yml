@@ -51,6 +51,11 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Apply the release version from the requested tag
+        env:
+          RELEASE_REF: refs/tags/${{ inputs.tag }}
+        run: node scripts/release-metadata.mjs --write
+
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -58,22 +63,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: Verify package and tag versions
-        run: |
-          if (-not $env:TAG.StartsWith('v')) {
-            Write-Error "Tag must start with v; received: $env:TAG"
-            exit 1
-          }
-          # Integration tags v<version>-test[.N] validate the base version.
-          # Use a proper version tag for publication and mark prereleases accordingly.
-          $base = $env:TAG -replace '-test(\.\d+)?$', ''
-          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          if ("v$version" -ne $base) {
-            Write-Error "Tag $env:TAG has base version $base, but package.json is v$version. Align the version before tagging."
-            exit 1
-          }
-          if ($base -ne $env:TAG) { "Integration tag: $env:TAG (base version $base matches)" } else { "Version matches: $env:TAG" }
 
       - name: Build bundles
         run: pnpm run bundle

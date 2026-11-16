@@ -2,29 +2,28 @@
 
 English · [简体中文](../../zh/guides/releases.md) · [Documentation](../README.md)
 
-The package is `dsh-pet-powercontext`. The release version configured in this source tree is **`0.1.0`**, a stable release that uses the npm **`latest`** channel. The [Release workflow](../../../.github/workflows/release.yml) runs only for pushed `v*` tags or manual dispatches. Pull requests and ordinary branch pushes do not trigger packaging. Only a pushed `v*` tag enters publication; updating or merging the version alone does not publish it.
+The package is `dsh-pet-powercontext`. The release tag determines its version: `v0.1.1` produces version `0.1.1`, and `v0.1.2-beta.1` produces version `0.1.2-beta.1`. You do not need to edit version fields before releasing. The [Release workflow](../../../.github/workflows/release.yml) runs only for pushed `v*` tags or manual dispatches. Pull requests and ordinary branch pushes do not trigger packaging. Only a pushed `v*` tag enters publication.
 
 ## Prepare
 
 1. Merge the intended changes into `master`.
-2. Set the version in `dsh-pet/package.json` and `openapi.yaml` together, then commit and merge that change. Both must read `0.1.0` for the release below.
-3. To publish npm, configure repository Actions variable `NPM_PUBLISH=true` and Actions secret `NPM_TOKEN` with publish access. Use an npm token suitable for unattended publication; never commit it to `.npmrc`. If the variable is absent or false, only GitHub Release and the desktop artifact are published.
-4. Push the matching tag from the intended commit:
+2. To publish npm, configure repository Actions variable `NPM_PUBLISH=true` and Actions secret `NPM_TOKEN` with publish access. Use an npm token suitable for unattended publication; never commit it to `.npmrc`. If the variable is absent or false, only GitHub Release and the desktop artifact are published.
+3. Choose an unused version and push its tag from the intended commit, for example:
 
 ```sh
 git switch master
 git pull --ff-only origin master
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
-Use a new version/tag for later releases. The workflow checks the committed version; it does not rewrite it.
+Before building, the workflows write the tag-derived version into `dsh-pet/package.json` and `openapi.yaml` in the runner checkout. The npm archive, Windows desktop application, and robot packages use that version. These changes are not committed or pushed back to the repository. The source version remains the fallback for local builds and manual branch builds.
 
 ## Automatic sequence
 
 | Stage                   | Work                                                                                                                   |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Validate                | Check package name, version and exact tag match                                                                        |
+| Prepare version         | Validate the package name and tag format; apply the tag version to package and OpenAPI metadata                        |
 | Build                   | Install locked dependencies; run unit tests and full `npm pack` prepack checks                                         |
 | Exercise                | Run Chromium UI/script tests; install the archive and check CLI `--help` / `--check`                                   |
 | Preserve                | Generate SHA256SUMS and upload the tested package as an Actions artifact for 14 days                                   |
@@ -33,6 +32,8 @@ Use a new version/tag for later releases. The workflow checks the committed vers
 | Build desktop           | Call the Windows workflow and attach `dsh-pet-powercontext-<version>-desktop-windows-x64-standard.zip` to that release |
 
 Versions ending in `alpha.N`, `beta.N` or `rc.N` use that npm dist-tag and a GitHub prerelease. Stable versions use `latest`. Manual runs of **Release** validate and package without publishing, even when selecting a tag. Use **Actions → Release → Run workflow** and optionally supply `ref` to check a branch, tag, or PR ref.
+
+Manual tag builds use the selected tag's version. Manual branch or PR builds use the version committed in that checkout. Use `refs/tags/v0.1.1` for an explicit tag or `refs/heads/<branch>` for an explicit branch. Invalid release tags stop the build before version fields are changed.
 
 The separate **Robot slim bundles** workflow also runs on pushed `v*` tags or manual dispatches. It produces platform packages as Actions artifacts without uploading them to a GitHub Release or publishing to npm.
 

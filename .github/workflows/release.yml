@@ -3,7 +3,6 @@ name: Release
 on:
   push:
     tags: ["v*"]
-  pull_request:
   workflow_dispatch:
     inputs:
       ref:
@@ -47,13 +46,15 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Validate package and release version
+      - name: Apply the release version from the selected tag
         id: metadata
+        env:
+          RELEASE_REF: ${{ inputs.ref || github.ref }}
         run: |
           # Chromium child processes need a writable temp directory outside runner-owned mounts.
           install -d -m 1777 /data/codex-tmp
           echo "TMPDIR=/data/codex-tmp" >> "$GITHUB_ENV"
-          node scripts/release-metadata.mjs
+          node scripts/release-metadata.mjs --write
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4

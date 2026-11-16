@@ -43,7 +43,7 @@ The supplied SDK metadata declares MIT but contains no separate vendor license/c
 
 ## Build, sizes and verification
 
-After this workflow is on the default branch, select **Run workflow** and choose a branch. The development branch also builds on push. There are no npm credentials or publishing permissions in this workflow.
+The workflow runs when a `v*` tag is pushed or when you select **Run workflow** and choose a branch or tag. Pull requests and ordinary branch pushes do not trigger packaging. There are no npm credentials or publishing permissions in this workflow.
 
 Each native runner verifies the Python archive and wheel hashes and checks the dependency closure before installing the SDK. Afterwards it permits exactly the two missing OpenCV requirements declared by the unmodified SDK metadata and rejects all other dependency errors. A plain `pip check` therefore reports those intentional omissions; reinstalling the SDK with automatic dependency resolution would restore the vision stack. Validation confirms `cv2` and NumPy are unavailable and imports the actual SDK protocol modules. It tests the relocated interpreter with hostile Python environment variables; exercises status, single/group actions, speech and all three stops against a loopback gRPC server; and repeats smoke tests after extracting the compressed archives. The slim npm archive must install with an empty npm cache in offline mode; the installed HTTP host must then select its bundled interpreter and read the loopback controller state.
 

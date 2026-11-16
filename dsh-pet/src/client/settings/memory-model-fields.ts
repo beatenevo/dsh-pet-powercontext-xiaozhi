@@ -40,6 +40,10 @@ export function makeMemoryModelFields(rt: SettingsRuntime) {
     const apiKey = embedding
       ? draft.embeddingApiKey || (sameModelEndpoint(url, draft.baseUrl) ? draft.apiKey : '')
       : draft.apiKey;
+    const savedKey =
+      !!props.models &&
+      (sameModelEndpoint(url, props.models.baseUrl) ||
+        (embedding && sameModelEndpoint(url, props.models.embeddingBaseUrl)));
     const kind = embedding ? 'embedding' : 'generation';
     const listId = 'memory-model-list-' + kind;
     useEffect(() => {
@@ -151,7 +155,10 @@ export function makeMemoryModelFields(rt: SettingsRuntime) {
         ),
         input(embedding ? 'embeddingBaseUrl' : 'baseUrl', 'url'),
         input(embedding ? 'embeddingApiKey' : 'apiKey', 'password'),
-        h('p', { className: 'dsh-pet-cfg__note', children: t('memorySetupKeyHint') }),
+        h('p', {
+          className: 'dsh-pet-cfg__note',
+          children: t(apiKey ? 'memorySetupDraftKey' : savedKey ? 'memorySetupSavedKey' : 'memorySetupNewKey'),
+        }),
         h('button', {
           type: 'button',
           disabled: locked || loading || !url,

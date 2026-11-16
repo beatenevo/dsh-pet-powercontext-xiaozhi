@@ -419,6 +419,80 @@ test('local memory setup preserves unsaved settings and reflects readiness, paus
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 });
 
+test('failed memory checks retain draft keys and show the failing provider until setup is saved', async (t) => {
+  const calls = [];
+  let snapshot = { ok: true, available: true, stage: 'idle', busy: false, configured: false };
+  const { page } = await open(t, {
+    lang: 'zh',
+    memorySetup: (route) => {
+      if (route.request().method() === 'POST') {
+        calls.push(route.request().postDataJSON());
+        snapshot = { ...snapshot, stage: 'checking', busy: true, errorCode: undefined };
+      }
+      return route.fulfill({ json: snapshot });
+    },
+  });
+  const card = page.locator('[data-memory-setup]');
+  await card.getByLabel('记忆模型预设', { exact: true }).selectOption('deepseek');
+  await card.getByLabel('生成模型密钥', { exact: true }).fill('generation-draft');
+  await card.getByLabel('向量模型服务商', { exact: true }).selectOption('qwen-cn');
+  await card.getByLabel('Embedding 密钥', { exact: true }).fill('embedding-draft');
+  await card.getByRole('button', { name: '检查并启用记忆' }).click();
+  await card.getByText('正在检查生成模型…', { exact: true }).waitFor();
+  assert.equal(await card.getByLabel('生成模型密钥', { exact: true }).inputValue(), 'generation-draft');
+  assert.equal(await card.getByLabel('Embedding 密钥', { exact: true }).inputValue(), 'embedding-draft');
+
+  snapshot = {
+    ...snapshot,
+    stage: 'error',
+    busy: false,
+    errorCode: 'embedding_authentication',
+    canRetry: true,
+    retryDraft: true,
+  };
+  await card.getByRole('button', { name: '刷新状态', exact: true }).click();
+  await card
+    .getByText('Embedding 密钥验证失败，请检查密钥是否有效，以及地址和密钥是否属于同一地域。', { exact: true })
+    .waitFor();
+  assert.equal(await card.getByLabel('生成模型密钥', { exact: true }).inputValue(), 'generation-draft');
+  assert.equal(await card.getByLabel('Embedding 密钥', { exact: true }).inputValue(), 'embedding-draft');
+
+  await card.getByLabel('Embedding 密钥', { exact: true }).fill('corrected-embedding-key');
+  await card.getByRole('button', { name: '检查并启用记忆' }).click();
+  await card.getByText('正在检查生成模型…', { exact: true }).waitFor();
+  assert.equal(calls[1].apiKey, 'generation-draft');
+  assert.equal(calls[1].embeddingApiKey, 'corrected-embedding-key');
+  snapshot = {
+    ...snapshot,
+    stage: 'ready',
+    busy: false,
+    configured: true,
+    memoryReady: true,
+    memoryEnabled: true,
+    models: {
+      baseUrl: calls[1].baseUrl,
+      model: calls[1].model,
+      embeddingBaseUrl: calls[1].embeddingBaseUrl,
+      embeddingModel: calls[1].embeddingModel,
+      embeddingDimension: calls[1].embeddingDimension,
+    },
+  };
+  await card.getByRole('button', { name: '刷新状态', exact: true }).click();
+  await card.getByText('本次配置已完成。', { exact: true }).waitFor();
+  assert.equal(await card.getByLabel('生成模型密钥', { exact: true }).inputValue(), '');
+  assert.equal(await card.getByLabel('Embedding 密钥', { exact: true }).inputValue(), '');
+  assert.equal(await card.getByText('当前地址已保存密钥，留空沿用，填写新值可更新。', { exact: true }).count(), 2);
+
+  // Updating only a key must also clear the draft after success, even though public model fields are unchanged.
+  await card.getByLabel('生成模型密钥', { exact: true }).fill('replacement-generation-key');
+  await card.getByRole('button', { name: '检查并启用记忆' }).click();
+  await card.getByText('正在检查生成模型…', { exact: true }).waitFor();
+  snapshot = { ...snapshot, stage: 'ready', busy: false };
+  await card.getByRole('button', { name: '刷新状态', exact: true }).click();
+  await card.getByText('本次配置已完成。', { exact: true }).waitFor();
+  assert.equal(await card.getByLabel('生成模型密钥', { exact: true }).inputValue(), '');
+});
+
 test('local memory setup cancels background preparation and distinguishes failed writes', async (t) => {
   let snapshot = {
     ok: true,

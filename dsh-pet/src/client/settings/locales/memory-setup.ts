@@ -34,7 +34,10 @@ export const memorySetupEn = {
   memorySetup_embeddingDimension: 'Embedding dimensions',
   memorySetup_embeddingApiKey: 'Embedding API key',
   memorySetupSavedKey: 'A key is saved for this address. Leave it blank to reuse it, or enter a replacement.',
-  memorySetupNewKey: 'Enter a key for this endpoint and region. Keys are stored privately on the DSH host.',
+  memorySetupDraftKey:
+    'Key entered. It is saved after setup succeeds; failed checks keep it in this form so you can correct and resubmit.',
+  memorySetupNewKey:
+    'No key is saved for this address. Remote services need their own key; local services may not. Keys are saved privately on the DSH host after successful setup.',
   memorySetupAdvanced: 'Embedding endpoint and key',
   memorySetupEmbeddingHint:
     'Leave the endpoint blank to use the generation endpoint. A key can be reused only at the same endpoint. Existing embedding models, endpoints and dimensions are locked to preserve the stored vectors.',
@@ -54,6 +57,52 @@ export const memorySetupEn = {
   memorySetupStop: 'Pause memory',
   memorySetup_error:
     'Preparation failed. Check the model endpoints, keys, dimensions, network and disk space, then retry. Existing data is retained.',
+  memorySetup_error_chat_authentication:
+    'The generation API key was rejected. Check that it is valid and belongs to this endpoint and region.',
+  memorySetup_error_chat_quota:
+    'The generation service reported a quota or rate limit. Check your account and retry later.',
+  memorySetup_error_chat_not_found: 'The generation model or API was not found. Check the model ID and endpoint.',
+  memorySetup_error_chat_timeout: 'The generation service timed out. Check connectivity and retry.',
+  memorySetup_error_chat_connection: 'Could not connect to the generation service. Check the endpoint and network.',
+  memorySetup_error_chat_unknown:
+    'The generation check failed. Check the model, endpoint and key; existing settings are retained.',
+  memorySetup_error_chat_key_required:
+    'Enter an API key for this generation endpoint. A key from another endpoint cannot be reused.',
+  memorySetup_error_embedding_key_required:
+    'Enter an embedding API key. The generation key can be reused only at the same endpoint.',
+  memorySetup_error_embedding_authentication:
+    'The embedding API key was rejected. Check that it is valid and belongs to this endpoint and region.',
+  memorySetup_error_embedding_quota:
+    'The embedding service reported a quota or rate limit. Check your account and retry later.',
+  memorySetup_error_embedding_not_found: 'The embedding model or API was not found. Check the model ID and endpoint.',
+  memorySetup_error_embedding_dimension:
+    'The returned embedding dimensions do not match. Check the configured dimensions.',
+  memorySetup_error_embedding_unavailable:
+    'The embedding check failed. Verify that the service supports this model and dimensions.',
+  memorySetup_error_embedding_timeout: 'The embedding service timed out. Check connectivity and retry.',
+  memorySetup_error_embedding_connection: 'Could not connect to the embedding service. Check the endpoint and network.',
+  memorySetup_error_unsupported_platform:
+    'Automatic installation is unavailable on this system. Connect an existing PowerContext server instead.',
+  memorySetup_error_memory_not_ready:
+    'Memory did not become ready in time. Retry and check model connectivity and the local runtime.',
+  memorySetup_error_memory_start_failed:
+    'The memory service exited. Retry the saved configuration; existing memory is retained.',
+  memorySetup_error_memory_port_in_use:
+    'The memory service port is in use. Stop the process using it and retry; existing memory is retained.',
+  memorySetup_error_runtime_command_failed:
+    'Runtime installation failed. Check network access and disk space, then retry.',
+  memorySetup_error_runtime_tool_missing:
+    'Automatic installation requires curl and tar. Install them or connect an existing memory server.',
+  memorySetup_error_runtime_command_timeout:
+    'Download or installation timed out. Check connectivity and retry; existing memory is retained.',
+  memorySetup_error_download_checksum_failed:
+    'Download verification failed, so installation was not run. Check connectivity and retry.',
+  memorySetup_error_invalid_setup:
+    'Complete the model settings, including the embedding model and dimensions for custom services.',
+  memorySetup_error_setup_not_configured: 'No memory configuration has been saved. Complete the setup form first.',
+  memorySetup_error_invalid_memory_settings:
+    'The local memory configuration could not be read. Check it before retrying; the original file is retained.',
+  memorySetup_error_setup_busy: 'Memory preparation is already running. Wait for it to finish or cancel it first.',
   memorySetup_error_memory_already_owned:
     'Another pet process owns this memory store. Stop it before starting memory here.',
   memorySetup_error_embedding_change_requires_new_store:
@@ -110,7 +159,9 @@ export const memorySetupZh: Record<keyof typeof memorySetupEn, string> = {
   memorySetup_embeddingDimension: '向量维度',
   memorySetup_embeddingApiKey: 'Embedding 密钥',
   memorySetupSavedKey: '当前地址已保存密钥，留空沿用，填写新值可更新。',
-  memorySetupNewKey: '填写此地址与地域的密钥，凭据私密保存在 DSH 所在机器。',
+  memorySetupDraftKey: '密钥已填写，设置成功后保存；检查失败时会保留在本表单中，便于修改后重新提交。',
+  memorySetupNewKey:
+    '尚未保存此地址的密钥。远程服务请填写自己的密钥，本机服务可留空；设置成功后凭据私密保存在 DSH 所在机器。',
   memorySetupAdvanced: 'Embedding 地址与密钥',
   memorySetupEmbeddingHint:
     '地址留空使用生成服务地址；仅同一地址可复用密钥。已有库的 Embedding 模型、地址和维度固定，以保持向量空间一致。',
@@ -128,6 +179,34 @@ export const memorySetupZh: Record<keyof typeof memorySetupEn, string> = {
   memorySetupCancel: '取消准备',
   memorySetupStop: '暂停记忆',
   memorySetup_error: '准备未完成，请检查模型地址、密钥、向量维度、网络及磁盘空间后重试。已有数据保留。',
+  memorySetup_error_chat_authentication: '生成模型密钥验证失败，请检查密钥是否有效，以及地址和密钥是否属于同一地域。',
+  memorySetup_error_chat_quota: '生成服务额度或调用频率受限，请检查账户后稍后重试。',
+  memorySetup_error_chat_not_found: '找不到生成模型或接口，请检查模型名与接口地址。',
+  memorySetup_error_chat_timeout: '生成服务响应超时，请检查网络后重试。',
+  memorySetup_error_chat_connection: '无法连接生成服务，请检查接口地址与网络。',
+  memorySetup_error_chat_unknown: '生成模型检查未通过，请检查模型、地址和密钥；原有配置保留。',
+  memorySetup_error_chat_key_required: '请填写此生成服务的 API 密钥，更换地址后不能沿用其他服务的密钥。',
+  memorySetup_error_embedding_key_required: '请填写 Embedding 服务的密钥，只有相同地址才可复用生成服务密钥。',
+  memorySetup_error_embedding_authentication:
+    'Embedding 密钥验证失败，请检查密钥是否有效，以及地址和密钥是否属于同一地域。',
+  memorySetup_error_embedding_quota: 'Embedding 服务额度或调用频率受限，请检查账户后稍后重试。',
+  memorySetup_error_embedding_not_found: '找不到 Embedding 模型或接口，请检查模型名与接口地址。',
+  memorySetup_error_embedding_dimension: 'Embedding 返回的向量维度不匹配，请核对填写的维度。',
+  memorySetup_error_embedding_unavailable: 'Embedding 检查未通过，请确认接口支持所选模型与维度。',
+  memorySetup_error_embedding_timeout: 'Embedding 服务响应超时，请检查网络后重试。',
+  memorySetup_error_embedding_connection: '无法连接 Embedding 服务，请检查地址和网络。',
+  memorySetup_error_unsupported_platform: '此系统暂不支持自动安装，请连接已有 PowerContext 服务。',
+  memorySetup_error_memory_not_ready: '记忆服务启动检查超时，请重试并检查模型连接与本机运行环境。',
+  memorySetup_error_memory_start_failed: '记忆服务已退出，请按已保存配置重试；已有记忆保留。',
+  memorySetup_error_memory_port_in_use: '记忆服务端口已被占用，请停止占用程序后重试；已有记忆保留。',
+  memorySetup_error_runtime_command_failed: '运行环境安装失败，请检查网络与磁盘空间后重试。',
+  memorySetup_error_runtime_tool_missing: '自动安装需要 curl 和 tar，请安装后重试，或连接已有记忆服务。',
+  memorySetup_error_runtime_command_timeout: '下载或安装等待超时，请检查网络后重试；已有记忆保留。',
+  memorySetup_error_download_checksum_failed: '下载校验未通过，未执行安装，请检查网络后重试。',
+  memorySetup_error_invalid_setup: '请补全模型设置，自定义服务还需填写 Embedding 模型与维度。',
+  memorySetup_error_setup_not_configured: '尚未保存记忆服务配置，请先完成上方设置。',
+  memorySetup_error_invalid_memory_settings: '无法读取本机记忆配置，请检查后重试；原文件保留。',
+  memorySetup_error_setup_busy: '记忆准备任务正在运行，请等待完成或先取消。',
   memorySetup_error_memory_already_owned: '另一个桌宠进程正在管理此记忆库，请先停止那个进程中的记忆服务。',
   memorySetup_error_embedding_change_requires_new_store: '请保留已保存的 Embedding 模型、地址和维度；可以更新密钥。',
   memorySetup_error_recovery_failed: '恢复未完成，请检查已保存配置与服务状态后再重试。',

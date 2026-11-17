@@ -27,3 +27,5 @@
 | `src/client/robot/settings.ts` | 目录选择及配置面板           |
 
 验证：`npm run test:robot` 使用本地模拟 MCP 服务覆盖 JSON/SSE、会话、长整数、目录失败、工具失败、超时与授权。此验证不能替代现场设备联调。
+
+机器人向桌宠发送语音或文字，请参见 [Astra 语音与桌宠对接说明书](./astra-voice-integration.md)。

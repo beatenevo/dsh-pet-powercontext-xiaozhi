@@ -240,6 +240,8 @@ function sendIcon(h: ChatPanelRuntime['h']): unknown {
  * box, because the inner textarea has no border.
  */
 export function composerNode(h: ChatPanelRuntime['h'], t: ChatPanelRuntime['t'], state: ChatPanelState): unknown {
+  const phase = state.recordingPhase ?? 'idle';
+  const recordingBusy = phase === 'permission' || phase === 'recording' || phase === 'recognizing';
   return h('div', {
     className: 'pet-chat-composer' + (state.busy ? ' is-busy' : ''),
     // The entire block is grayed out during generation: both screen reading and visual interpretation indicate that "this item has been sent."
@@ -257,6 +259,14 @@ export function composerNode(h: ChatPanelRuntime['h'], t: ChatPanelRuntime['t'],
     },
     children: [
       previewNode(h, t, state),
+      state.toggleRecording
+        ? h('div', {
+            className: 'pet-chat-record-status',
+            role: 'status',
+            'aria-live': 'polite',
+            children: t(`recordStatus_${phase}`),
+          })
+        : null,
       h('textarea', {
         className: 'pet-chat-input',
         ref: state.draftRef,
@@ -294,13 +304,31 @@ export function composerNode(h: ChatPanelRuntime['h'], t: ChatPanelRuntime['t'],
               }),
             ],
           }),
+          state.toggleRecording
+            ? h('button', {
+                type: 'button',
+                className: 'pet-chat-record',
+                'aria-pressed': phase === 'recording',
+                disabled: state.busy || !state.petId || phase === 'permission' || phase === 'recognizing',
+                onClick: state.toggleRecording,
+                children: phase === 'recording' ? t('recordStop') : t('recordStart'),
+              })
+            : null,
+          recordingBusy
+            ? h('button', {
+                type: 'button',
+                className: 'pet-chat-record',
+                onClick: state.cancelRecording,
+                children: t('recordCancel'),
+              })
+            : null,
           h('span', { className: 'pet-chat-composer-spacer' }),
           h('button', {
             type: 'button',
             className: 'pet-chat-send' + (state.busy ? ' is-busy' : ''),
             'aria-label': state.busy ? t('composerSending') : t('composerSend'),
             onClick: () => state.send(),
-            disabled: state.busy,
+            disabled: state.busy || recordingBusy,
             // Switching circles during generation: leaving the arrows on will make people think they can still click (the button is disabled at this time)
             children: state.busy
               ? h('span', { className: 'pet-chat-send-spinner', 'aria-hidden': 'true' })

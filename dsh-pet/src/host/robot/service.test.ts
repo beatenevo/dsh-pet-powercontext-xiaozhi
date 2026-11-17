@@ -475,6 +475,7 @@ test('one opt-in speaks every new linked-pet utterance once, without history, cl
   h.state.writePet('main', 'say', { text: 'Before enabling' });
   await enableChat(h);
   h.state.read();
+  h.state.writePet('main', 'say', { text: 'Mirrored robot speech', source: 'robot-input' });
   h.state.writePet('another-pet', 'say', { text: 'Not the linked pet' });
   h.state.writePet('main', 'say', { clear: true });
   h.state.writePet('main', 'say', { image: 'image.png' });

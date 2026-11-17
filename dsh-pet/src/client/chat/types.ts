@@ -66,6 +66,10 @@ export interface DraftKeyEvent {
 
 /** hook Returns: status, derived values, actions, and list references. */
 export interface ChatPanelState extends PanelData {
+  /** Optional for consumers that render a non-recording composer. */
+  readonly recordingPhase?: import('./recording.ts').RecordingPhase;
+  readonly toggleRecording?: () => void;
+  readonly cancelRecording?: () => void;
   /** The current round to be rendered (has been intercepted by {@link PanelData.visibleRounds}). */
   readonly rounds: readonly ChatRound[];
   /** There are earlier rounds in the memory that are not displayed. */

@@ -389,6 +389,8 @@ export function createRobotService(options: {
     if (leaf !== 'say' || !data || typeof data !== 'object' || !('text' in data) || typeof data.text !== 'string')
       return;
     if (disposed || storageError || !config.enabled || !config.chatSpeech || config.petId !== petId || stopping) return;
+    // Mirrored robot speech must not be sent back to the robot's speaker.
+    if ('source' in data && data.source === 'robot-input') return;
     const text = data.text.trim();
     if (!text || ('clear' in data && data.clear === true)) return;
     const id = randomUUID();

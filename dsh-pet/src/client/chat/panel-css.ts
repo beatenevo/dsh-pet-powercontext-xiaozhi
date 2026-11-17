@@ -544,12 +544,17 @@ ${COMPARISON_CSS}
   color: var(--dsw-alias-label-tertiary);
 }
 
+.pet-chat-record-status { padding: 4px 0; font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.pet-chat-record[aria-pressed="true"] { font-weight: bold; outline: 2px solid currentColor; }
+.pet-chat-record:disabled { opacity: .5; cursor: default; }
 .pet-chat-composer-bar {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   gap: ${px(SIZE.gap)};
 }
 
+.pet-chat-record,
 .pet-chat-attach {
   display: inline-flex;
   align-items: center;

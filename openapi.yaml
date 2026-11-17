@@ -229,6 +229,91 @@ paths:
                   accepted: { type: boolean }
                   status:
                     $ref: "#/components/schemas/ObservabilityStatus"
+  /dsh-pet-7340/robot/input:
+    post:
+      tags: [Robot]
+      operationId: receiveRobotInput
+      summary: Receive robot text or a complete audio utterance
+      description: |
+        Exactly one of text or audio is required. Audio uses the configured ASR service
+        (base64, complete 16 kHz mono PCM16 WAV, at most 7 MiB decoded).
+        Chat mode generates a reply using existing memory, voice and animation settings.
+        Say mode mirrors recognized text without forwarding it back to robot TTS.
+        Empty recognition succeeds with skipped=true and no presentation effects.
+        Success acknowledges dispatch, not audible speech or completed animation.
+      parameters:
+        - name: pet
+          in: query
+          required: true
+          schema: { type: string }
+        - name: surface
+          in: query
+          required: true
+          schema: { type: string, enum: [desktop, web] }
+        - name: session
+          in: query
+          schema: { type: string, maxLength: 256 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                text: { type: string, minLength: 1, maxLength: 2000 }
+                audio:
+                  {
+                    type: string,
+                    minLength: 1,
+                    description: Base64 WAV without a data URI prefix,
+                  }
+                provider:
+                  {
+                    type: string,
+                    minLength: 1,
+                    description: ASR provider ID; audio only,
+                  }
+                mode: { type: string, enum: [chat, say], default: chat }
+                animation:
+                  {
+                    type: string,
+                    minLength: 1,
+                    description: Registered animation name; say only,
+                  }
+                speak:
+                  {
+                    type: boolean,
+                    default: true,
+                    description: Local TTS; say only,
+                  }
+              oneOf:
+                - required: [text]
+                  not: { required: [audio] }
+                - required: [audio]
+                  not: { required: [text] }
+              dependentRequired:
+                provider: [audio]
+              allOf:
+                - if:
+                    anyOf:
+                      - required: [animation]
+                      - required: [speak]
+                  then:
+                    required: [mode]
+                    properties:
+                      mode: { const: say }
+      responses:
+        "200":
+          description: JSON with ok; success includes inputText and text (or skipped), optional playbackId. Business errors include reason and message.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "400":
+          description: Invalid JSON
+        "405":
+          description: Method not allowed
+
   /dsh-pet-7340/robot:
     get:
       tags:
@@ -3860,7 +3945,7 @@ components:
         chatSpeech:
           type: boolean
           default: false
-          description: Forward all new text utterances from petId to robot TTS, including replies, whispers, sleep talk and robot feedback. Requires enabled. One switch, independent of computer TTS. Long messages are split into Unicode-safe chunks of at most 500 UTF-16 code units; the transient queue holds at most 100 chunks, expiring after two minutes. Stop, configuration changes and restart discard the queue. Offline or failed delivery clears the backlog without retry; no history replay. Speech receipts never generate new speech.
+          description: Forward all new text utterances from petId to robot TTS, including replies, whispers, sleep talk and robot feedback. Mirrored utterances from robot/input say mode are excluded. Requires enabled. One switch, independent of computer TTS. Long messages are split into Unicode-safe chunks of at most 500 UTF-16 code units; the transient queue holds at most 100 chunks, expiring after two minutes. Stop, configuration changes and restart discard the queue. Offline or failed delivery clears the backlog without retry; no history replay. Speech receipts never generate new speech.
         chatActions:
           type: boolean
           default: false

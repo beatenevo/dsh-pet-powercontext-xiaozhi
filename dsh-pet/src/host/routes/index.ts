@@ -17,6 +17,7 @@ import { handleCharacterRoutes } from './character.ts';
 import { handleChatRoutes } from './chat.ts';
 import { handleMemoryLibraryRoutes } from './memory-library.ts';
 import { handleMemorySetupRoutes } from './memory-setup.ts';
+import { handleRobotInputRoutes } from './robot-input.ts';
 import { handleRobotRoutes } from './robot.ts';
 import { handleComparisonRoutes } from './comparison.ts';
 import { handleObservabilityRoutes } from './observability.ts';
@@ -53,6 +54,7 @@ const HANDLERS: readonly RouteHandler[] = [
   handleMemoryLibraryRoutes,
   handleMemorySetupRoutes,
   handleRobotRoutes,
+  handleRobotInputRoutes,
   handleAttachmentRoutes,
   handleTodoRoutes,
   handleVoiceRoutes,
@@ -70,7 +72,7 @@ const HANDLERS: readonly RouteHandler[] = [
  * and will not cause "pets that won't wake up".
  */
 function sleepGated(rest: string, method: string): boolean {
-  if (rest === 'chat') return method === 'POST';
+  if (rest === 'chat' || rest === 'robot/input') return method === 'POST';
   if (rest === 'todos') return method === 'POST' || method === 'DELETE';
   return (
     rest === 'anim' ||

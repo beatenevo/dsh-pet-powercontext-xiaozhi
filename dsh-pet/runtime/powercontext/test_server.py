@@ -1,4 +1,4 @@
-"""验证命令行拒绝静默回退和无效追踪组合，不启动数据库。"""
+"""Verify CLI rejection of silent fallback and invalid tracing flags without starting a database."""
 
 import json
 import os

@@ -1,7 +1,7 @@
-"""为专用 seekdb Server 管理 SQL 事件监听，继承当前请求链路并在退出时卸载。
+"""Manage SQL listeners for a dedicated seekdb server, preserving request trace context.
 
-只观察目标库的 seekdb 连接，不导出参数、结果或异常正文。
-SQL 文本须显式启用，先移除字面量和注释；观测失败不影响数据库操作。
+Observe only the target seekdb database; omit parameters, results, and exception text.
+SQL text is opt-in and redacted; telemetry failures must not affect database operations.
 """
 
 import re
@@ -23,7 +23,7 @@ _OPERATIONS = frozenset(("SELECT", "WITH", "INSERT", "UPDATE", "DELETE"))
 
 
 def query_metadata(statement):
-    """返回有限长的脱敏 DML 模板；无法闭合的引号或注释不导出。"""
+    """Return a bounded, redacted DML template; reject unclosed quotes or comments."""
     if not isinstance(statement, str) or len(statement) > 65536:
         return None
     pieces = []
@@ -49,7 +49,7 @@ def query_metadata(statement):
 
 
 class SeekDBTracing(AbstractContextManager):
-    """持有本进程的监听器；不注册或关闭调用方的 OTel provider。"""
+    """Own process-local listeners without registering or closing the caller's OTel provider."""
 
     def __init__(self, provider, database, *, include_sql=False):
         self.tracer = provider.get_tracer("dsh-pet.powercontext.seekdb")
@@ -80,7 +80,7 @@ class SeekDBTracing(AbstractContextManager):
         self.listeners.clear()
 
     def before(self, conn, cursor, statement, parameters, context, executemany):
-        """只在采样中的父 span 下创建真实查询子 span。"""
+        """Create actual query spans only under valid, sampled parent spans."""
         try:
             url = conn.engine.url
             parent = trace.get_current_span().get_span_context()
@@ -105,12 +105,12 @@ class SeekDBTracing(AbstractContextManager):
                 "seekdb." + operation, kind=SpanKind.CLIENT, attributes=attributes
             )
             setattr(context, self.span_key, span)
-        except Exception:  # noqa: BLE001 - 观测异常不得改变数据库调用结果。
-            # 观测端不可用不能改变数据库调用的成败。
+        except Exception:  # noqa: BLE001 - Telemetry errors must not change database results.
+            # An unavailable telemetry backend must not affect database success or failure.
             return
 
     def finish(self, context, failed=False):
-        """完成一次查询且清空状态，错误只标记类别。"""
+        """Finish a query and clear its state; record only error status on failure."""
         if context is None:
             return
         span = getattr(context, self.span_key, None)
@@ -121,7 +121,7 @@ class SeekDBTracing(AbstractContextManager):
             if failed:
                 span.set_status(Status(StatusCode.ERROR))
             span.end()
-        except Exception:  # noqa: BLE001 - 导出器异常不得替换数据库结果。
+        except Exception:  # noqa: BLE001 - Exporter errors must not replace database results.
             return
 
     def after(self, conn, cursor, statement, parameters, context, executemany):

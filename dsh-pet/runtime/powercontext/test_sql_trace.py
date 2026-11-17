@@ -1,4 +1,4 @@
-"""验证事件生命周期、链路归属和 SQL 隐私；数据库事件使用本地 SQLite 驱动。"""
+"""Test listener lifecycle, trace ownership, and SQL privacy using local SQLite events."""
 
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -22,7 +22,7 @@ class SQLTraceTests(unittest.TestCase):
         self.provider.add_span_processor(SimpleSpanProcessor(self.exporter))
         self.tracer = self.provider.get_tracer("test")
         self.engine = create_engine("sqlite://")
-        # 只替换连接身份以测试过滤，实际执行与异常仍来自 SQLite。
+        # Override only connection identity; execution and errors still come from SQLite.
         self.engine.url = URL.create("mysql+aseekdb", database="powercontext")
         self.addCleanup(self.provider.shutdown)
         self.addCleanup(self.engine.dispose)

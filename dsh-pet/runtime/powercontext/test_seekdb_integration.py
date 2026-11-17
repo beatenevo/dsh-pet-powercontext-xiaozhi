@@ -1,4 +1,4 @@
-"""真实 seekdb 验证：HTTP 父链路、记忆持久化、全文与向量 SQL；无需模型密钥。"""
+"""Test real seekdb writes, full-text/vector SQL, and HTTP trace continuity without model keys."""
 
 import os
 import unittest
@@ -21,7 +21,7 @@ from sql_trace import SeekDBTracing
 
 
 class FixtureEmbedding:
-    """固定向量仅用于测试 SQL 与父链路，不作为语义检索质量证据。"""
+    """Use fixed vectors to test SQL and trace continuity, not semantic retrieval quality."""
 
     profile = EmbeddingProfile(profile_id="integration", model="fixture", dimension=3)
 

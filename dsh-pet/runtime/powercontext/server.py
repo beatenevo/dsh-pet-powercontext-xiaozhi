@@ -1,7 +1,7 @@
-"""启动独立的 PowerContext seekdb 服务，并接入可卸载的 SQL 追踪。
+"""Start a standalone PowerContext seekdb server with removable SQL tracing.
 
-沿用 PowerContext 的环境配置、认证和生命周期，不启动第二个数据库副本。
-同一数据目录只允许一个服务进程；数据库迁移仍由 PowerContext 管理。
+Reuse PowerContext environment settings, authentication, and lifecycle management.
+Run one server per data directory; PowerContext continues to manage migrations.
 """
 
 import argparse
@@ -9,7 +9,7 @@ from contextlib import nullcontext
 
 
 def main():
-    """验证 seekdb 配置后启动服务，关闭时先卸载 SQL 监听。"""
+    """Validate seekdb settings and remove SQL listeners before shutting down tracing."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--sql-text",

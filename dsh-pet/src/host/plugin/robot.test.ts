@@ -46,9 +46,7 @@ async function harness(t: TestContext, display: string) {
     action: 'configure',
     config: {
       ...defaultRobotConfig(),
-      address: '127.0.0.1:1',
-      // No installed interpreter or hardware is used by this test.
-      python: join(root, 'missing', 'python3'),
+      address: 'http://127.0.0.1:1/mcp',
       petId,
     },
   });
@@ -94,7 +92,7 @@ test('confirming an old proposal cannot move a robot for a deleted pet', async (
       ...h.service.snapshot().config,
       enabled: true,
       chatActions: true,
-      actions: [{ key: 'greet', name: 'Greeting', actionIds: [100], petAnimation: '' }],
+      actions: [{ key: 'greet', name: 'Greeting', tool: 'startTeachProgram', target: '100', petAnimation: '' }],
     },
   });
   const context = h.service.beginChat(h.petId)!;

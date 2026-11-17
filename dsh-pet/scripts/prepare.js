@@ -53,7 +53,6 @@ const keep = [
   'src',
   'assets/webm',
   'runtime/electron-helper',
-  'runtime/astra/bridge.py',
   'runtime/powercontext/server.py',
   'runtime/powercontext/sql_trace.py',
   'runtime/powercontext/requirements.txt',

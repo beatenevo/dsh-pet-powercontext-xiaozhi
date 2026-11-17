@@ -1,7 +1,7 @@
 /**
  * Own the optional robot connection, one-shot motion authorization and command receipts.
  * Calls never retry automatically; losing a result consumes authorization and leaves an unknown receipt.
- * Each stop runs independently of the command worker. Host restart always disarms control.
+ * Cancelling a wait never establishes physical stop. Host restart always disarms control.
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
@@ -31,7 +31,7 @@ export interface RobotService {
   dispose(): Promise<void>;
 }
 
-/** Create a controller with an injectable SDK transport; no movement is sent during construction. */
+/** Create a controller with an injectable MCP transport; no movement is sent during construction. */
 export function createRobotService(options: {
   userRoot: string;
   state: PollStateStore;
@@ -59,7 +59,12 @@ export function createRobotService(options: {
   let error = '';
   try {
     const saved = readPrivateJson(configFile);
-    if (saved !== undefined) config = robotConfigSchema.parse(saved);
+    if (saved !== undefined) {
+      if (typeof saved === 'object' && saved !== null && 'python' in saved) {
+        // SDK 动作 ID 与示教程序主键不兼容，不能自动转换并继续执行。
+        error = 'robot_mcp_setup_required';
+      } else config = robotConfigSchema.parse(saved);
+    }
     receipts = readRobotJournal(journalFile);
   } catch {
     storageError = true;
@@ -74,6 +79,7 @@ export function createRobotService(options: {
   let checkedAt = 0;
   let connected = false;
   let telemetry: RobotSnapshot['telemetry'];
+  let catalog: RobotSnapshot['catalog'];
   let stopResult: RobotResult | undefined;
   let stopOperation: Promise<RobotResult> | undefined;
   let statusAbort: AbortController | undefined;
@@ -114,6 +120,7 @@ export function createRobotService(options: {
     checkedAt,
     connected: connected && now() - checkedAt < 15_000,
     telemetry,
+    catalog,
     error,
     stopResult,
     pendingAction: pendingAction && pendingAction.expiresAt > now() ? { ...pendingAction } : undefined,
@@ -153,10 +160,14 @@ export function createRobotService(options: {
           const result = await run(config, { operation: 'status' }, abort.signal);
           if (disposed || abort.signal.aborted) return;
           checkedAt = now();
-          connected = result.ok && !!result.telemetry;
+          connected = result.ok;
+          catalog = result.catalog;
           telemetry = result.telemetry;
           error = connected ? '' : result.code;
-          if (!connected || telemetry?.actionCode !== 520000 || telemetry.modes.some((mode) => mode !== 1))
+          if (
+            !connected ||
+            (telemetry && (telemetry.actionCode !== 520000 || telemetry.modes.some((mode) => mode !== 1)))
+          )
             armed = false;
           // Speech acknowledgements can change the free-form description. Only actual controller
           // state transitions create status bubbles; speech's own checks/receipts never feed TTS again.
@@ -199,7 +210,7 @@ export function createRobotService(options: {
     if (item.state === 'running') {
       item.state = result.ok
         ? 'reported-success'
-        : result.code === 'rejected' || result.code === 'sdk_unavailable' || result.code === 'python_unavailable'
+        : result.code === 'rejected' || result.code === 'unsupported_tool' || result.code === 'invalid_target'
           ? 'failed'
           : 'unknown';
       item.message = result.message;
@@ -234,7 +245,7 @@ export function createRobotService(options: {
           kind: request.action,
           address: config.address,
           pet: request.petId,
-          payload: request.action === 'speak' ? request.text : action?.actionIds,
+          payload: request.action === 'speak' ? request.text : action && [action.tool, action.target],
         }),
       )
       .digest('hex');
@@ -248,7 +259,8 @@ export function createRobotService(options: {
     if (request.action === 'execute' && !armed) throw new Error('robot_not_armed');
     if (
       request.action === 'execute' &&
-      (telemetry?.actionCode !== 520000 || telemetry.modes.some((mode) => mode !== 1))
+      telemetry &&
+      (telemetry.actionCode !== 520000 || telemetry.modes.some((mode) => mode !== 1))
     )
       throw new Error('robot_not_ready');
     if (receipts.length >= 1000) throw new Error('robot_receipt_limit');
@@ -279,7 +291,7 @@ export function createRobotService(options: {
     stopResult = undefined;
     const call: RobotCall =
       request.action === 'execute'
-        ? { operation: 'execute', requestId: request.id, actionIds: action!.actionIds }
+        ? { operation: 'execute', requestId: request.id, tool: action!.tool, target: action!.target }
         : { operation: 'speak', text: request.text };
     if (!automaticSpeech)
       notify({
@@ -299,7 +311,7 @@ export function createRobotService(options: {
     statusAbort?.abort();
     if (active) {
       active.receipt.state = 'unknown';
-      active.receipt.message = 'Stop requested; physical state must be verified.';
+      active.receipt.message = 'Local wait cancelled; robot may still be running. Verify on site.';
       active.receipt.finishedAt = now();
       active.abort.abort();
       try {
@@ -386,7 +398,7 @@ export function createRobotService(options: {
     }
     const chunks: string[] = [];
     let chunk = '';
-    // Code-point iteration avoids splitting a UTF-16 surrogate pair at the SDK's 500-unit limit.
+    // Code-point iteration avoids splitting a UTF-16 surrogate pair at the configured 500-unit chunk limit.
     for (const point of text) {
       if (chunk.length + point.length > 500) {
         chunks.push(chunk);
@@ -423,8 +435,7 @@ export function createRobotService(options: {
       active ||
       stopping ||
       !snapshot().connected ||
-      telemetry?.actionCode !== 520000 ||
-      telemetry.modes.some((mode) => mode !== 1)
+      (telemetry && (telemetry.actionCode !== 520000 || telemetry.modes.some((mode) => mode !== 1)))
     )
       throw new Error('robot_not_ready');
     armed = true;
@@ -508,6 +519,7 @@ export function createRobotService(options: {
         session = randomUUID();
         armed = connected = false;
         telemetry = undefined;
+        catalog = undefined;
         stopResult = undefined;
         previousStatus = undefined;
         error = '';
@@ -518,8 +530,7 @@ export function createRobotService(options: {
           stopping ||
           !config.enabled ||
           !snapshot().connected ||
-          telemetry?.actionCode !== 520000 ||
-          telemetry.modes.some((mode) => mode !== 1)
+          (telemetry && (telemetry.actionCode !== 520000 || telemetry.modes.some((mode) => mode !== 1)))
         )
           throw new Error('robot_not_ready');
         armed = true;

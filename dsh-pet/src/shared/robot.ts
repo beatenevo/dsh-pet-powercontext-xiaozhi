@@ -4,7 +4,9 @@
 export interface RobotAction {
   key: string;
   name: string;
-  actionIds: number[];
+  tool: 'startTeachProgram' | 'RobotAgvMove';
+  /** 从发现目录中选择，始终保留原始字符串。 */
+  target: string;
   petAnimation: string;
 }
 
@@ -16,7 +18,8 @@ export interface RobotConfig {
   /** Model-selected actions remain proposals until confirmed on site. */
   chatActions: boolean;
   address: string;
-  python: string;
+  /** MCP 配置版本；旧 SDK 配置迁移时禁用。 */
+  version: 2;
   /** Maximum RPC duration in seconds; expired movement requests remain uncertain. */
   timeoutSeconds: number;
   petId: string;
@@ -30,11 +33,18 @@ export interface RobotTelemetry {
   modes: number[];
 }
 
-/** A bounded RPC result from the isolated Python adapter. */
+/** MCP 返回的可选动作目录。 */
+export interface RobotCatalog {
+  programs: { id: string; name: string }[];
+  areas: { areaName: string; parameter: string }[];
+}
+
+/** MCP 操作结果；成功仅代表服务端报告。 */
 export interface RobotResult {
   ok: boolean;
   code: string;
   message: string;
+  catalog?: RobotCatalog;
   telemetry?: RobotTelemetry;
   stops?: Record<string, { ok: boolean; message: string }>;
 }
@@ -79,6 +89,7 @@ export interface RobotSnapshot {
   stopping: boolean;
   connected: boolean;
   checkedAt: number;
+  catalog?: RobotCatalog;
   telemetry?: RobotTelemetry;
   error: string;
   stopResult?: RobotResult;

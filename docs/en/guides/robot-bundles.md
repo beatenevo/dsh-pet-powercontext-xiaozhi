@@ -1,5 +1,6 @@
 # Slim robot control packages
 
+> This branch now uses MCP. The Python/SDK bundle instructions below apply to older versions only. Follow the [MCP setup guide](../guides/robot.md).
 [Robot guide](robot.md) · [简体中文](../../zh/guides/robot-bundles.md)
 
 The **Robot slim bundles** GitHub Actions workflow creates preview artifacts for Windows x64, Linux x64, Linux ARM64, macOS Intel and macOS Apple Silicon. It also produces ordinary and slim Windows desktop ZIPs. These builds do not publish to npm or create a GitHub Release. The published `0.1.0-beta.1` remains unchanged.

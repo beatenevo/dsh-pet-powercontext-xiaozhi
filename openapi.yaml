@@ -3822,7 +3822,8 @@ components:
       required:
         - key
         - name
-        - actionIds
+        - tool
+        - target
         - petAnimation
       properties:
         key:
@@ -3832,14 +3833,14 @@ components:
           type: string
           minLength: 1
           maxLength: 80
-        actionIds:
-          type: array
-          minItems: 1
-          maxItems: 32
-          items:
-            type: integer
-            minimum: 0
-            maximum: 2147483647
+        tool:
+          type: string
+          enum: [startTeachProgram, RobotAgvMove]
+        target:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Original program ID or station string from the MCP catalog. Never convert to Number.
         petAnimation:
           type: string
           maxLength: 128
@@ -3849,7 +3850,7 @@ components:
       required:
         - enabled
         - address
-        - python
+        - version
         - timeoutSeconds
         - petId
         - actions
@@ -3867,19 +3868,14 @@ components:
         address:
           type: string
           maxLength: 255
-          description: Empty only when disabled; hostname or IPv4 followed by a port from 1 to 65535. IPv6 is not supported.
-        python:
-          type: string
-          minLength: 1
-          maxLength: 1024
-          description: >-
-            Use bundled (default) for the private packaged runtime, or an explicit Python executable path
-            ending in python, python3, python3.11 or another numeric Python version, optionally .exe.
-            Missing bundled runtimes never fall back to system Python. No shell commands.
+          description: Complete HTTP(S) MCP endpoint without credentials or fragment. Empty only when disabled.
+        version:
+          const: 2
+          description: MCP configuration version. Legacy SDK configuration is disabled and must be replaced.
         timeoutSeconds:
           type: integer
           minimum: 3
-          maximum: 120
+          maximum: 3600
         petId:
           type: string
           minLength: 1
@@ -3889,7 +3885,27 @@ components:
           maxItems: 20
           items:
             $ref: "#/components/schemas/RobotAction"
-          description: Unique action keys; only manufacturer-verified taught IDs.
+          description: Unique action keys; targets are verified against the MCP catalog before each execution.
+    RobotCatalog:
+      type: object
+      required: [programs, areas]
+      properties:
+        programs:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: { type: string }
+              name: { type: string }
+        areas:
+          type: array
+          items:
+            type: object
+            required: [areaName, parameter]
+            properties:
+              areaName: { type: string }
+              parameter: { type: string }
     RobotTelemetry:
       type: object
       required:
@@ -4054,6 +4070,8 @@ components:
           type: boolean
         checkedAt:
           type: integer
+        catalog:
+          $ref: "#/components/schemas/RobotCatalog"
         telemetry:
           $ref: "#/components/schemas/RobotTelemetry"
         error:
@@ -4086,7 +4104,7 @@ components:
               description: Exact pendingAction.id. The server selects its configured action; clients cannot override the action key or robot IDs.
             confirmed:
               const: true
-          description: Confirm this proposal on site. Checks fresh controller status before consuming one authorization and dispatching once. Duplicate, expired, or revoked proposals cannot send another action.
+          description: Confirm this proposal on site. Checks MCP connectivity before consuming one authorization and dispatching once. Duplicate, expired, or revoked proposals cannot send another action.
         - type: object
           additionalProperties: false
           required: [action, session, id]
@@ -4201,8 +4219,8 @@ components:
               const: true
       description: >-
         No automatic retries. execute consumes one-shot motion authorization. Old sessions and conflicting
-        duplicate IDs are rejected. stop is independent of the movement worker and does not require enabled
-        monitoring or authorization.
+        duplicate IDs are rejected. stop cancels only the local wait and disarms control; no MCP stop tool exists.
+        The robot may continue running. No enabled monitoring or authorization is required to cancel.
     PetMemoryPage:
       type: object
       required: [ok, items, nextCursor]

@@ -59,10 +59,10 @@ async function harness(t: TestContext, transport?: RobotRunner, mirrorFeedback =
     config: {
       ...defaultRobotConfig(),
       enabled: true,
-      address: '127.0.0.1:50051',
+      address: 'http://127.0.0.1:8182/mcp',
       actions: [
-        { key: 'greet', name: 'Greet', actionIds: [100, 101], petAnimation: 'Wave' },
-        { key: 'bow', name: 'Bow', actionIds: [102], petAnimation: '' },
+        { key: 'greet', name: 'Greet', tool: 'startTeachProgram', target: '100', petAnimation: 'Wave' },
+        { key: 'bow', name: 'Bow', tool: 'startTeachProgram', target: '102', petAnimation: '' },
       ],
     },
   });
@@ -92,13 +92,9 @@ test('configuration cannot select arbitrary commands or unverified IDs', () => {
     { python: 'bash' },
     { address: 'host:99999' },
     { timeoutSeconds: 0 },
-    { actions: [{ key: 'raw', name: 'Raw', actionIds: [-1], petAnimation: '' }] },
+    { actions: [{ key: 'raw', name: 'Raw', tool: 'invalid', target: '-1', petAnimation: '' }] },
   ])
     assert.equal(robotConfigSchema.safeParse({ ...defaultRobotConfig(), ...patch }).success, false);
-  assert.equal(
-    robotConfigSchema.safeParse({ ...defaultRobotConfig(), python: 'C:\\robot\\Scripts\\python.exe' }).success,
-    true,
-  );
 });
 
 test('connection checks do not authorize motion and confirmation is mandatory', async (t) => {
@@ -123,7 +119,7 @@ test('one authorization permits one allowlisted group and duplicate delivery can
   await h.execute(id);
   await h.execute(id);
   assert.equal(h.calls.filter((call) => call.operation === 'execute').length, 1);
-  assert.deepEqual(h.calls[h.calls.length - 1]?.actionIds, [100, 101]);
+  assert.deepEqual(h.calls[h.calls.length - 1]?.target, '100');
   assert.equal(h.service.snapshot().armed, false);
   await assert.rejects(h.execute(id, 'bow'), /robot_request_conflict/);
   await assert.rejects(h.execute(), /robot_busy/);
@@ -329,7 +325,7 @@ test('chat speech runs once, preserves the reply bubble and proposes movement un
     h.calls.map((call) => call.operation),
     ['status', 'speak', 'status', 'execute'],
   );
-  assert.deepEqual(h.calls[3].actionIds, [100, 101]);
+  assert.deepEqual(h.calls[3].target, '100');
   assert.ok(h.feedback.some((event) => event.animation === 'Wave'));
   assert.equal(h.service.snapshot().pendingAction, undefined);
   await assert.rejects(h.service.submit(request), /robot_proposal_expired/);
@@ -600,4 +596,22 @@ test('robot status and action feedback are spoken, but TTS acknowledgement descr
   await h.service.submit({ action: 'check' });
   await setImmediate();
   assert.equal(h.calls.filter((call) => call.operation === 'speak').length, count);
+});
+
+test('legacy SDK configuration is disabled but can be replaced with MCP configuration', async (t) => {
+  const h = await harness(t);
+  writeFileSync(
+    join(h.root, 'astra-robot.json'),
+    JSON.stringify({ enabled: true, python: 'bundled', address: 'localhost:50051', actions: [{ actionIds: [100] }] }),
+  );
+  const migrated = createRobotService(h.options);
+  t.after(() => migrated.dispose());
+  assert.equal(migrated.snapshot().config.enabled, false);
+  assert.equal(migrated.snapshot().error, 'robot_mcp_setup_required');
+  assert.deepEqual(migrated.snapshot().config.actions, []);
+  await migrated.submit({
+    action: 'configure',
+    config: { ...defaultRobotConfig(), enabled: true, address: 'http://localhost:8182/mcp' },
+  });
+  assert.equal(migrated.snapshot().error, '');
 });

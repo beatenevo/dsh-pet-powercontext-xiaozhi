@@ -222,8 +222,8 @@ test('robot observation waits for the worker result instead of treating queue ad
     config: {
       ...defaultRobotConfig(),
       enabled: true,
-      address: '127.0.0.1:50051',
-      actions: [{ key: 'greet', name: 'Greet', actionIds: [100], petAnimation: '' }],
+      address: 'http://127.0.0.1:8182/mcp',
+      actions: [{ key: 'greet', name: 'Greet', tool: 'startTeachProgram', target: '100', petAnimation: '' }],
     },
   });
   await robot.submit({ action: 'check' });

@@ -63,7 +63,6 @@ const required = [
   'lib/client.js', // Browser side
   'lib/standalone.js', // npm command entry point
   'lib/chat-panel.js', // Standalone mode dialogue interface
-  'runtime/astra/bridge.py', // Optional Astra Pro 2.0 SDK adapter
   'runtime/powercontext/server.py',
   'runtime/powercontext/sql_trace.py',
   'runtime/powercontext/requirements.txt',
@@ -189,8 +188,6 @@ try {
 // parties will not be able to get any official reference picture. The same type of problem as memes - the whitelist of
 // prepare.js is the real source. The explicit assertion here prevents silent leakage again.
 const characterFile = 'assets/main-character.png';
-if (pkg.files?.includes('runtime/astra/bridge.py')) ok('files includes the Astra adapter');
-else fail('package.json files must include runtime/astra/bridge.py');
 if (Array.isArray(pkg.files) && pkg.files.includes(characterFile)) ok(`files includes ${characterFile}`);
 else fail(`package.json files must include ${characterFile} (character reference would not ship)`);
 

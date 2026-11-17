@@ -64,6 +64,10 @@ const required = [
   'lib/standalone.js', // npm command entry point
   'lib/chat-panel.js', // Standalone mode dialogue interface
   'runtime/astra/bridge.py', // Optional Astra Pro 2.0 SDK adapter
+  'runtime/powercontext/server.py',
+  'runtime/powercontext/sql_trace.py',
+  'runtime/powercontext/requirements.txt',
+  'runtime/powercontext/README.md',
   'README.zh.md', // Chinese instructions for use
   'ASSET-LICENSE.md', // Authorization and signature instructions released with the asset
   'lib/types/index.d.ts', // host type declaration

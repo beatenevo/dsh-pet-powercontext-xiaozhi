@@ -1,13 +1,14 @@
-/** Prevent accidental ID zero or malformed sequences in operator-entered action mappings. */
+/** MCP 目标保留字符串，避免长整数精度丢失。 */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRobotActionIds } from './settings.ts';
-
-test('accept ordered taught action IDs, including a deliberate zero', () => {
-  assert.deepEqual(parseRobotActionIds('0, 100,101'), [0, 100, 101]);
-});
-
-test('reject empty IDs, decimal positions, expressions and out-of-range values', () => {
-  for (const value of ['', ' ', '1,', ',1', '1,,2', '-1', '1.2', '1e2', '1;2', '2147483648'])
-    assert.throws(() => parseRobotActionIds(value), /robotInvalidIds/);
+import { defaultRobotConfig, robotConfigSchema } from '../../host/robot/config.ts';
+test('MCP configuration preserves long program IDs and rejects SDK addresses', () => {
+  const config = robotConfigSchema.parse({
+    ...defaultRobotConfig(),
+    actions: [
+      { key: 'test', name: 'Test', tool: 'startTeachProgram', target: '9223372036854775807', petAnimation: '' },
+    ],
+  });
+  assert.equal(config.actions[0].target, '9223372036854775807');
+  assert.equal(robotConfigSchema.safeParse({ ...config, address: 'localhost:50051' }).success, false);
 });

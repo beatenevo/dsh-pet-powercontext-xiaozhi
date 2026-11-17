@@ -1,5 +1,6 @@
 # 机器人控制精简安装包
 
+> 本分支已切换为 MCP 接入，以下 Python/SDK 安装包说明仅适用于旧版本。请使用 [MCP 接入指南](../guides/robot.md)。
 [机器人指南](robot.md) · [English](../../en/guides/robot-bundles.md)
 
 GitHub Actions 的 **Robot slim bundles** 流水线分别生成 Windows x64、Linux x64、Linux ARM64、macOS Intel 和 macOS Apple Silicon 的预览包，同时生成普通版和机器人精简版的 Windows 桌面 ZIP。本流水线不发布 npm，也不创建 GitHub Release；已发布的 `0.1.0-beta.1` 保持不变。

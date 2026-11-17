@@ -39,8 +39,8 @@ export function makeRobotPanel(rt: RobotRuntime) {
     const blocked = !status || pending || status.busy || status.stopping;
     const ready =
       status?.connected &&
-      status.telemetry?.actionCode === 520000 &&
-      status.telemetry.modes.every((mode) => mode === 1);
+      (!status.telemetry ||
+        (status.telemetry.actionCode === 520000 && status.telemetry.modes.every((mode) => mode === 1)));
     const button = (label: RobotKey, body: unknown, disabled = false, danger = false) =>
       h('button', {
         type: 'button',
@@ -225,6 +225,7 @@ export function makeRobotPanel(rt: RobotRuntime) {
               ? h(Settings, {
                   key: status.session,
                   config: { ...status.config, petId: props.petId || status.config.petId },
+                  catalog: status.catalog,
                   disabled: blocked || status.checking,
                   save: (config: unknown) => send({ action: 'configure', config }),
                 })

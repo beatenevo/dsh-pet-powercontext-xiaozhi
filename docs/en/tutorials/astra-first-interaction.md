@@ -1,5 +1,6 @@
 # From installing the pet to interacting with Astra Pro 2.0
 
+> This branch now uses MCP. The Python/SDK bundle instructions below apply to older versions only. Follow the [MCP setup guide](../guides/robot.md).
 English · [简体中文](../../zh/tutorials/astra-first-interaction.md) · [Documentation home](../README.md)
 
 This tutorial takes you through installing dsh-pet, configuring chat, connecting Astra Pro 2.0, and using the pet panel to request speech and manufacturer-verified robot actions.

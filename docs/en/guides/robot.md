@@ -1,97 +1,27 @@
-# Connect an Astra Pro 2.0 robot
+# Astra Pro 2.0 over MCP
 
-[Documentation](../README.md) · [简体中文](../../zh/guides/robot.md)
+This branch connects through MCP Streamable HTTP. Client-side Python and the Astra SDK are no longer required.
 
-For a first installation, follow the [complete setup and interaction tutorial](../tutorials/astra-first-interaction.md).
+1. Build and start this branch, then open the Astra robot panel.
+2. Enable the connection, enter `http://<server>:8182/hz-dual-robot-product/mcp`, and save.
+3. Check the connection to discover teach programs and movement areas. Connectivity does not establish physical readiness.
+4. Add an action, choose a program or area from the catalog, name it, and save. Program IDs remain strings throughout.
+5. Check the connection again, verify posture and surrounding space on site, authorize one action, then execute it. Chat proposals also require individual confirmation.
+6. Speech uses `textToSpeech`; the pet speech option forwards new utterances.
 
-Use a build containing the robot bridge and the **Chat interaction** settings for the features below. The control panel is shared by DSH pet chat and standalone pet chat; PowerContext and a model API key are not required for robot controls.
+The default request timeout is 60 seconds (configurable from 3 to 3600). Commands are not retried. A timeout or cancelled wait may leave the robot running. There is no MCP stop tool: use on-site controls as needed. Success cannot distinguish normal program completion from a server-side stop signal.
 
-## What works
+Legacy Python/gRPC configuration is disabled on upgrade. Configure the MCP endpoint and select targets again; old action IDs cannot be converted into program IDs. Existing receipts are retained.
 
-| Operator action         | Astra Pro 2.0 interface                                          | Pet feedback                                                |
-| ----------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------- |
-| Check connection        | Controller state code/description and body/left/right arm modes  | Connection and controller description                       |
-| Run a taught action     | `ActionControl(action_id, command_id)`                           | Requested action, optional pet animation and result receipt |
-| Run a taught sequence   | `ActionManager(action_id[], command_description)`                | One group request and result receipt                        |
-| Speak through the robot | `PublishTTSText(tts_text)`                                       | Request acknowledgement; playback completion is unknown     |
-| Stop robot              | `PlannerControlStop`, `RobotSetMode(mode=5)`, `AgvEmergencyStop` | A separate acknowledgement for each subsystem               |
+For gateway authentication, set `DSH_PET_ROBOT_MCP_HEADERS` to a JSON headers object in the host environment, for example `{"Authorization":"Bearer <token>"}`. Headers are not stored in panel configuration or logged. Restart after changing the environment.
 
-Monitoring polls controller state every five seconds while enabled. A changed controller description produces a pet bubble, including changes initiated outside the pet. The SDK status used here does not identify the externally performed action: it cannot yet mirror arbitrary robot gestures. An optional pet animation starts when this application requests its mapped action; it is not synchronized to physical completion.
+The official MCP SDK handles initialization and sessions. The adapter discovers paginated tools, validates arguments against runtime schemas, re-queries targets before execution and releases sessions. Commands are serialized within one host; coordinate other hosts and controllers on site.
 
-Chat can optionally propose actions from the manufacturer-verified taught-action allowlist. Model output and automatic whispers never authorize movement: each proposed action requires an explicit on-site confirmation in the panel. It does not expose joint control, Cartesian motion, mode recovery or arbitrary SDK/system commands. Robot commands are not automatically stored as PowerContext memories.
+| Source                         | Responsibility                            |
+| ------------------------------ | ----------------------------------------- |
+| `src/host/robot/mcp.ts`        | MCP sessions, discovery and calls         |
+| `src/host/robot/config.ts`     | Endpoint and action validation            |
+| `src/host/robot/service.ts`    | Authorization, serialization and receipts |
+| `src/client/robot/settings.ts` | Catalog selection and configuration       |
 
-## Prepare the host and robot
-
-Ask the manufacturer for the exhibition robot's **2.0 gRPC address and port**, validated taught action IDs and sequence order, required initial posture/modes, and the on-site recovery procedure after a stop. Do not copy example IP addresses or action IDs from demonstration files.
-
-The Python interpreter runs on the machine hosting DSH or the standalone app, which must reach the robot. For DSH in a container, install Python/SDK inside that environment and configure a path visible there. The manufacturer SDK uses plaintext gRPC; keep it on the controlled robot network. The DSH host access controls apply to robot control as well; standalone uses its existing local session authentication.
-
-For the recommended bundled installation, download the [slim control package](robot-bundles.md) for your host platform and select **Bundled environment**. It includes private Python and the SDK control dependencies, without OpenCV or NumPy and without modifying system Python.
-
-For an explicit custom environment, install the supplied `astra_grpc_clients-2.0.0-py3-none-any.whl` into a separate Python environment **outside the repository and application directory**. Python 3.11 or 3.12 is a suitable starting point. The generated SDK requires newer dependencies than the wheel's minimum metadata; the following versions were verified together against a local gRPC test service.
-
-Linux (replace the wheel path with your actual download):
-
-```bash
-python3 -m venv "$HOME/.local/share/astra-v2-venv"
-"$HOME/.local/share/astra-v2-venv/bin/python" -m pip install \
-  "grpcio==1.78.0" "protobuf==6.31.1" \
-  /path/to/astra_grpc_clients-2.0.0-py3-none-any.whl
-```
-
-Windows PowerShell:
-
-```powershell
-$astraVenv = Join-Path $env:LOCALAPPDATA "astra-v2-venv"
-py -3.11 -m venv $astraVenv
-& "$astraVenv\Scripts\python.exe" -m pip install `
-  "grpcio==1.78.0" "protobuf==6.31.1" `
-  "C:\Downloads\astra_grpc_clients-2.0.0-py3-none-any.whl"
-```
-
-The ordinary plugin ships only the adapter; the slim platform artifacts additionally include private Python and the SDK control dependencies. Camera and image processing helpers are excluded. The adapter imports the generated protocol modules directly and applies deadlines to every call. It only accepts SDK version `2.0.0`; it does not fall back to the 1.0 protocol. Windows commands are setup instructions; this integration has not been validated on a physical Windows-connected robot.
-
-## Configure and operate
-
-1. Open pet chat and expand **Astra Pro 2.0 robot → Connection and taught actions**.
-2. Enter the robot's `hostname:port` or IPv4 address and port. Keep **Bundled environment** for a full package, or select **Custom Python environment** and enter its full executable path. IPv6 addresses are not currently supported.
-3. Add a descriptive action name and the approved action ID. Comma-separated IDs send one 2.0 action-manager sequence, in order. Optional pet animation names must match the installed pet's animation configuration.
-4. Enable connection monitoring and save. Saving or restarting the host disarms motion. Checking a connection never changes the robot's mode or moves it.
-5. Choose **Check connection**. Motion authorization requires a fresh status, idle controller code `520000`, and body/left/right arm modes all equal to automatic mode `1`. Set the robot's modes using the manufacturer's tooling; this UI never switches it into automatic mode.
-6. Expand **Manual controls**. With the robot stationary and the action cleared on site, choose **Verified stationary on site: allow one action**, then **Run selected physical action**. Authorization is consumed by the request, including a failed or uncertain result.
-7. For speech, type the text and choose **Speak through robot**. Speech requires a connection and an idle application command slot, but no movement authorization.
-8. Use **Recent requests** to inspect the outcome. `Controller reported success` is the RPC result, not independent evidence that movement finished. A timeout or connection loss is `Execution state unknown`; the app never automatically retries it.
-
-**Stop robot** stays available while an action request is pending. It starts an independent adapter process and attempts all three subsystem stops even if one fails. Cancelling the local request is not evidence that the robot stopped. Confirm standstill on site and use the physical emergency stop when required. Resuming modes is an on-site operation; the application does not automatically resume. Closing the host attempts a stop only when an application command is still pending; it cannot guarantee a stop after a crash or a power/network loss.
-
-## Stored state and troubleshooting
-
-- `$DSH_HOME/dsh-pet/astra-robot.json`: connection and action allowlist, with private file permissions. Without `DSH_HOME`, the host's normal DSH data directory applies.
-- `$DSH_HOME/dsh-pet/astra-commands.json`: up to 20 recent receipts, trimmed further to fit the private file size limit. Speech text is not stored in these receipts. Vendor response messages may contain operational details.
-- Host restarts retain uncertain receipts but never replay commands. Session IDs change on restart/configuration changes. Duplicate command IDs with identical contents return the existing receipt; conflicting contents are rejected. Request IDs are application deduplication keys, not a claim of robot-side exactly-once execution.
-- `bundled_runtime_unavailable`: install the full package for this host platform; a missing bundled runtime never falls back to system Python.
-- `sdk_unavailable`: check the configured interpreter, exact SDK version and pinned gRPC/protobuf dependencies.
-- `robot_not_ready`: check connection freshness, idle code and all three modes. A successful ping alone is insufficient.
-- `robot_storage_unavailable`: fix permissions or a corrupt private state file while control is stopped, then restart. Movement stays blocked; a stop request remains available when the configured address was loaded.
-- `robot_receipt_limit`: the controller retains at most 1,000 request identities per host session. After confirming no active movement, restart the host to begin a new session.
-
-## Speak replies and propose actions from chat
-
-1. Configure the pet chat model and verify an ordinary reply. Open the chat tab for the pet that should control the robot.
-2. In **Astra Pro 2.0 robot → Connection and taught actions → Chat interaction**, enable **Speak all pet messages through the robot**. This single speech switch covers new chat replies, automatic and manual whispers, sleep talk, and robot status/action feedback. Optionally enable **Suggest configured robot actions from chat**. The speech and action options default to off for new configurations; saved values are preserved on upgrade.
-3. Keep **Enable connection monitoring** selected, save, and check the connection. Saving binds these settings to the current pet; utterances from other pets are not forwarded.
-4. Configure a readable action name such as “Greeting”, its manufacturer-verified IDs, and an optional pet animation. The model sees only action names and keys, never SDK arguments. No additional model call is used to select an action.
-5. Send “Introduce yourself, then greet everyone.” The new answer is displayed and saved normally, and its text is sent to robot TTS. A configured action selected by the model appears in an **Action awaiting on-site confirmation** card.
-6. Verify space and posture, then click **Confirm on site and run this action**. The server checks fresh controller status and runs only that proposal. No separate generic arm click is needed. The mapped pet animation and command receipts use the existing feedback path. Use **Dismiss action** to discard the proposal.
-
-Proposals expire after two minutes. A new linked chat turn, stop, disarm, configuration change, or host restart cancels them. Old confirmation pages and duplicate submissions cannot execute the action again. Speech waits in order behind an active application command; the pet's text remains available. Long messages are split into chunks of up to 500 UTF-16 code units without splitting emoji. The queue holds at most 100 chunks, skips messages waiting over two minutes, and is discarded on stop, configuration changes or restart. Offline or failed delivery clears the backlog without automatic retry; the panel reports delivery, queue overflow or expiry. Speech acknowledgements do not prove playback completion, and action confirmation does not wait for an audio-completion event.
-
-When chat interaction is enabled, **Manual controls** is collapsed to leave room for the answer and confirmation card; **Check connection** and **Stop robot** remain visible. Every new text bubble from the linked pet is forwarded, including reminders and text published through the broadcast API. History reads, image-only bubbles and bubble clearing do not speak. DSH task answers are included only if published as pet utterances. Automatic TTS receipts stay in the panel without creating another bubble; controller monitoring announces action-code/mode changes, not description-only TTS acknowledgements, preventing an echo loop. PowerContext is optional and does not grant movement permission. Computer TTS remains a separate setting; turn it off if you want only the robot speaker. The robot microphone is not connected by these switches.
-
-If no action card appears, explicitly ask the robot to perform the configured action by name. Action selection depends on the chat model; a spoken promise alone never submits a physical action.
-
-## Validation boundary
-
-Automated checks cover one-shot authorization, duplicate requests, stale status, restart uncertainty, independent stops and the actual browser controls. The supplied 2.0 wheel has also been exercised against a **synthetic loopback gRPC server**, including the built HTTP host and Python process bridge. This verifies serialization and application behavior; it does not validate robot firmware, physical movements, collision avoidance, speech playback, or stopping distance. Those require the exhibition robot and an on-site operator.
-
-For developers: `pnpm test`, `pnpm test:robot` (Python, no SDK needed), and `pnpm test:ui`. Local environments, protocol probes and validation logs belong outside the checkout. See the [HTTP reference](../reference/http-api.md) and [OpenAPI contract](../../../openapi.yaml).
+Run `npm run test:robot` for local protocol and controller regression tests. Mock-server checks do not establish physical robot behavior.

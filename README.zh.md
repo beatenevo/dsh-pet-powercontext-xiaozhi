@@ -8,7 +8,7 @@
 
 本项目基于 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)。
 
-开发预览：[Astra Pro 2.0 机器人联动](docs/zh/guides/robot.md)支持在桌宠聊天中执行示教动作、语音播报和接收状态反馈。请使用带有 `astra-pro-2.0-bundled` 标记的预览包，npm 已发布的 `0.1.0-beta.1` 尚不包含机器人功能。[选择下载包](docs/zh/guides/robot-bundles.md#下载和安装) · [完整安装与互动图文教程](docs/zh/tutorials/astra-first-interaction.md)。
+开发预览：[Astra Pro 2.0 MCP 接入](docs/zh/guides/robot.md)支持目录发现、示教程序、区域移动和语音播报，无需客户端 Python/SDK。
 
 开发预览：[AI Vision 可观测性](docs/zh/guides/observability.md)提供可选、不含正文的链路采集，以及平台已有记忆视图的查看入口。[Token 对照](docs/zh/guides/token-comparison.md)可以比较三种上下文策略的回答与实测用量。这些功能尚未包含在 npm 已发布的 `0.1.0-beta.1` 中。
 

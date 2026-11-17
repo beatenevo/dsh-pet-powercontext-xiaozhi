@@ -1,5 +1,4 @@
 /** Validate operator configuration and persist it outside the installed package. */
-import { basename } from 'node:path';
 import { z } from 'zod';
 import type { RobotConfig } from '../../shared/robot.ts';
 
@@ -9,9 +8,13 @@ const address = z
   .max(255)
   .refine((value) => {
     if (!value) return true;
-    const match = /^([a-zA-Z0-9.-]+):(\d{1,5})$/.exec(value);
-    return !!match && Number(match[2]) > 0 && Number(match[2]) <= 65535;
-  }, 'Expected a robot hostname:port');
+    try {
+      const url = new URL(value);
+      return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && !url.hash;
+    } catch {
+      return false;
+    }
+  }, 'Expected a complete HTTP(S) MCP endpoint');
 
 /** Configuration schema; action IDs always come from the operator's allowlist. */
 export const robotConfigSchema = z
@@ -20,24 +23,16 @@ export const robotConfigSchema = z
     chatSpeech: z.boolean().default(false),
     chatActions: z.boolean().default(false),
     address,
-    python: z
-      .string()
-      .min(1)
-      .max(1024)
-      .refine(
-        (value) =>
-          value === 'bundled' ||
-          (!/[\r\n\0]/.test(value) &&
-            /^python(?:\d+(?:\.\d+)*)?(?:\.exe)?$/i.test(basename(value.replace(/\\/g, '/')))),
-      ),
-    timeoutSeconds: z.number().int().min(3).max(120),
+    version: z.literal(2),
+    timeoutSeconds: z.number().int().min(3).max(3600),
     petId: z.string().min(1).max(128),
     actions: z
       .array(
         z.strictObject({
           key: identifier,
           name: z.string().trim().min(1).max(80),
-          actionIds: z.array(z.number().int().min(0).max(2_147_483_647)).min(1).max(32),
+          tool: z.enum(['startTeachProgram', 'RobotAgvMove']),
+          target: z.string().trim().min(1).max(128),
           petAnimation: z.string().max(128),
         }),
       )
@@ -60,8 +55,8 @@ export function defaultRobotConfig(): RobotConfig {
     chatSpeech: false,
     chatActions: false,
     address: '',
-    python: 'bundled',
-    timeoutSeconds: 30,
+    version: 2,
+    timeoutSeconds: 60,
     petId: 'main',
     actions: [],
   };

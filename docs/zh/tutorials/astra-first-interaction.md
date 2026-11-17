@@ -1,5 +1,6 @@
 # 从安装桌宠到联动 Astra Pro 2.0
 
+> 本分支已切换为 MCP 接入，以下 Python/SDK 安装包说明仅适用于旧版本。请使用 [MCP 接入指南](../guides/robot.md)。
 [English](../../en/tutorials/astra-first-interaction.md) · [文档首页](../README.md)
 
 这份教程带你完成四件事：安装 dsh-pet、配置聊天、连接 Astra Pro 2.0，然后通过桌宠面板让机器人播报和执行厂家确认过的动作。

@@ -53,7 +53,6 @@ const keep = [
   'src',
   'assets/webm',
   'runtime/electron-helper',
-  'runtime/astra/bridge.py',
   'assets/fonts',
   'assets/pic',
   // Meme: The host side only reads the picture from assets/memes in the package and pairs it with the

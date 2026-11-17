@@ -799,10 +799,10 @@ for (const connected of [true, false]) {
       config: {
         ...defaultRobotConfig(),
         enabled: true,
-        address: '127.0.0.1:50051',
+        address: 'http://127.0.0.1:8182/mcp',
         chatSpeech: true,
         chatActions: true,
-        actions: [{ key: 'greet', name: '打招呼', actionIds: [100], petAnimation: '' }],
+        actions: [{ key: 'greet', name: '打招呼', tool: 'startTeachProgram', target: '100', petAnimation: '' }],
       },
     });
     const captured: Record<string, unknown>[] = [];

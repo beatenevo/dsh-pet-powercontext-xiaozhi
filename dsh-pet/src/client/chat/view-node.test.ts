@@ -181,3 +181,28 @@ describe('composerNode - Enter to send to avoid input method', () => {
     assert.deepEqual(calls, ['keydown', 'start', 'end']);
   });
 });
+
+test('recording composer keeps cancel available and blocks send until review', () => {
+  for (const phase of ['permission', 'recording', 'recognizing', 'ready'] as const) {
+    let cancelled = false;
+    const node = composerNode(
+      h,
+      t,
+      stateOf({
+        recordingPhase: phase,
+        toggleRecording: () => {},
+        cancelRecording: () => {
+          cancelled = true;
+        },
+      }),
+    );
+    assert.equal(byClass(node, 'pet-chat-send')?.props.disabled, phase !== 'ready');
+    assert.equal(byClass(node, 'pet-chat-record-status')?.props.role, 'status');
+    if (phase !== 'ready') {
+      const cancel = buttonByText(node, '取消');
+      (cancel?.props.onClick as () => void)();
+      assert.equal(cancelled, true);
+    }
+    assert.ok(buttonByText(node, phase === 'recording' ? '结束并识别' : '录音'));
+  }
+});

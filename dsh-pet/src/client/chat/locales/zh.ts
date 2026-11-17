@@ -1,3 +1,4 @@
+import { recordingZh } from '../recording-locales.ts';
 /**
  * Chinese text for the dialogue panel; the key set is the true source of the entire collection.
  */
@@ -7,6 +8,7 @@ import { robotZh } from '../../robot/locales.ts';
 import { dshMemoryZh } from '../../dsh-memory-status.ts';
 
 export const zh = {
+  ...recordingZh,
   ...dshMemoryZh,
   ...comparisonZh,
   ...robotZh,

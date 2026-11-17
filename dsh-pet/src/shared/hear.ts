@@ -203,58 +203,65 @@ export async function hearAudio(url: string, audio: string, signal?: AbortSignal
  */
 export async function startRecording(): Promise<HearRecorder> {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
-  const ctx = new AudioContext({ sampleRate: HEAR_SAMPLE_RATE });
-  const source = ctx.createMediaStreamSource(stream);
-  const processor = ctx.createScriptProcessor(BLOCK_SAMPLES, 1, 1);
-  const chunks: Float32Array[] = [];
-  const maxSamples = Math.floor((MAX_RECORD_MS / 1000) * HEAR_SAMPLE_RATE);
-  let frames = 0;
-  let closed = false;
+  let ctx: AudioContext | undefined;
+  try {
+    ctx = new AudioContext({ sampleRate: HEAR_SAMPLE_RATE });
+    const source = ctx.createMediaStreamSource(stream);
+    const processor = ctx.createScriptProcessor(BLOCK_SAMPLES, 1, 1);
+    const chunks: Float32Array[] = [];
+    const maxSamples = Math.floor((MAX_RECORD_MS / 1000) * HEAR_SAMPLE_RATE);
+    let frames = 0;
+    let closed = false;
 
-  processor.onaudioprocess = (event) => {
-    if (frames >= maxSamples) return;
-    const samples = event.inputBuffer.getChannelData(0);
-    const room = maxSamples - frames;
-    const take = samples.length > room ? samples.subarray(0, room) : samples;
-    // Must copy: The underlying array of inputBuffer is reused every frame. Directly storing the reference will result in a bunch of the same data.
-    chunks.push(new Float32Array(take));
-    frames += take.length;
-  };
-  source.connect(processor);
-  processor.connect(ctx.destination);
-  // The default context may be suspended (when there is no user gesture); the caller is in pointerdown and is eligible for recovery.
-  await ctx.resume();
+    processor.onaudioprocess = (event) => {
+      if (frames >= maxSamples) return;
+      const samples = event.inputBuffer.getChannelData(0);
+      const room = maxSamples - frames;
+      const take = samples.length > room ? samples.subarray(0, room) : samples;
+      // Must copy: The underlying array of inputBuffer is reused every frame. Directly storing the reference will result in a bunch of the same data.
+      chunks.push(new Float32Array(take));
+      frames += take.length;
+    };
+    source.connect(processor);
+    processor.connect(ctx.destination);
+    // The default context may be suspended (when there is no user gesture); the caller is in pointerdown and is eligible for recovery.
+    await ctx.resume();
 
-  const teardown = (): void => {
-    if (closed) return;
-    closed = true;
-    processor.onaudioprocess = null;
-    try {
-      source.disconnect();
-      processor.disconnect();
-    } catch {
-      /* Disconnected: Doesn’t matter */
-    }
-    for (const track of stream.getTracks()) track.stop();
-    void ctx.close();
-  };
-
-  return {
-    elapsedMs: () => (frames / HEAR_SAMPLE_RATE) * 1000,
-    async stop() {
-      // The acquisition is one block later than the release: let the last block fall into the bag first, otherwise tens of milliseconds of tail sound will be cut off every time
-      await new Promise((resolve) => setTimeout(resolve, TAIL_SETTLE_MS));
-      teardown();
-      if (frames === 0) return null;
-      const all = new Float32Array(frames);
-      let offset = 0;
-      for (const chunk of chunks) {
-        all.set(chunk, offset);
-        offset += chunk.length;
+    const teardown = (): void => {
+      if (closed) return;
+      closed = true;
+      processor.onaudioprocess = null;
+      try {
+        source.disconnect();
+        processor.disconnect();
+      } catch {
+        /* Disconnected: Doesn’t matter */
       }
-      const pcm = floatToPcm16(all);
-      return { wave: encodeWave(pcm), peak: peakOf(pcm) };
-    },
-    cancel: teardown,
-  };
+      for (const track of stream.getTracks()) track.stop();
+      void ctx?.close().catch(() => {});
+    };
+
+    return {
+      elapsedMs: () => (frames / HEAR_SAMPLE_RATE) * 1000,
+      async stop() {
+        // The acquisition is one block later than the release: let the last block fall into the bag first, otherwise tens of milliseconds of tail sound will be cut off every time
+        await new Promise((resolve) => setTimeout(resolve, TAIL_SETTLE_MS));
+        teardown();
+        if (frames === 0) return null;
+        const all = new Float32Array(frames);
+        let offset = 0;
+        for (const chunk of chunks) {
+          all.set(chunk, offset);
+          offset += chunk.length;
+        }
+        const pcm = floatToPcm16(all);
+        return { wave: encodeWave(pcm), peak: peakOf(pcm) };
+      },
+      cancel: teardown,
+    };
+  } catch (error) {
+    for (const track of stream.getTracks()) track.stop();
+    if (ctx) void ctx.close().catch(() => {});
+    throw error;
+  }
 }

@@ -1,3 +1,4 @@
+import { recordingEn } from '../recording-locales.ts';
 /**
  * French copy of dialogue panel; keyset must be consistent with zh.
  */
@@ -9,6 +10,7 @@ import { robotEn } from '../../robot/locales.ts';
 import { dshMemoryEn } from '../../dsh-memory-status.ts';
 
 export const fr: Record<Key, string> = {
+  ...recordingEn,
   ...dshMemoryEn,
   ...comparisonEn,
   ...robotEn,

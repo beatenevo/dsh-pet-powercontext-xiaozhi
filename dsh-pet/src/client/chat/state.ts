@@ -6,6 +6,7 @@
  * Splitting into multiple useState will reveal the intermediate state.
  * @module dsh-pet/src/client/chat/state
  */
+import { createRecording, recordingBrowser, type RecordingPhase } from './recording.ts';
 import { speakText } from '../../shared/voice.ts';
 import { createCompositionWatch, decideEnter } from '../../shared/chat/enter.ts';
 import type { CompositionWatch } from '../../shared/chat/enter.ts';
@@ -61,8 +62,35 @@ export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
   return function usePetChatState(): ChatPanelState {
     // The version number is generated when the panel is mounted: it must be remounted every time the panel is opened. If you change the avatar and reopen it, you will definitely get the new picture.
     const [data, setData] = useState<PanelData>({ ...INITIAL, avatarVersion: Date.now() });
+    const [recordingPhase, setRecordingPhase] = useState<RecordingPhase>('idle');
+    const recordingRef = useRef<ReturnType<typeof createRecording> | null>(null);
+    const recording = (recordingRef.current ??= createRecording({
+      ...recordingBrowser,
+      phase: setRecordingPhase,
+      error: (kind, detail) =>
+        setData((prev) => ({ ...prev, error: rt.t(`recordError_${kind}`) + (detail ? ': ' + detail : '') })),
+      append: (text) =>
+        setData((prev) => ({ ...prev, draft: prev.draft ? prev.draft + '\n' + text : text, error: '' })),
+    }));
+    rt.useEffect(() => () => recording.cancel(false), []);
+    rt.useEffect(() => {
+      recording.cancel();
+    }, [data.petId]);
     const listRef = useRef<HTMLDivElement | null>(null);
     const draftRef = useRef<HTMLTextAreaElement | null>(null);
+    rt.useEffect(() => {
+      if (typeof document === 'undefined' || !recording.active()) return;
+      // Standalone tab navigation hides the mounted panel instead of unmounting it.
+      const checkVisible = (): void => {
+        if (document.hidden || (draftRef.current && draftRef.current.getClientRects().length === 0)) recording.cancel();
+      };
+      const timer = setInterval(checkVisible, 250);
+      document.addEventListener('visibilitychange', checkVisible);
+      return () => {
+        clearInterval(timer);
+        document.removeEventListener('visibilitychange', checkVisible);
+      };
+    }, [recordingPhase]);
     /** Input method combination state: must survive across renderings. Rebuilding once will forget "composing". */
     const imeRef = useRef<CompositionWatch | null>(null);
     const ime = (imeRef.current ??= createCompositionWatch());
@@ -93,6 +121,7 @@ export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
         const next = rt.readSessionId?.();
         if (next === previous) return;
         previous = next;
+        recording.cancel();
         patch({ messages: [], selected: [], contextRounds: 0 });
         void reload(data.petId);
       }, 500);
@@ -114,6 +143,20 @@ export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
     return {
       ...data,
       ...sendActions,
+      send: () => {
+        if (!recording.active()) {
+          recording.cancel();
+          sendActions.send();
+        }
+      },
+      recordingPhase,
+      toggleRecording: () => {
+        if (!data.busy && data.petId) {
+          patch({ error: '' });
+          void recording.toggle();
+        }
+      },
+      cancelRecording: () => recording.cancel(),
       ...history,
       ...shell,
       rounds,
@@ -143,6 +186,7 @@ export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
       listRef,
       draftRef,
       pickPet: (petId: string) => {
+        recording.cancel();
         patch({
           petId,
           messages: [],
@@ -174,7 +218,10 @@ export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
         const action = decideEnter(sendKey, ime, performance.now());
         if (action === 'ignore') return;
         event.preventDefault();
-        if (action === 'send') sendActions.send();
+        if (action === 'send' && !recording.active()) {
+          recording.cancel();
+          sendActions.send();
+        }
       },
       onDraftCompositionStart: ime.start,
       onDraftCompositionEnd: () => ime.end(performance.now()),

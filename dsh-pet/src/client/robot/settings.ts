@@ -61,6 +61,27 @@ export function makeRobotSettings(rt: RobotRuntime) {
                   ],
                 }),
                 field(t('robotAddress'), draft.address, (address) => setDraft({ ...draft, address })),
+                h('div', {
+                  className: 'pet-robot-chat-options',
+                  children: [
+                    h('strong', { children: t('robotChatTitle') }),
+                    ...(['chatSpeech', 'chatActions'] as const).map((key) =>
+                      h('label', {
+                        key,
+                        children: [
+                          h('input', {
+                            type: 'checkbox',
+                            checked: draft[key] === true,
+                            onChange: (event: { target: { checked: boolean } }) =>
+                              setDraft({ ...draft, [key]: event.target.checked }),
+                          }),
+                          t(key === 'chatSpeech' ? 'robotChatSpeechOption' : 'robotChatActionsOption'),
+                        ],
+                      }),
+                    ),
+                    h('p', { className: 'pet-robot-note', children: t('robotChatOptionsHint') }),
+                  ],
+                }),
                 h('label', {
                   children: [
                     t('robotRuntime'),

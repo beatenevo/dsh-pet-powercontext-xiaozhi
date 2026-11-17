@@ -96,7 +96,18 @@ export function apply(ctx: any): void {
   ctx.effect(() => () => observability.shutdown());
   const comparison = createComparisonService(ctx, configPaths, observability);
   ctx.effect(() => () => comparison.shutdown());
-  const chatMemory = createChatMemory({ ctx, configPaths, log, memeDirsFor, playback, state, userRoot, observability });
+  const robot = registerRobot(ctx, userRoot, () => httpRoute.handlePetRoute, observability);
+  const chatMemory = createChatMemory({
+    ctx,
+    configPaths,
+    log,
+    memeDirsFor,
+    playback,
+    state,
+    userRoot,
+    observability,
+    robot,
+  });
   const { lastWhisperAt, publishWhisper, publishSleepTalk, chatWithPet, getActivePetId, setActivePetId } = chatMemory;
 
   const balancePoll = createBalancePoll({ ctx, configPaths, getActivePetId, log, state, standaloneAiBalance });
@@ -138,7 +149,7 @@ export function apply(ctx: any): void {
   const deps: PetRouteDeps = {
     comparison,
     observability,
-    robot: registerRobot(ctx, userRoot, () => httpRoute.handlePetRoute, observability),
+    robot,
     memorySetup: registerManagedMemory(ctx, setup, () => httpRoute.memoryConfig),
     ...setup,
     ...petLookup,

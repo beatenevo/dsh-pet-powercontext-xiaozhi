@@ -3856,6 +3856,14 @@ components:
       properties:
         enabled:
           type: boolean
+        chatSpeech:
+          type: boolean
+          default: false
+          description: Forward newly generated replies from petId to robot TTS. Requires enabled. No history replay or delayed retries; replies over 500 characters are skipped.
+        chatActions:
+          type: boolean
+          default: false
+          description: Let petId chat propose configured action keys. Each proposal needs separate on-site confirmation; enabling this never authorizes movement.
         address:
           type: string
           maxLength: 255
@@ -3971,6 +3979,38 @@ components:
         message:
           type: string
           maxLength: 1000
+    RobotPendingAction:
+      type: object
+      required: [id, petId, key, name, expiresAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        petId:
+          type: string
+        key:
+          type: string
+        name:
+          type: string
+        expiresAt:
+          type: integer
+          description: Unix milliseconds. Proposals expire after two minutes and are revoked by a new linked chat turn, stop, disarm, configuration change, or host restart.
+    RobotChatSpeech:
+      type: object
+      required: [id, petId, state]
+      properties:
+        id:
+          type: string
+          format: uuid
+        petId:
+          type: string
+        state:
+          type: string
+          enum: [checking, running, reported-success, failed, unknown, skipped]
+        reason:
+          type: string
+          enum: [busy, offline, too_long, empty, cancelled]
+      description: Latest chat reply delivery, independent of chat generation success. Controller acknowledgement does not prove speech playback completion.
     RobotSnapshot:
       type: object
       required:
@@ -4011,6 +4051,10 @@ components:
           type: string
         stopResult:
           $ref: "#/components/schemas/RobotResult"
+        pendingAction:
+          $ref: "#/components/schemas/RobotPendingAction"
+        chatSpeech:
+          $ref: "#/components/schemas/RobotChatSpeech"
         commands:
           type: array
           maxItems: 20
@@ -4018,6 +4062,34 @@ components:
             $ref: "#/components/schemas/RobotCommand"
     RobotRequest:
       oneOf:
+        - type: object
+          additionalProperties: false
+          required: [action, session, id, confirmed]
+          properties:
+            action:
+              const: confirm-chat-action
+            session:
+              type: string
+              format: uuid
+            id:
+              type: string
+              format: uuid
+              description: Exact pendingAction.id. The server selects its configured action; clients cannot override the action key or robot IDs.
+            confirmed:
+              const: true
+          description: Confirm this proposal on site. Checks fresh controller status before consuming one authorization and dispatching once. Duplicate, expired, or revoked proposals cannot send another action.
+        - type: object
+          additionalProperties: false
+          required: [action, session, id]
+          properties:
+            action:
+              const: dismiss-chat-action
+            session:
+              type: string
+              format: uuid
+            id:
+              type: string
+              format: uuid
         - type: object
           additionalProperties: false
           required:

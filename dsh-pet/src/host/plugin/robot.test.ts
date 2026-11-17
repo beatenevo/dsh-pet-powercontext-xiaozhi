@@ -12,6 +12,7 @@ import { PollStateStore } from '../state.ts';
 import { defaultRobotConfig } from '../robot/config.ts';
 import type { PetRouteDeps } from '../routes/types.ts';
 import type { RouteResult } from '../http.ts';
+import { handleRobotRoutes } from '../routes/robot.ts';
 
 async function harness(t: TestContext, display: string) {
   const root = mkdtempSync(join(tmpdir(), 'astra-pet-feedback-'));
@@ -58,7 +59,7 @@ async function harness(t: TestContext, display: string) {
     assert.equal(responses.length, 1);
     return result.stopResult!;
   };
-  return { state, lookup, petId, responses, stop };
+  return { state, lookup, petId, responses, stop, service, configPaths };
 }
 
 for (const display of ['web', 'desktop', 'both']) {
@@ -83,4 +84,37 @@ test('robot feedback respects exclusive pet ownership', async (t) => {
   assert.equal(h.responses[0].kind, 'json');
   assert.equal((h.responses[0] as { obj: { reason: string } }).obj.reason, 'lock-required');
   assert.deepEqual(h.state.read().pets[h.petId].say, before);
+});
+
+test('confirming an old proposal cannot move a robot for a deleted pet', async (t) => {
+  const h = await harness(t, 'web');
+  await h.service.submit({
+    action: 'configure',
+    config: {
+      ...h.service.snapshot().config,
+      enabled: true,
+      chatActions: true,
+      actions: [{ key: 'greet', name: 'Greeting', actionIds: [100], petAnimation: '' }],
+    },
+  });
+  const context = h.service.beginChat(h.petId)!;
+  h.service.completeChat(context, { text: 'Hello', actionKey: 'greet' });
+  const id = h.service.snapshot().pendingAction!.id;
+  writeFileSync(h.configPaths.defaultFile, JSON.stringify({ pets: [] }));
+  const result = await handleRobotRoutes(
+    {
+      robot: h.service,
+      requirePet: h.lookup.requirePet,
+      configPaths: h.configPaths,
+    } as unknown as PetRouteDeps,
+    {
+      rest: 'robot',
+      method: 'POST',
+      url: new URL('http://localhost/dsh-pet-7340/robot'),
+      body: JSON.stringify({ action: 'confirm-chat-action', session: context.session, id, confirmed: true }),
+    },
+  );
+  assert.equal(result?.kind, 'json');
+  assert.equal((result as { obj: { reason: string } }).obj.reason, 'unknown-pet');
+  assert.equal(h.service.snapshot().commands.length, 0);
 });

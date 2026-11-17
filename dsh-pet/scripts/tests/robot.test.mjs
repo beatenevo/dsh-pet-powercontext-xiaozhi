@@ -58,8 +58,11 @@ createRoot(document.getElementById('root')).render(React.createElement(Panel,{pe
         state.session = randomUUID();
         state.armed = false;
         state.connected = false;
+        state.pendingAction = undefined;
       }
-      if (request.action === 'execute') {
+      if (request.action === 'dismiss-chat-action') state.pendingAction = undefined;
+      if (request.action === 'execute' || request.action === 'confirm-chat-action') {
+        state.pendingAction = undefined;
         state.armed = false;
         state.busy = true;
         if (delayExecute)
@@ -99,6 +102,8 @@ beforeEach(() => {
     session: randomUUID(),
     config: {
       enabled: true,
+      chatSpeech: false,
+      chatActions: false,
       address: '127.0.0.1:50051',
       python: 'python3',
       timeoutSeconds: 30,
@@ -192,4 +197,45 @@ test('an empty taught action ID is rejected locally instead of becoming action z
   assert.deepEqual(requests[0].config.actions[0].actionIds, [105, 106]);
   assert.equal(requests[0].config.python, 'bundled');
   assert.equal(state.armed, false);
+});
+
+test('chat interaction switches save explicit opt-ins for the current pet', async (t) => {
+  const page = await open(t);
+  await page.getByText('Connection and taught actions', { exact: true }).click();
+  const speech = page.getByRole('checkbox', { name: 'Speak pet replies through the robot' });
+  const actions = page.getByRole('checkbox', { name: 'Suggest configured robot actions from chat' });
+  assert.equal(await speech.isChecked(), false);
+  assert.equal(await actions.isChecked(), false);
+  await speech.check();
+  await actions.check();
+  await page.getByRole('button', { name: 'Save robot configuration' }).click();
+  await page.getByText('Disconnected or stale status', { exact: true }).waitFor();
+  assert.equal(requests[0].config.chatSpeech, true);
+  assert.equal(requests[0].config.chatActions, true);
+  assert.equal(requests[0].config.petId, 'main');
+});
+
+test('a chat-selected action stays visible and sends only its proposal identity after confirmation', async (t) => {
+  const id = randomUUID();
+  state.pendingAction = { id, petId: 'main', key: 'greet', name: 'Greeting', expiresAt: Date.now() + 120000 };
+  state.chatSpeech = { id: randomUUID(), petId: 'main', state: 'reported-success' };
+  const page = await open(t);
+  const card = page.getByRole('region', { name: 'Chat interaction' });
+  await card.getByText('Greeting', { exact: true }).waitFor();
+  await card.getByText('Reply speech: Speech request accepted (playback completion unknown)').waitFor();
+  assert.equal(requests.length, 0);
+  await card.getByRole('button', { name: 'Confirm on site and run this action' }).click();
+  await page.getByText('Recent requests', { exact: true }).click();
+  await page.getByText(/Greeting: Controller reported success/).waitFor();
+  assert.deepEqual(requests, [{ action: 'confirm-chat-action', session: state.session, id, confirmed: true }]);
+  assert.equal(await page.getByRole('button', { name: 'Confirm on site and run this action' }).count(), 0);
+});
+
+test('dismissal removes the proposed action without an execute request', async (t) => {
+  const id = randomUUID();
+  state.pendingAction = { id, petId: 'main', key: 'greet', name: 'Greeting', expiresAt: Date.now() + 120000 };
+  const page = await open(t);
+  await page.getByRole('button', { name: 'Dismiss action', exact: true }).click();
+  await page.getByRole('button', { name: 'Dismiss action', exact: true }).waitFor({ state: 'detached' });
+  assert.deepEqual(requests, [{ action: 'dismiss-chat-action', session: state.session, id }]);
 });

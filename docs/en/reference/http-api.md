@@ -93,7 +93,9 @@ Standalone chat works after its model is configured. Balance and DSH session ser
 
 ## Astra Pro 2.0
 
-`GET /dsh-pet-7340/robot` reads cached state; JSON `POST` submits `configure`, `check`, `arm`, `disarm`, `execute`, `speak` or `stop`. Actions require a current session and explicit confirmation; `execute` also consumes one-shot authorization. Business failures use `ok: false`. Standalone requires session authentication for reads and writes. See the [setup and behavior guide](../guides/robot.md) and the `RobotRequest` / `RobotSnapshot` schemas in OpenAPI.
+`GET /dsh-pet-7340/robot` reads cached state; JSON `POST` submits `configure`, `check`, `arm`, `disarm`, `execute`, `speak`, `stop`, `confirm-chat-action`, or `dismiss-chat-action`. Actions require a current session and explicit confirmation; `execute` also consumes one-shot authorization. Business failures use `ok: false`. Standalone requires session authentication for reads and writes. See the [setup and behavior guide](../guides/robot.md) and the `RobotRequest` / `RobotSnapshot` schemas in OpenAPI.
+
+Chat forwarding is opt-in through `RobotConfig.chatSpeech` and `chatActions` (both default to false), bound to `petId`. `RobotSnapshot.pendingAction` carries a proposal ID and expiry; confirmation submits that ID with the current session and `confirmed: true`, without client-selected SDK arguments. It checks fresh controller status and consumes the proposal once. `chatSpeech` reports delivery separately from chat success. See [chat interaction](../guides/robot.md#speak-replies-and-propose-actions-from-chat).
 
 ## Environment queries
 

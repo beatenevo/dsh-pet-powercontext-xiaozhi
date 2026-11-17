@@ -27,6 +27,7 @@ import type { HostSetup } from './setup.ts';
 import type { HostContext } from './context.ts';
 import type { PetObservability } from '../observability/service.ts';
 import type { PetOperation } from '../../shared/observability.ts';
+import type { RobotService } from '../robot/service.ts';
 import { DEFAULT_CHAT_MEMORY, chatMemoryConfigValid, type ChatMemoryConfig } from '../../shared/chat-memory-config.ts';
 import { prepareDshMemory, type DshMemoryResult } from '../dsh-memory.ts';
 import { boundedHistory, memoryRecallQuery } from '../memory-context.ts';
@@ -74,6 +75,7 @@ function voiceTargetFor(pet: Record<string, unknown>): VoiceTarget | undefined {
 /** Input of dialogue and memory: assembly period objects and earlier factories. */
 export type ChatMemoryInput = {
   observability?: PetObservability;
+  robot?: RobotService;
   /** host context (the one apply received). */
   ctx: HostContext;
   /** Optional environment lookup; tests provide local facts instead of calling public weather services. */
@@ -561,6 +563,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     observe(
       'chat',
       async () => {
+        const robotChat = deps.robot?.beginChat(petId);
         // Query optional weather outside the journal lock so it does not block other conversations.
         const env = await environmentForPrompt();
         return withMemoryLock(async () => {
@@ -691,6 +694,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
             userText: patch?.userText ?? text,
             pool,
             actions,
+            robotActions: robotChat?.actions,
             preferred: configuredModel(found.conf, 'chatModel'),
             image,
           });
@@ -756,6 +760,8 @@ export function createChatMemory(deps: ChatMemoryInput) {
             });
           }
           // The same text is brought out with the return value (the leaves are written as written, not one of the two)
+          if (robotChat)
+            deps.robot?.completeChat(robotChat, { text: generated.text, actionKey: generated.robotAction });
           return { ok: true as const, text: generated.text, ...(generated.image ? { image: generated.image } : {}) };
         });
       },

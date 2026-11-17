@@ -13,8 +13,14 @@ export const handleRobotRoutes: RouteHandler = async (deps, { rest, method, body
   try {
     if (method === 'POST') {
       const request = robotRequestSchema.parse(JSON.parse(body ?? 'null'));
-      if ('petId' in request) {
-        const pet = deps.requirePet(new URLSearchParams({ pet: request.petId }), () => readAllConfig(deps.configPaths));
+      const petId =
+        'petId' in request
+          ? request.petId
+          : request.action === 'confirm-chat-action'
+            ? deps.robot.snapshot().pendingAction?.petId
+            : undefined;
+      if (petId !== undefined) {
+        const pet = deps.requirePet(new URLSearchParams({ pet: petId }), () => readAllConfig(deps.configPaths));
         if (!pet.ok) return pet.res;
       }
       return okResult({ ok: true, ...(await deps.robot.submit(request)) });

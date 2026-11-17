@@ -17,6 +17,10 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { setImmediate as flush } from 'node:timers/promises';
+import { createRobotService } from './robot/service.ts';
+import { defaultRobotConfig } from './robot/config.ts';
+import type { RobotCall } from './robot/worker.ts';
 
 import { DEFAULT_CHAT_MEMORY } from '../shared/chat-memory-config.ts';
 import { DSH_MEMORY_PROTOCOL, DSH_MEMORY_SERVICE } from './dsh-memory.ts';
@@ -82,9 +86,11 @@ function createMemory(
   captured?: Record<string, unknown>[],
   getService?: (name: string) => unknown,
   environment: ChatMemoryInput['environment'] = async () => ({}),
+  robot?: ChatMemoryInput['robot'],
 ) {
   return createChatMemory({
     environment,
+    robot,
     ctx: { ...(fakeCtx(reply, captured) as object), ...(getService ? { get: getService } : {}) },
     configPaths: ws.configPaths,
     log: { info: () => {}, warn: () => {}, error: () => {} },
@@ -761,3 +767,72 @@ test('failed environment lookup still generates a reply', async () => {
     rmSync(ws.dir, { recursive: true, force: true });
   }
 });
+
+for (const connected of [true, false]) {
+  test(`chat-to-robot forwards only the saved reply and isolates ${connected ? 'available' : 'offline'} transport`, async (t) => {
+    const ws = tempWorkspace();
+    const calls: RobotCall[] = [];
+    const robot = createRobotService({
+      userRoot: ws.userRoot,
+      monitor: false,
+      run: async (_config, call) => {
+        calls.push(call);
+        return call.operation === 'status'
+          ? {
+              ok: connected,
+              code: 'status',
+              message: 'Local fixture',
+              telemetry: { actionCode: 520000, description: 'Idle', modes: [1, 1, 1] },
+            }
+          : { ok: true, code: 'reported_success', message: 'Local fixture accepted' };
+      },
+    });
+    t.after(async () => {
+      await robot.dispose();
+      rmSync(ws.dir, { recursive: true, force: true });
+    });
+    await robot.submit({
+      action: 'configure',
+      config: {
+        ...defaultRobotConfig(),
+        enabled: true,
+        address: '127.0.0.1:50051',
+        chatSpeech: true,
+        chatActions: true,
+        actions: [{ key: 'greet', name: '打招呼', actionIds: [100], petAnimation: '' }],
+      },
+    });
+    const captured: Record<string, unknown>[] = [];
+    const records: Array<{ petId: string; leaf: string; data: Record<string, unknown> }> = [];
+    const reply = '你好，我是桌宠。打招呼动作等待现场确认。';
+    const memory = createMemory(
+      reply + '\n[robot_action:greet]',
+      ws,
+      undefined,
+      { records },
+      captured,
+      undefined,
+      async () => ({}),
+      robot,
+    );
+    const result = await memory.chatWithPet('main', '介绍一下自己，再打个招呼');
+    assert.deepEqual(result, { ok: true, text: reply });
+    await flush();
+    assert.match(userTextOf(captured[0]), /robot_action:KEY/);
+    assert.match(userTextOf(captured[0]), /"name":"打招呼"/);
+    assert.equal(readMessages(ws.userRoot)[1].content, reply);
+    assert.equal(records.find((entry) => entry.leaf === 'say')?.data.text, reply);
+    assert.equal(robot.snapshot().pendingAction?.key, 'greet');
+    assert.equal(
+      calls.some((call) => call.operation === 'execute'),
+      false,
+    );
+    assert.equal(calls.filter((call) => call.operation === 'speak').length, connected ? 1 : 0);
+    if (connected) assert.equal(calls.find((call) => call.operation === 'speak')?.text, reply);
+    else assert.equal(robot.snapshot().chatSpeech?.reason, 'offline');
+    const count = calls.length;
+    await memory.readMemory();
+    await flush();
+    assert.equal(calls.length, count, 'Reading history must not replay speech or movement');
+  });
+}

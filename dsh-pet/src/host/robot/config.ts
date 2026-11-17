@@ -17,6 +17,8 @@ const address = z
 export const robotConfigSchema = z
   .strictObject({
     enabled: z.boolean(),
+    chatSpeech: z.boolean().default(false),
+    chatActions: z.boolean().default(false),
     address,
     python: z
       .string()
@@ -55,6 +57,8 @@ export const robotConfigSchema = z
 export function defaultRobotConfig(): RobotConfig {
   return {
     enabled: false,
+    chatSpeech: false,
+    chatActions: false,
     address: '',
     python: 'bundled',
     timeoutSeconds: 30,
@@ -70,6 +74,13 @@ export const robotRequestSchema = z.discriminatedUnion('action', [
   z.strictObject({ action: z.literal('arm'), session: z.string().uuid(), confirmed: z.literal(true) }),
   z.strictObject({ action: z.literal('disarm') }),
   z.strictObject({ action: z.literal('stop') }),
+  z.strictObject({
+    action: z.literal('confirm-chat-action'),
+    session: z.string().uuid(),
+    id: z.string().uuid(),
+    confirmed: z.literal(true),
+  }),
+  z.strictObject({ action: z.literal('dismiss-chat-action'), session: z.string().uuid(), id: z.string().uuid() }),
   z.strictObject({
     action: z.literal('execute'),
     session: z.string().uuid(),

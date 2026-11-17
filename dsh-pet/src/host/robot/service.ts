@@ -7,7 +7,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { readPrivateJson, writePrivateJson } from '../../standalone/ai-storage.ts';
-import type { RobotResult, RobotSnapshot } from '../../shared/robot.ts';
+import type { RobotChatSpeech, RobotPendingAction, RobotResult, RobotSnapshot } from '../../shared/robot.ts';
+import type { RobotChatContext } from './chat.ts';
 import { defaultRobotConfig, robotConfigSchema, robotRequestSchema, type RobotRequest } from './config.ts';
 import { readRobotJournal, writeRobotJournal, type RobotReceipt } from './journal.ts';
 import { runRobotWorker, type RobotRunner, type RobotCall } from './worker.ts';
@@ -24,6 +25,8 @@ export interface RobotFeedback {
 export interface RobotService {
   snapshot(): RobotSnapshot;
   submit(input: unknown): Promise<RobotSnapshot>;
+  beginChat(petId: string): RobotChatContext | undefined;
+  completeChat(context: RobotChatContext, reply: { text: string; actionKey?: string }): void;
   dispose(): Promise<void>;
 }
 
@@ -72,7 +75,19 @@ export function createRobotService(options: {
   let stopResult: RobotResult | undefined;
   let stopOperation: Promise<RobotResult> | undefined;
   let statusAbort: AbortController | undefined;
+  let statusOperation: Promise<void> | undefined;
   let previousDescription: string | undefined;
+  let chatContext: RobotChatContext | undefined;
+  let chatCompleted = false;
+  let pendingAction: RobotPendingAction | undefined;
+  let chatSpeech: RobotChatSpeech | undefined;
+  const cancelChat = (): void => {
+    chatContext = undefined;
+    pendingAction = undefined;
+    if (chatSpeech?.state === 'checking') chatSpeech = { ...chatSpeech, state: 'skipped', reason: 'cancelled' };
+  };
+  const currentChat = (context: RobotChatContext): boolean =>
+    !disposed && config.enabled && context.session === session && context.id === chatContext?.id;
   const notify = (event: RobotFeedback): void => {
     void Promise.resolve()
       .then(() => options.feedback?.(event))
@@ -90,6 +105,8 @@ export function createRobotService(options: {
     telemetry,
     error,
     stopResult,
+    pendingAction: pendingAction && pendingAction.expiresAt > now() ? { ...pendingAction } : undefined,
+    chatSpeech: chatSpeech ? { ...chatSpeech } : undefined,
     commands: receipts.slice(-20).map((item) => ({
       id: item.id,
       kind: item.kind,
@@ -111,32 +128,48 @@ export function createRobotService(options: {
       throw new Error(error);
     }
   };
-  const check = async (): Promise<void> => {
-    if (!config.enabled || checking || stopping || disposed || storageError) return;
+  const check = (): Promise<void> => {
+    if (!config.enabled || stopping || disposed || storageError) return Promise.resolve();
+    if (statusOperation) return statusOperation;
     checking = true;
-    statusAbort = new AbortController();
-    try {
-      const result = await run(config, { operation: 'status' }, statusAbort.signal);
-      if (disposed || statusAbort.signal.aborted) return;
-      checkedAt = now();
-      connected = result.ok && !!result.telemetry;
-      telemetry = result.telemetry;
-      error = connected ? '' : result.code;
-      if (!connected || telemetry?.actionCode !== 520000 || telemetry.modes.some((mode) => mode !== 1)) armed = false;
-      const description = connected ? telemetry?.description : undefined;
-      if (description && previousDescription !== undefined && description !== previousDescription)
-        notify({ petId: config.petId, text: `Robot: ${description}` });
-      previousDescription = description;
-    } catch {
-      connected = false;
-      armed = false;
-      error = 'robot_connection_failed';
-    } finally {
-      checking = false;
-      statusAbort = undefined;
-    }
+    const abort = new AbortController();
+    statusAbort = abort;
+    // Share an in-flight monitor check with chat speech instead of dropping the reply as busy.
+    statusOperation = Promise.resolve()
+      .then(async () => {
+        if (disposed || abort.signal.aborted) return;
+        try {
+          const result = await run(config, { operation: 'status' }, abort.signal);
+          if (disposed || abort.signal.aborted) return;
+          checkedAt = now();
+          connected = result.ok && !!result.telemetry;
+          telemetry = result.telemetry;
+          error = connected ? '' : result.code;
+          if (!connected || telemetry?.actionCode !== 520000 || telemetry.modes.some((mode) => mode !== 1))
+            armed = false;
+          const description = connected ? telemetry?.description : undefined;
+          if (description && previousDescription !== undefined && description !== previousDescription)
+            notify({ petId: config.petId, text: `Robot: ${description}` });
+          previousDescription = description;
+        } catch {
+          connected = false;
+          armed = false;
+          error = 'robot_connection_failed';
+        }
+      })
+      .finally(() => {
+        checking = false;
+        statusAbort = undefined;
+        statusOperation = undefined;
+      });
+    return statusOperation;
   };
-  const finish = async (item: RobotReceipt, call: RobotCall, abort: AbortController): Promise<void> => {
+  const finish = async (
+    item: RobotReceipt,
+    call: RobotCall,
+    abort: AbortController,
+    fromChat: boolean,
+  ): Promise<void> => {
     let result: RobotResult;
     try {
       result = await run(config, call, abort.signal);
@@ -154,6 +187,7 @@ export function createRobotService(options: {
       item.finishedAt = now();
     }
     active = undefined;
+    if (fromChat && chatSpeech?.id === item.id) chatSpeech = { ...chatSpeech, state: item.state };
     // The old idle sample must not authorize another motion after a command returns.
     statusAbort?.abort();
     connected = false;
@@ -162,9 +196,12 @@ export function createRobotService(options: {
     } catch {
       /* The storage fault blocks future commands. */
     }
-    if (!disposed) notify({ petId: item.petId, text: `Robot ${item.key}: ${item.state}. ${item.message}` });
+    // Automatic speech receipts belong in the panel; they must not replace the pet's answer bubble.
+    if (!disposed && !fromChat)
+      notify({ petId: item.petId, text: `Robot ${item.key}: ${item.state}. ${item.message}` });
   };
-  const command = (request: Extract<RobotRequest, { action: 'execute' | 'speak' }>): void => {
+  const command = (request: Extract<RobotRequest, { action: 'execute' | 'speak' }>, fromChat = false): void => {
+    if (storageError) throw new Error('robot_storage_unavailable');
     const action = request.action === 'execute' ? config.actions.find((item) => item.key === request.key) : undefined;
     if (request.action === 'execute' && !action) throw new Error('robot_unknown_action');
     const fingerprint = createHash('sha256')
@@ -220,14 +257,16 @@ export function createRobotService(options: {
       request.action === 'execute'
         ? { operation: 'execute', requestId: request.id, actionIds: action!.actionIds }
         : { operation: 'speak', text: request.text };
-    notify({
-      petId: request.petId,
-      text: `Robot: ${item.key} requested.`,
-      animation: action?.petAnimation || undefined,
-    });
-    void finish(item, call, abort);
+    if (!fromChat)
+      notify({
+        petId: request.petId,
+        text: `Robot: ${item.key} requested.`,
+        animation: action?.petAnimation || undefined,
+      });
+    void finish(item, call, abort, fromChat);
   };
   const stop = async (): Promise<void> => {
+    cancelChat();
     armed = false;
     if (stopping) return;
     if (!config.address) throw new Error('robot_address_required');
@@ -260,10 +299,98 @@ export function createRobotService(options: {
     }
     notify({ petId: config.petId, text: stopResult.message });
   };
+  const speakReply = async (context: RobotChatContext, text: string): Promise<void> => {
+    const skip = (reason: RobotChatSpeech['reason']): void => {
+      if (currentChat(context)) chatSpeech = { id: context.id, petId: context.petId, state: 'skipped', reason };
+    };
+    if (!text.trim()) return skip('empty');
+    if (text.length > 500) return skip('too_long');
+    if (active || stopping) return skip('busy');
+    chatSpeech = { id: context.id, petId: context.petId, state: 'checking' };
+    try {
+      await check();
+      if (!currentChat(context) || !config.chatSpeech) return;
+      if (active || stopping) return skip('busy');
+      if (!snapshot().connected) return skip('offline');
+      chatSpeech = { id: context.id, petId: context.petId, state: 'running' };
+      command(
+        { action: 'speak', session, id: context.id, text: text.trim(), petId: context.petId, confirmed: true },
+        true,
+      );
+    } catch {
+      if (currentChat(context)) chatSpeech = { id: context.id, petId: context.petId, state: 'failed' };
+    }
+  };
+  const confirmChatAction = async (id: string): Promise<void> => {
+    const proposal = pendingAction;
+    if (!proposal || proposal.id !== id || proposal.expiresAt <= now()) throw new Error('robot_proposal_expired');
+    if (!config.enabled || !config.chatActions) throw new Error('robot_chat_disabled');
+    if (active || stopping || checking) throw new Error('robot_busy');
+    // Confirmation is bound to this proposal and a new status sample, never to a previous generic arm.
+    await check();
+    if (disposed || pendingAction !== proposal || proposal.expiresAt <= now())
+      throw new Error('robot_proposal_expired');
+    if (
+      active ||
+      stopping ||
+      !snapshot().connected ||
+      telemetry?.actionCode !== 520000 ||
+      telemetry.modes.some((mode) => mode !== 1)
+    )
+      throw new Error('robot_not_ready');
+    armed = true;
+    try {
+      command({
+        action: 'execute',
+        session,
+        id: proposal.id,
+        key: proposal.key,
+        petId: proposal.petId,
+        confirmed: true,
+      });
+      cancelChat();
+    } finally {
+      armed = false;
+    }
+  };
   const timer = options.monitor === false ? undefined : setInterval(() => void check(), 5000);
   timer?.unref();
   return {
     snapshot,
+    beginChat(petId) {
+      if (
+        disposed ||
+        storageError ||
+        !config.enabled ||
+        config.petId !== petId ||
+        (!config.chatSpeech && !config.chatActions)
+      )
+        return;
+      cancelChat();
+      armed = false;
+      chatCompleted = false;
+      chatContext = {
+        id: randomUUID(),
+        session,
+        petId,
+        actions: config.chatActions ? config.actions.map(({ key, name }) => ({ key, name })) : [],
+      };
+      return structuredClone(chatContext);
+    },
+    completeChat(context, reply) {
+      if (!currentChat(context) || storageError || chatCompleted) return;
+      chatCompleted = true;
+      const action = config.chatActions && config.actions.find((item) => item.key === reply.actionKey);
+      if (action)
+        pendingAction = {
+          id: randomUUID(),
+          petId: context.petId,
+          key: action.key,
+          name: action.name,
+          expiresAt: now() + 120_000,
+        };
+      if (config.chatSpeech) void speakReply(context, reply.text);
+    },
     async submit(input) {
       const request = robotRequestSchema.parse(input);
       if (disposed) throw new Error('robot_disposed');
@@ -273,15 +400,22 @@ export function createRobotService(options: {
       }
       if (request.action === 'disarm') {
         armed = false;
+        cancelChat();
         return snapshot();
       }
       if (storageError) throw new Error('robot_storage_unavailable');
       if ('session' in request && request.session !== session) throw new Error('robot_session_changed');
-      if (request.action === 'configure') {
+      if (request.action === 'confirm-chat-action') await confirmChatAction(request.id);
+      else if (request.action === 'dismiss-chat-action') {
+        if (pendingAction?.id !== request.id) throw new Error('robot_proposal_expired');
+        pendingAction = undefined;
+      } else if (request.action === 'configure') {
         if (active || checking || stopping) throw new Error('robot_busy');
         mkdirSync(options.userRoot, { recursive: true, mode: 0o700 });
         writePrivateJson(configFile, request.config);
         config = request.config;
+        cancelChat();
+        chatSpeech = undefined;
         session = randomUUID();
         armed = connected = false;
         telemetry = undefined;
@@ -300,11 +434,15 @@ export function createRobotService(options: {
         )
           throw new Error('robot_not_ready');
         armed = true;
-      } else command(request);
+      } else {
+        cancelChat();
+        command(request);
+      }
       return snapshot();
     },
     async dispose() {
       disposed = true;
+      cancelChat();
       armed = false;
       clearInterval(timer);
       statusAbort?.abort();

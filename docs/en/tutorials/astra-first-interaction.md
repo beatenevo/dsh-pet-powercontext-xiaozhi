@@ -126,7 +126,7 @@ No particular provider or fixed model name is required. Ollama needs a separatel
 
 PowerContext remembers preferences and information from successful chats. **It is not required for robot control.** Enable it later by configuring a memory-generation model and text embedding model with the correct dimensions. The robot's bundled Python/SDK does not include an installed PowerContext service; memory is prepared separately, and automatic setup on Windows remains experimental. Follow [memory setup](../guides/memory.md).
 
-Pet speech through the computer and speech through the robot are separate. Computer speech is configured in the pet's voice settings. Robot speech uses the **Speak through robot** button described below; chat replies are not forwarded automatically to the robot speaker.
+Pet speech through the computer and speech through the robot are separate. Computer speech is configured in the pet's voice settings. Robot speech can use the **Speak through robot** button below, or the opt-in **Speak pet replies through the robot** setting. To propose configured actions from conversation and confirm them on site, follow [chat interaction](../guides/robot.md#speak-replies-and-propose-actions-from-chat).
 
 ## 5. Connect Astra Pro 2.0
 
@@ -157,7 +157,7 @@ Monitoring reads state approximately every five seconds. A sample older than 15 
 3. Click **Speak through robot**.
 4. Expand **Recent requests** to read the response, and listen on site to confirm actual audio.
 
-Speech does not require motion authorization, but does require an explicit click. Sending speech also clears any previously granted one-action authorization. A successful response means the speech request was accepted, not that playback has completed.
+Manual speech does not require motion authorization; the chat-forwarding option can send newly generated replies automatically. Sending speech also clears any previously granted one-action authorization. A successful response means the speech request was accepted, not that playback has completed.
 
 ### Add a manufacturer-verified taught action
 

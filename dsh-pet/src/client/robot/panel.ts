@@ -1,4 +1,4 @@
-/** Explicit physical controls, distinct from automatic pet chat and animation. */
+/** Robot speech status, confirmed chat proposals, and manual physical controls. */
 import { makeRobotSettings } from './settings.ts';
 import { robotRequestId, useRobotState, type RobotRuntime } from './state.ts';
 import type { RobotKey } from './locales.ts';
@@ -11,6 +11,27 @@ export function makeRobotPanel(rt: RobotRuntime) {
     const { snapshot: status, error, pending, send } = useRobotState(rt);
     const [selected, setSelected] = useState('');
     const [text, setText] = useState('');
+    const proposal = status?.pendingAction?.petId === props.petId ? status.pendingAction : undefined;
+    const speech = status?.chatSpeech?.petId === props.petId ? status.chatSpeech : undefined;
+    const speechKey: RobotKey | undefined = speech
+      ? {
+          checking: 'robotSpeechChecking' as const,
+          running: 'robotRunning' as const,
+          'reported-success': 'robotSpeechAccepted' as const,
+          failed: 'robotFailed' as const,
+          unknown: 'robotUnknown' as const,
+          skipped: 'robotSpeechSkipped' as const,
+        }[speech.state]
+      : undefined;
+    const reasonKey: RobotKey | undefined = speech?.reason
+      ? {
+          busy: 'robotSpeechBusy' as const,
+          offline: 'robotSpeechOffline' as const,
+          too_long: 'robotSpeechLong' as const,
+          empty: 'robotSpeechEmpty' as const,
+          cancelled: 'robotSpeechCancelled' as const,
+        }[speech.reason]
+      : undefined;
     const action = status?.config.actions.find((item) => item.key === selected) ?? status?.config.actions[0];
     const blocked = !status || pending || status.busy || status.stopping;
     const ready =
@@ -29,7 +50,12 @@ export function makeRobotPanel(rt: RobotRuntime) {
       className: 'pet-robot',
       'data-robot-panel': '',
       children: [
-        h('summary', { children: t('robotTitle') }),
+        h('summary', {
+          children: [
+            h('span', { children: t('robotTitle') }),
+            proposal ? h('span', { className: 'pet-robot-badge', children: t('robotProposalTitle') }) : null,
+          ],
+        }),
         h('div', {
           className: 'pet-robot-body',
           children: [
@@ -41,83 +67,139 @@ export function makeRobotPanel(rt: RobotRuntime) {
                   ? t('robotConnected')
                   : t('robotDisconnected'),
             }),
-            h('p', {
-              children: status?.stopping
-                ? t('robotStopping')
-                : status?.busy
-                  ? t('robotBusy')
-                  : status?.armed
-                    ? t('robotArmed')
-                    : t('robotDisarmed'),
-            }),
-            h('p', { children: t('robotReady') }),
             h('div', {
               className: 'pet-robot-buttons',
               children: [
                 button('robotCheck', { action: 'check' }, pending || !status?.config.enabled || status.checking),
-                button(
-                  'robotArm',
-                  { action: 'arm', session: status?.session, confirmed: true },
-                  blocked || !ready || status.armed,
-                ),
-                button('robotDisarm', { action: 'disarm' }, !status?.armed),
-                // Stop remains clickable while action, configuration and connection requests are pending.
                 button('robotStop', { action: 'stop' }, !status?.config.address || status.stopping, true),
               ],
             }),
-            h('p', { className: 'pet-robot-note', children: t('robotStopHint') }),
-            status?.config.actions.length
-              ? h('label', {
+            proposal || speech
+              ? h('section', {
+                  className: 'pet-robot-chat-card',
+                  'aria-label': t('robotChatTitle'),
                   children: [
-                    t('robotName'),
-                    h('select', {
-                      value: action?.key ?? '',
-                      disabled: blocked,
-                      onChange: (event: { target: { value: string } }) => setSelected(event.target.value),
-                      children: status.config.actions.map((item) =>
-                        h('option', { key: item.key, value: item.key, children: item.name }),
-                      ),
-                    }),
+                    h('strong', { children: t('robotChatTitle') }),
+                    speechKey
+                      ? h('p', {
+                          role: 'status',
+                          children: [
+                            t('robotChatSpeechLabel'),
+                            ': ',
+                            t(speechKey),
+                            reasonKey ? ' · ' + t(reasonKey) : '',
+                          ],
+                        })
+                      : null,
+                    proposal
+                      ? h('div', {
+                          className: 'pet-robot-proposal',
+                          children: [
+                            h('p', { children: t('robotProposalTitle') }),
+                            h('strong', { className: 'pet-robot-proposal-name', children: proposal.name }),
+                            h('p', { className: 'pet-robot-note', children: t('robotProposalHint') }),
+                            button(
+                              'robotConfirmProposal',
+                              {
+                                action: 'confirm-chat-action',
+                                session: status?.session,
+                                id: proposal.id,
+                                confirmed: true,
+                              },
+                              blocked || !!status?.checking || proposal.expiresAt <= Date.now(),
+                            ),
+                            button(
+                              'robotDismissProposal',
+                              { action: 'dismiss-chat-action', session: status?.session, id: proposal.id },
+                              pending,
+                            ),
+                          ],
+                        })
+                      : null,
                   ],
                 })
-              : h('p', { children: t('robotEmpty') }),
-            h('button', {
-              type: 'button',
-              disabled: blocked || !status?.armed || !status.connected || !action || !props.petId,
-              onClick: () =>
-                void send({
-                  action: 'execute',
-                  session: status?.session,
-                  id: robotRequestId(),
-                  key: action?.key,
-                  petId: props.petId,
-                  confirmed: true,
-                }),
-              children: t('robotRun'),
-            }),
-            h('label', {
+              : null,
+            h('details', {
+              className: 'pet-robot-manual',
+              open: !status?.config.chatSpeech && !status?.config.chatActions,
               children: [
-                t('robotText'),
-                h('input', {
-                  value: text,
-                  maxLength: 500,
-                  onChange: (event: { target: { value: string } }) => setText(event.target.value),
+                h('summary', { children: t('robotManual') }),
+                h('p', {
+                  children: status?.stopping
+                    ? t('robotStopping')
+                    : status?.busy
+                      ? t('robotBusy')
+                      : status?.armed
+                        ? t('robotArmed')
+                        : t('robotDisarmed'),
+                }),
+                h('p', { children: t('robotReady') }),
+                h('div', {
+                  className: 'pet-robot-buttons',
+                  children: [
+                    button(
+                      'robotArm',
+                      { action: 'arm', session: status?.session, confirmed: true },
+                      blocked || !ready || status.armed,
+                    ),
+                    button('robotDisarm', { action: 'disarm' }, !status?.armed),
+                  ],
+                }),
+                h('p', { className: 'pet-robot-note', children: t('robotStopHint') }),
+                status?.config.actions.length
+                  ? h('label', {
+                      children: [
+                        t('robotName'),
+                        h('select', {
+                          value: action?.key ?? '',
+                          disabled: blocked,
+                          onChange: (event: { target: { value: string } }) => setSelected(event.target.value),
+                          children: status.config.actions.map((item) =>
+                            h('option', { key: item.key, value: item.key, children: item.name }),
+                          ),
+                        }),
+                      ],
+                    })
+                  : h('p', { children: t('robotEmpty') }),
+                h('button', {
+                  type: 'button',
+                  disabled: blocked || !status?.armed || !status.connected || !action || !props.petId,
+                  onClick: () =>
+                    void send({
+                      action: 'execute',
+                      session: status?.session,
+                      id: robotRequestId(),
+                      key: action?.key,
+                      petId: props.petId,
+                      confirmed: true,
+                    }),
+                  children: t('robotRun'),
+                }),
+                h('label', {
+                  children: [
+                    t('robotText'),
+                    h('input', {
+                      value: text,
+                      maxLength: 500,
+                      onChange: (event: { target: { value: string } }) => setText(event.target.value),
+                    }),
+                  ],
+                }),
+                h('button', {
+                  type: 'button',
+                  disabled: blocked || !status?.connected || !text.trim() || !props.petId,
+                  onClick: () =>
+                    void send({
+                      action: 'speak',
+                      session: status?.session,
+                      id: robotRequestId(),
+                      text,
+                      petId: props.petId,
+                      confirmed: true,
+                    }),
+                  children: t('robotSpeak'),
                 }),
               ],
-            }),
-            h('button', {
-              type: 'button',
-              disabled: blocked || !status?.connected || !text.trim() || !props.petId,
-              onClick: () =>
-                void send({
-                  action: 'speak',
-                  session: status?.session,
-                  id: robotRequestId(),
-                  text,
-                  petId: props.petId,
-                  confirmed: true,
-                }),
-              children: t('robotSpeak'),
             }),
             error ? h('p', { role: 'alert', children: `${t('robotRequestError')} (${error})` }) : null,
             status?.error ? h('p', { role: 'alert', children: status.error }) : null,

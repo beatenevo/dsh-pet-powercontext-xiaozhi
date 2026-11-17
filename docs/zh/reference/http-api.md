@@ -191,7 +191,9 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 
 ## Astra Pro 2.0
 
-`GET /dsh-pet-7340/robot` 读取缓存状态；JSON `POST` 提交 `configure`、`check`、`arm`、`disarm`、`execute`、`speak` 或 `stop`。动作需要当前会话和显式确认，`execute` 还会消耗单次授权。业务失败返回 `ok: false`。独立版读写均需要会话认证。安装与行为见[机器人指南](../guides/robot.md)，完整字段见 OpenAPI 的 `RobotRequest` / `RobotSnapshot`。
+`GET /dsh-pet-7340/robot` 读取缓存状态；JSON `POST` 提交 `configure`、`check`、`arm`、`disarm`、`execute`、`speak`、`stop`、`confirm-chat-action` 或 `dismiss-chat-action`。动作需要当前会话和显式确认，`execute` 还会消耗单次授权。业务失败返回 `ok: false`。独立版读写均需要会话认证。安装与行为见[机器人指南](../guides/robot.md)，完整字段见 OpenAPI 的 `RobotRequest` / `RobotSnapshot`。
+
+对话转发通过 `RobotConfig.chatSpeech` 和 `chatActions` 主动开启，均默认关闭，并绑定 `petId`。`RobotSnapshot.pendingAction` 包含推荐标识和过期时间；确认请求提交该标识、当前会话及 `confirmed: true`，不接受客户端指定 SDK 参数。服务端重新检查控制器状态并只消耗一次推荐。`chatSpeech` 独立于聊天成功状态报告播报结果。参见[对话联动](../guides/robot.md#播报回答与对话推荐动作)。
 
 ## 环境查询
 

@@ -11,6 +11,10 @@ export interface RobotAction {
 /** Operator-owned settings; enabling monitoring never authorizes motion. */
 export interface RobotConfig {
   enabled: boolean;
+  /** Opt-in forwarding for successful replies from petId only. */
+  chatSpeech: boolean;
+  /** Model-selected actions remain proposals until confirmed on site. */
+  chatActions: boolean;
   address: string;
   python: string;
   /** Maximum RPC duration in seconds; expired movement requests remain uncertain. */
@@ -47,6 +51,23 @@ export interface RobotCommand {
   message: string;
 }
 
+/** One reply's physical action proposal; never persisted or executed without confirmation. */
+export interface RobotPendingAction {
+  id: string;
+  petId: string;
+  key: string;
+  name: string;
+  expiresAt: number;
+}
+
+/** Delivery status for the latest chat reply, separate from chat generation success. */
+export interface RobotChatSpeech {
+  id: string;
+  petId: string;
+  state: RobotCommand['state'] | 'checking' | 'skipped';
+  reason?: 'busy' | 'offline' | 'too_long' | 'empty' | 'cancelled';
+}
+
 /** Snapshot shared by DSH settings and the standalone chat panel. */
 export interface RobotSnapshot {
   /** Changes on host restart and configuration replacement; stale control pages cannot send motion. */
@@ -61,5 +82,7 @@ export interface RobotSnapshot {
   telemetry?: RobotTelemetry;
   error: string;
   stopResult?: RobotResult;
+  pendingAction?: RobotPendingAction;
+  chatSpeech?: RobotChatSpeech;
   commands: RobotCommand[];
 }

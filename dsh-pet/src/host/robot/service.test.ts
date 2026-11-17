@@ -268,3 +268,196 @@ test('host shutdown awaits the independent stop response for an outstanding comm
   await setImmediate();
   assert.equal(h.service.snapshot().commands[0].state, 'unknown');
 });
+
+async function enableChat(h: Awaited<ReturnType<typeof harness>>, speech = true) {
+  await h.service.submit({
+    action: 'configure',
+    config: { ...h.service.snapshot().config, chatSpeech: speech, chatActions: true },
+  });
+}
+
+test('old configurations keep chat forwarding off and only the linked pet can start a robot turn', async (t) => {
+  const old: Record<string, unknown> = { ...defaultRobotConfig() };
+  delete old.chatSpeech;
+  delete old.chatActions;
+  assert.equal(robotConfigSchema.parse(old).chatSpeech, false);
+  assert.equal(robotConfigSchema.parse(old).chatActions, false);
+  const h = await harness(t);
+  assert.equal(h.service.beginChat('main'), undefined);
+  await enableChat(h);
+  assert.equal(h.service.beginChat('another-pet'), undefined);
+  assert.equal(h.calls.length, 0);
+});
+
+test('chat speech runs once, preserves the reply bubble and proposes movement until fresh on-site confirmation', async (t) => {
+  const h = await harness(t);
+  await enableChat(h);
+  const turn = h.service.beginChat('main')!;
+  assert.deepEqual(turn.actions, [
+    { key: 'greet', name: 'Greet' },
+    { key: 'bow', name: 'Bow' },
+  ]);
+  h.service.completeChat(turn, { text: 'Hello, I am your guide.', actionKey: 'greet' });
+  h.service.completeChat(turn, { text: 'Duplicate', actionKey: 'bow' });
+  await setImmediate();
+  assert.deepEqual(
+    h.calls.map((call) => call.operation),
+    ['status', 'speak'],
+  );
+  assert.equal(h.calls[1].text, 'Hello, I am your guide.');
+  assert.equal(h.feedback.length, 0, 'Automatic speech must not overwrite the answer bubble');
+  assert.equal(h.service.snapshot().chatSpeech?.state, 'reported-success');
+  assert.equal(h.service.snapshot().armed, false);
+  const proposal = h.service.snapshot().pendingAction!;
+  assert.equal(proposal.key, 'greet');
+  const request = { action: 'confirm-chat-action', session: turn.session, id: proposal.id, confirmed: true };
+  await assert.rejects(h.service.submit({ ...request, confirmed: false }));
+  await h.service.submit(request);
+  await setImmediate();
+  assert.deepEqual(
+    h.calls.map((call) => call.operation),
+    ['status', 'speak', 'status', 'execute'],
+  );
+  assert.deepEqual(h.calls[3].actionIds, [100, 101]);
+  assert.ok(h.feedback.some((event) => event.animation === 'Wave'));
+  assert.equal(h.service.snapshot().pendingAction, undefined);
+  await assert.rejects(h.service.submit(request), /robot_proposal_expired/);
+  assert.equal(h.calls.filter((call) => call.operation === 'execute').length, 1);
+});
+
+for (const cancel of ['stop', 'disarm', 'configure', 'new-chat', 'dismiss']) {
+  test(`${cancel} invalidates a proposed action and cannot replay a late completion`, async (t) => {
+    const h = await harness(t);
+    await enableChat(h, false);
+    const turn = h.service.beginChat('main')!;
+    h.service.completeChat(turn, { text: 'Ready?', actionKey: 'greet' });
+    const proposal = h.service.snapshot().pendingAction!;
+    if (cancel === 'configure') await h.service.submit({ action: 'configure', config: h.service.snapshot().config });
+    else if (cancel === 'new-chat') h.service.beginChat('main');
+    else if (cancel === 'dismiss')
+      await h.service.submit({ action: 'dismiss-chat-action', session: turn.session, id: proposal.id });
+    else await h.service.submit({ action: cancel });
+    h.service.completeChat(turn, { text: 'Late', actionKey: 'greet' });
+    assert.equal(h.service.snapshot().pendingAction, undefined);
+    await assert.rejects(
+      h.service.submit({ action: 'confirm-chat-action', session: turn.session, id: proposal.id, confirmed: true }),
+    );
+    assert.equal(
+      h.calls.some((call) => call.operation === 'execute'),
+      false,
+    );
+  });
+}
+
+test('unknown keys and expired proposals cannot request movement', async (t) => {
+  const h = await harness(t);
+  await enableChat(h, false);
+  h.service.completeChat(h.service.beginChat('main')!, { text: 'Unknown', actionKey: 'unconfigured' });
+  assert.equal(h.service.snapshot().pendingAction, undefined);
+  const turn = h.service.beginChat('main')!;
+  h.service.completeChat(turn, { text: 'Hello', actionKey: 'greet' });
+  const id = h.service.snapshot().pendingAction!.id;
+  h.advance(120_001);
+  assert.equal(h.service.snapshot().pendingAction, undefined);
+  await assert.rejects(
+    h.service.submit({ action: 'confirm-chat-action', session: turn.session, id, confirmed: true }),
+    /robot_proposal_expired/,
+  );
+  assert.equal(h.calls.length, 0);
+});
+
+test('a stop while confirmation is checking status cancels the exact proposed action', async (t) => {
+  const status = deferred();
+  const h = await harness(t, async (_config, call) => (call.operation === 'status' ? status.promise : success));
+  await enableChat(h, false);
+  const turn = h.service.beginChat('main')!;
+  h.service.completeChat(turn, { text: 'Hello', actionKey: 'greet' });
+  const confirmation = h.service.submit({
+    action: 'confirm-chat-action',
+    session: turn.session,
+    id: h.service.snapshot().pendingAction!.id,
+    confirmed: true,
+  });
+  await h.service.submit({ action: 'stop' });
+  status.resolve(healthy);
+  await assert.rejects(confirmation, /robot_proposal_expired/);
+  assert.equal(
+    h.calls.some((call) => call.operation === 'execute'),
+    false,
+  );
+});
+
+test('stop cancels speech waiting on a connection check without sending it later', async (t) => {
+  const status = deferred();
+  const h = await harness(t, async (_config, call) => (call.operation === 'status' ? status.promise : success));
+  await enableChat(h);
+  h.service.completeChat(h.service.beginChat('main')!, { text: 'Hello' });
+  await h.service.submit({ action: 'stop' });
+  status.resolve(healthy);
+  await setImmediate();
+  assert.equal(h.service.snapshot().chatSpeech?.reason, 'cancelled');
+  assert.equal(
+    h.calls.some((call) => call.operation === 'speak'),
+    false,
+  );
+});
+
+for (const stopBeforeReady of [false, true]) {
+  test(`speech shares an ongoing monitor check${stopBeforeReady ? ' and respects a subsequent stop' : ''}`, async (t) => {
+    const status = deferred();
+    const h = await harness(t, async (_config, call) => (call.operation === 'status' ? status.promise : success));
+    await enableChat(h);
+    const monitoring = h.service.submit({ action: 'check' });
+    h.service.completeChat(h.service.beginChat('main')!, { text: 'Hello after checking' });
+    assert.equal(h.service.snapshot().chatSpeech?.state, 'checking');
+    if (stopBeforeReady) await h.service.submit({ action: 'stop' });
+    status.resolve(healthy);
+    await monitoring;
+    await setImmediate();
+    assert.equal(h.calls.filter((call) => call.operation === 'speak').length, stopBeforeReady ? 0 : 1);
+    assert.equal(h.service.snapshot().chatSpeech?.state, stopBeforeReady ? 'skipped' : 'reported-success');
+    if (stopBeforeReady) assert.equal(h.service.snapshot().chatSpeech?.reason, 'cancelled');
+  });
+}
+
+test('offline and overlong replies are skipped without automatic retry', async (t) => {
+  const h = await harness(t, async () => ({ ok: false, code: 'offline', message: 'Offline' }));
+  await enableChat(h);
+  h.service.completeChat(h.service.beginChat('main')!, { text: 'x'.repeat(501) });
+  assert.equal(h.service.snapshot().chatSpeech?.reason, 'too_long');
+  assert.equal(h.calls.length, 0);
+  h.service.completeChat(h.service.beginChat('main')!, { text: 'Hello' });
+  await setImmediate();
+  assert.equal(h.service.snapshot().chatSpeech?.reason, 'offline');
+  assert.equal(
+    h.calls.some((call) => call.operation === 'speak'),
+    false,
+  );
+});
+
+test('busy robot replies are skipped and never queued behind the running command', async (t) => {
+  const pending = deferred();
+  const h = await harness(t, async (_config, call) => (call.operation === 'execute' ? pending.promise : healthy));
+  await enableChat(h);
+  await h.arm();
+  await h.execute();
+  h.service.completeChat(h.service.beginChat('main')!, { text: 'Do not queue me' });
+  assert.equal(h.service.snapshot().chatSpeech?.reason, 'busy');
+  pending.resolve(success);
+  await setImmediate();
+  assert.equal(
+    h.calls.some((call) => call.operation === 'speak'),
+    false,
+  );
+});
+
+test('unreadable robot receipts disable automatic chat forwarding as well as manual commands', async (t) => {
+  const h = await harness(t);
+  await enableChat(h);
+  writeFileSync(join(h.root, 'astra-commands.json'), '{invalid');
+  const robot = createRobotService(h.options);
+  t.after(() => robot.dispose());
+  assert.equal(robot.snapshot().error, 'robot_storage_unavailable');
+  assert.equal(robot.beginChat('main'), undefined);
+  assert.equal(h.calls.length, 0);
+});

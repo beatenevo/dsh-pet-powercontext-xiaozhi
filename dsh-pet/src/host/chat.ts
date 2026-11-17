@@ -22,10 +22,11 @@ import { modelCandidates, modelLabel, type ModelRef } from './model-selection.ts
 import { historyStampOf } from './time-context.ts';
 import { recalledContextText } from './memory-context.ts';
 import type { PetObservability } from './observability/service.ts';
+import { extractRobotAction, robotActionInstruction, type RobotChatAction } from './robot/chat.ts';
 
 /** Generate failure reason (identical to the WhisperState failure branch of shared/whisper.ts). */
 export type ChatGenerateResult =
-  | { ok: true; text: string; image?: string; action?: string }
+  | { ok: true; text: string; image?: string; action?: string; robotAction?: string }
   | { ok: false; reason: 'provider-missing' | 'generate-error'; message?: string };
 
 /** A message in memory: GET /chat The window entry returned is this. */
@@ -125,6 +126,8 @@ export interface ChatGenerateInput {
   readonly pool?: readonly MemeEntry[];
   /** List of actions that can be performed (transmitted when the dialogue linkage switch is turned on, from animations.categories); empty / default = neither injected nor parsed. */
   readonly actions?: readonly string[];
+  /** Physical action proposals only; execution requires a separate operator confirmation. */
+  readonly robotActions?: readonly RobotChatAction[];
   /** Entry individually specified model (chatModel); Default/leave blank = only use the model of the current session. */
   readonly preferred?: ModelRef;
   /** Pictures attached to this round; default = plain text request, the data path is the same as before adding pictures. */
@@ -168,6 +171,7 @@ export async function generateChat(input: ChatGenerateInput): Promise<ChatGenera
         userText,
         pool,
         actions,
+        robotActions: input.robotActions ?? [],
         image,
         recalledContext: input.recalledContext,
       });
@@ -198,6 +202,7 @@ interface GenerateOnce {
   readonly userText: string;
   readonly pool: MemeEntry[];
   readonly actions: string[];
+  readonly robotActions: readonly RobotChatAction[];
   readonly image?: PetImageRef;
 }
 
@@ -232,7 +237,10 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
   // newly added actions come after it, without changing the position of the existing prompt words.
   const wantImage = pool.length > 0;
   const wantAction = actions.length > 0;
-  const instruction = (wantImage ? imageInstruction(pool) : '') + (wantAction ? actionInstruction(actions) : '');
+  const instruction =
+    (wantImage ? imageInstruction(pool) : '') +
+    (wantAction ? actionInstruction(actions) : '') +
+    robotActionInstruction(once.robotActions);
   const content: Record<string, unknown>[] = [
     ...(once.recalledContext ? [{ type: 'text', text: recalledContextText(once.recalledContext) }] : []),
     { type: 'text', text: instruction === '' ? userText : userText + instruction },
@@ -285,9 +293,11 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
     .join('')
     .trim();
   if (!text) return { ok: false, reason: 'generate-error', message: noTextReason(assembler.finish) };
-  if (!wantImage && !wantAction) return { ok: true, text };
+  const robot = extractRobotAction(text, once.robotActions);
   // Strip the action first and then the map: the two tags are independent of each other, and the order does not affect the result; invalid names of actions will also be stripped (see extractChatAction).
-  const acted: { text: string; action?: string } = wantAction ? extractChatAction(text, actions) : { text };
+  const acted: { text: string; action?: string } = wantAction
+    ? extractChatAction(robot.text, actions)
+    : { text: robot.text };
   const picked: { text: string; image?: string } = wantImage
     ? extractChatImage(acted.text, pool)
     : { text: acted.text };
@@ -296,5 +306,6 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
     text: picked.text,
     ...(picked.image ? { image: picked.image } : {}),
     ...(acted.action ? { action: acted.action } : {}),
+    ...(robot.key ? { robotAction: robot.key } : {}),
   };
 }

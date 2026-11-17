@@ -1,9 +1,13 @@
 """Offline checks for SDK call selection, deadlines and independent stop failures."""
 
 import importlib.util
+import io
+import json
+from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("astra_bridge", Path(__file__).with_name("bridge.py"))
 bridge = importlib.util.module_from_spec(spec)
@@ -103,6 +107,35 @@ class AdapterTest(unittest.TestCase):
         self.request("speak", text="Hello")
         self.assertEqual(self.calls[0][0], "PublishTTSText")
         self.assertEqual(self.calls[0][1].tts_text, "Hello")
+
+    def test_utf8_speech_survives_a_gbk_standard_input(self):
+        for text in ("主人早上好呀～今天雾好大呢", "你好，Astra！🤖 café 𠮷"):
+            with self.subTest(text=text):
+                self.calls.clear()
+                payload = json.dumps({
+                    "operation": "speak", "address": "127.0.0.1:50051", "timeoutSeconds": 3, "text": text,
+                }, ensure_ascii=False).encode("utf-8")
+                output = io.StringIO()
+                with io.TextIOWrapper(io.BytesIO(payload), encoding="gbk", errors="strict") as stdin:
+                    with patch.object(bridge.sys, "stdin", stdin), redirect_stdout(output), patch.object(
+                        bridge, "load_sdk", return_value=(self.grpc, self.messages, self.services),
+                    ):
+                        bridge.main()
+                self.assertTrue(json.loads(output.getvalue())["ok"])
+                self.assertEqual(len(self.calls), 1)
+                self.assertEqual(self.calls[0][0], "PublishTTSText")
+                self.assertEqual(self.calls[0][1].tts_text, text)
+
+    def test_invalid_utf8_is_rejected_before_loading_the_sdk(self):
+        payload = b'{"operation":"speak","text":"\xc4\xe3\xba\xc3"}'
+        output = io.StringIO()
+        with io.TextIOWrapper(io.BytesIO(payload), encoding="gbk", errors="strict") as stdin:
+            with patch.object(bridge.sys, "stdin", stdin), redirect_stdout(output), patch.object(
+                bridge, "load_sdk",
+            ) as load_sdk:
+                bridge.main()
+        self.assertEqual(json.loads(output.getvalue())["code"], "invalid_request")
+        load_sdk.assert_not_called()
 
     def test_arbitrary_system_commands_are_not_exposed(self):
         self.assertFalse(self.request("execute_system_command")["ok"])

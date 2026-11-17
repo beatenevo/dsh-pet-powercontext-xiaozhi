@@ -58,7 +58,7 @@ export const runRobotWorker: RobotRunner = (config, call, signal) =>
       return;
     }
     const timeoutSeconds = call.operation === 'status' || call.operation === 'stop' ? 3 : config.timeoutSeconds;
-    const child = spawn(python, ['-I', '-B', '-u', '-c', script], {
+    const child = spawn(python, ['-I', '-X', 'utf8', '-B', '-u', '-c', script], {
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -83,8 +83,9 @@ export const runRobotWorker: RobotRunner = (config, call, signal) =>
       (timeoutSeconds + 8) * 1000,
     );
     signal?.addEventListener('abort', abort, { once: true });
-    child.stdout.on('data', (chunk: Buffer) => {
-      output += chunk.toString();
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      output += chunk;
       if (output.length > 32_768) {
         child.kill('SIGKILL');
         finish({ ok: false, code: 'invalid_response', message: 'Robot adapter response exceeded limits.' });
@@ -103,5 +104,5 @@ export const runRobotWorker: RobotRunner = (config, call, signal) =>
         finish({ ok: false, code: 'invalid_response', message: 'Robot adapter did not return a valid response.' });
       }
     });
-    child.stdin.end(JSON.stringify({ ...call, address: config.address, timeoutSeconds }));
+    child.stdin.end(JSON.stringify({ ...call, address: config.address, timeoutSeconds }), 'utf8');
   });

@@ -110,9 +110,9 @@ def run(request, sdk=None):
 
 
 def main():
-    """Read one host request without executing attachment demo programs."""
+    """Read one UTF-8 host request independently of the system's stdin encoding."""
     try:
-        request = json.loads(sys.stdin.read(16_384))
+        request = json.loads(sys.stdin.buffer.read(16_384).decode("utf-8"))
         result = run(request)
     except (ValueError, TypeError):
         result = reply(False, "invalid_request", "Invalid adapter request.")

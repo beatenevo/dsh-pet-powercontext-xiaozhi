@@ -53,6 +53,10 @@ const keep = [
   'src',
   'assets/webm',
   'runtime/electron-helper',
+  'runtime/powercontext/server.py',
+  'runtime/powercontext/sql_trace.py',
+  'runtime/powercontext/requirements.txt',
+  'runtime/powercontext/README.md',
   'assets/fonts',
   'assets/pic',
   // Meme: The host side only reads the picture from assets/memes in the package and pairs it with the

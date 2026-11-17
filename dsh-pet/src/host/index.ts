@@ -96,7 +96,7 @@ export function apply(ctx: any): void {
   ctx.effect(() => () => observability.shutdown());
   const comparison = createComparisonService(ctx, configPaths, observability);
   ctx.effect(() => () => comparison.shutdown());
-  const robot = registerRobot(ctx, userRoot, () => httpRoute.handlePetRoute, observability);
+  const robot = registerRobot(ctx, userRoot, state, () => httpRoute.handlePetRoute, observability);
   const chatMemory = createChatMemory({
     ctx,
     configPaths,

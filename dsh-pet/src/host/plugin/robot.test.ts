@@ -33,7 +33,7 @@ async function harness(t: TestContext, display: string) {
     memeDirsFor: () => [],
   } as unknown as PetRouteDeps);
   const responses: RouteResult[] = [];
-  const service = registerRobot({ effect: (effect: () => unknown) => effect() }, root, () => async (...args) => {
+  const service = registerRobot({ effect: (effect: () => unknown) => effect() }, root, state, () => async (...args) => {
     const response = await handlePetRoute(...args);
     responses.push(response);
     return response;

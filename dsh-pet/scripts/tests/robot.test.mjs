@@ -202,7 +202,7 @@ test('an empty taught action ID is rejected locally instead of becoming action z
 test('chat interaction switches save explicit opt-ins for the current pet', async (t) => {
   const page = await open(t);
   await page.getByText('Connection and taught actions', { exact: true }).click();
-  const speech = page.getByRole('checkbox', { name: 'Speak pet replies through the robot' });
+  const speech = page.getByRole('checkbox', { name: 'Speak all pet messages through the robot' });
   const actions = page.getByRole('checkbox', { name: 'Suggest configured robot actions from chat' });
   assert.equal(await speech.isChecked(), false);
   assert.equal(await actions.isChecked(), false);
@@ -222,7 +222,7 @@ test('a chat-selected action stays visible and sends only its proposal identity 
   const page = await open(t);
   const card = page.getByRole('region', { name: 'Chat interaction' });
   await card.getByText('Greeting', { exact: true }).waitFor();
-  await card.getByText('Reply speech: Speech request accepted (playback completion unknown)').waitFor();
+  await card.getByText('Pet speech: Speech request accepted (playback completion unknown)').waitFor();
   assert.equal(requests.length, 0);
   await card.getByRole('button', { name: 'Confirm on site and run this action' }).click();
   await page.getByText('Recent requests', { exact: true }).click();

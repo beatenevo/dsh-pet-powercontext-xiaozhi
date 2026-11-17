@@ -27,6 +27,7 @@ import { DSH_MEMORY_PROTOCOL, DSH_MEMORY_SERVICE } from './dsh-memory.ts';
 import { createChatMemory, type ChatMemoryInput } from './plugin/chat-memory.ts';
 import type { ChatMemoryMessage } from './chat.ts';
 import type { ConfigPaths } from './config.ts';
+import { PollStateStore } from './state.ts';
 import type { PetImageRef } from './image-attachment.ts';
 import { registerChatMemoryProvider, resetChatMemoryProviders } from './chat-memory-provider.ts';
 
@@ -87,7 +88,12 @@ function createMemory(
   getService?: (name: string) => unknown,
   environment: ChatMemoryInput['environment'] = async () => ({}),
   robot?: ChatMemoryInput['robot'],
+  state = new PollStateStore(),
 ) {
+  state.onPetWrite((petId, leaf, data) => {
+    collect?.writes?.push(petId + '.' + leaf);
+    collect?.records?.push({ petId, leaf, data: data as Record<string, unknown> });
+  });
   return createChatMemory({
     environment,
     robot,
@@ -97,12 +103,7 @@ function createMemory(
     memeDirsFor: () => (memeDir === undefined ? [] : [memeDir]),
     // The playback receipt table only uses create: the number contains the pet and action name, and the test is based on this assertion which action is written into the leaf.
     playback: { create: (petId: string, name: string) => ({ playbackId: 'pb-' + petId + '-' + name }) },
-    state: {
-      writePet: (petId: string, leaf: string, data: Record<string, unknown>) => {
-        collect?.writes?.push(petId + '.' + leaf);
-        collect?.records?.push({ petId, leaf, data });
-      },
-    },
+    state,
     userRoot: ws.userRoot,
   } as unknown as ChatMemoryInput);
 }
@@ -772,8 +773,10 @@ for (const connected of [true, false]) {
   test(`chat-to-robot forwards only the saved reply and isolates ${connected ? 'available' : 'offline'} transport`, async (t) => {
     const ws = tempWorkspace();
     const calls: RobotCall[] = [];
+    const state = new PollStateStore();
     const robot = createRobotService({
       userRoot: ws.userRoot,
+      state,
       monitor: false,
       run: async (_config, call) => {
         calls.push(call);
@@ -814,6 +817,7 @@ for (const connected of [true, false]) {
       undefined,
       async () => ({}),
       robot,
+      state,
     );
     const result = await memory.chatWithPet('main', '介绍一下自己，再打个招呼');
     assert.deepEqual(result, { ok: true, text: reply });
@@ -834,5 +838,26 @@ for (const connected of [true, false]) {
     await memory.readMemory();
     await flush();
     assert.equal(calls.length, count, 'Reading history must not replay speech or movement');
+    const automatic = createMemory(
+      '自动碎碎念和梦话 🐱',
+      ws,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      robot,
+      state,
+    );
+    assert.equal((await automatic.publishWhisper('main', undefined, undefined, 'whisper')).ok, true);
+    await flush();
+    assert.equal(await automatic.publishSleepTalk('main'), true);
+    await flush();
+    assert.equal(calls.filter((call) => call.operation === 'speak').length, connected ? 3 : 0);
+    assert.equal(records.filter((entry) => entry.leaf === 'say').length, 3);
+    assert.ok(
+      records.filter((entry) => entry.leaf === 'say').every((entry) => !('voiceTo' in entry.data)),
+      'Robot speech does not depend on computer TTS flags',
+    );
   });
 }

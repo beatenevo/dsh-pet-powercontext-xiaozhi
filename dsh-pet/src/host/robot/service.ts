@@ -13,6 +13,7 @@ import { defaultRobotConfig, robotConfigSchema, robotRequestSchema, type RobotRe
 import { readRobotJournal, writeRobotJournal, type RobotReceipt } from './journal.ts';
 import { runRobotWorker, type RobotRunner, type RobotCall } from './worker.ts';
 import type { PetObservability } from '../observability/service.ts';
+import type { PollStateStore } from '../state.ts';
 
 /** Pet feedback is best-effort and never changes the recorded physical command result. */
 export interface RobotFeedback {
@@ -33,6 +34,7 @@ export interface RobotService {
 /** Create a controller with an injectable SDK transport; no movement is sent during construction. */
 export function createRobotService(options: {
   userRoot: string;
+  state: PollStateStore;
   observability?: PetObservability;
   run?: RobotRunner;
   feedback?: (event: RobotFeedback) => Promise<void>;
@@ -76,15 +78,24 @@ export function createRobotService(options: {
   let stopOperation: Promise<RobotResult> | undefined;
   let statusAbort: AbortController | undefined;
   let statusOperation: Promise<void> | undefined;
-  let previousDescription: string | undefined;
+  let previousStatus: string | undefined;
   let chatContext: RobotChatContext | undefined;
   let chatCompleted = false;
   let pendingAction: RobotPendingAction | undefined;
   let chatSpeech: RobotChatSpeech | undefined;
+  // Bound transient speech to 100 chunks (at most 50,000 UTF-16 code units), never persisted or replayed.
+  const speechQueue: Array<{ id: string; petId: string; text: string; expiresAt: number }> = [];
+  let speechEpoch = 0;
+  let speechDraining = false;
+  const cancelSpeech = (): void => {
+    speechEpoch++;
+    speechQueue.length = 0;
+    if (chatSpeech?.state === 'checking' || chatSpeech?.state === 'queued')
+      chatSpeech = { ...chatSpeech, state: 'skipped', reason: 'cancelled' };
+  };
   const cancelChat = (): void => {
     chatContext = undefined;
     pendingAction = undefined;
-    if (chatSpeech?.state === 'checking') chatSpeech = { ...chatSpeech, state: 'skipped', reason: 'cancelled' };
   };
   const currentChat = (context: RobotChatContext): boolean =>
     !disposed && config.enabled && context.session === session && context.id === chatContext?.id;
@@ -147,10 +158,18 @@ export function createRobotService(options: {
           error = connected ? '' : result.code;
           if (!connected || telemetry?.actionCode !== 520000 || telemetry.modes.some((mode) => mode !== 1))
             armed = false;
-          const description = connected ? telemetry?.description : undefined;
-          if (description && previousDescription !== undefined && description !== previousDescription)
-            notify({ petId: config.petId, text: `Robot: ${description}` });
-          previousDescription = description;
+          // Speech acknowledgements can change the free-form description. Only actual controller
+          // state transitions create status bubbles; speech's own checks/receipts never feed TTS again.
+          const status = connected && telemetry ? JSON.stringify([telemetry.actionCode, telemetry.modes]) : undefined;
+          if (
+            status &&
+            previousStatus !== undefined &&
+            status !== previousStatus &&
+            !speechDraining &&
+            active?.receipt.kind !== 'speak'
+          )
+            notify({ petId: config.petId, text: `Robot: ${telemetry!.description}` });
+          previousStatus = status;
         } catch {
           connected = false;
           armed = false;
@@ -168,7 +187,7 @@ export function createRobotService(options: {
     item: RobotReceipt,
     call: RobotCall,
     abort: AbortController,
-    fromChat: boolean,
+    automaticSpeech: boolean,
   ): Promise<void> => {
     let result: RobotResult;
     try {
@@ -187,7 +206,8 @@ export function createRobotService(options: {
       item.finishedAt = now();
     }
     active = undefined;
-    if (fromChat && chatSpeech?.id === item.id) chatSpeech = { ...chatSpeech, state: item.state };
+    if (automaticSpeech && (chatSpeech?.id === item.id || chatSpeech?.state === 'queued'))
+      chatSpeech = { id: item.id, petId: item.petId, state: item.state };
     // The old idle sample must not authorize another motion after a command returns.
     statusAbort?.abort();
     connected = false;
@@ -197,10 +217,14 @@ export function createRobotService(options: {
       /* The storage fault blocks future commands. */
     }
     // Automatic speech receipts belong in the panel; they must not replace the pet's answer bubble.
-    if (!disposed && !fromChat)
+    if (!disposed && !automaticSpeech)
       notify({ petId: item.petId, text: `Robot ${item.key}: ${item.state}. ${item.message}` });
+    void drainSpeech();
   };
-  const command = (request: Extract<RobotRequest, { action: 'execute' | 'speak' }>, fromChat = false): void => {
+  const command = (
+    request: Extract<RobotRequest, { action: 'execute' | 'speak' }>,
+    automaticSpeech = false,
+  ): Promise<void> => {
     if (storageError) throw new Error('robot_storage_unavailable');
     const action = request.action === 'execute' ? config.actions.find((item) => item.key === request.key) : undefined;
     if (request.action === 'execute' && !action) throw new Error('robot_unknown_action');
@@ -217,7 +241,7 @@ export function createRobotService(options: {
     const existing = receipts.find((item) => item.id === request.id);
     if (existing) {
       if (existing.fingerprint !== fingerprint) throw new Error('robot_request_conflict');
-      return;
+      return Promise.resolve();
     }
     if (active || stopping) throw new Error('robot_busy');
     if (!config.enabled || !snapshot().connected) throw new Error('robot_not_connected');
@@ -257,16 +281,17 @@ export function createRobotService(options: {
       request.action === 'execute'
         ? { operation: 'execute', requestId: request.id, actionIds: action!.actionIds }
         : { operation: 'speak', text: request.text };
-    if (!fromChat)
+    if (!automaticSpeech)
       notify({
         petId: request.petId,
         text: `Robot: ${item.key} requested.`,
         animation: action?.petAnimation || undefined,
       });
-    void finish(item, call, abort, fromChat);
+    return finish(item, call, abort, automaticSpeech);
   };
   const stop = async (): Promise<void> => {
     cancelChat();
+    cancelSpeech();
     armed = false;
     if (stopping) return;
     if (!config.address) throw new Error('robot_address_required');
@@ -299,28 +324,92 @@ export function createRobotService(options: {
     }
     notify({ petId: config.petId, text: stopResult.message });
   };
-  const speakReply = async (context: RobotChatContext, text: string): Promise<void> => {
-    const skip = (reason: RobotChatSpeech['reason']): void => {
-      if (currentChat(context)) chatSpeech = { id: context.id, petId: context.petId, state: 'skipped', reason };
-    };
-    if (!text.trim()) return skip('empty');
-    if (text.length > 500) return skip('too_long');
-    if (active || stopping) return skip('busy');
-    chatSpeech = { id: context.id, petId: context.petId, state: 'checking' };
+  const drainSpeech = async (): Promise<void> => {
+    if (speechDraining || active || stopping || disposed || storageError) return;
+    speechDraining = true;
+    const epoch = speechEpoch;
     try {
-      await check();
-      if (!currentChat(context) || !config.chatSpeech) return;
-      if (active || stopping) return skip('busy');
-      if (!snapshot().connected) return skip('offline');
-      chatSpeech = { id: context.id, petId: context.petId, state: 'running' };
-      command(
-        { action: 'speak', session, id: context.id, text: text.trim(), petId: context.petId, confirmed: true },
-        true,
-      );
-    } catch {
-      if (currentChat(context)) chatSpeech = { id: context.id, petId: context.petId, state: 'failed' };
+      while (speechQueue.length && epoch === speechEpoch && !active && !stopping && !disposed) {
+        const item = speechQueue[0];
+        const skip = (reason: RobotChatSpeech['reason']): void => {
+          chatSpeech = { id: item.id, petId: item.petId, state: 'skipped', reason };
+        };
+        if (item.expiresAt <= now()) {
+          speechQueue.shift();
+          skip('expired');
+          continue;
+        }
+        chatSpeech = { id: item.id, petId: item.petId, state: 'checking' };
+        await check();
+        if (epoch !== speechEpoch || disposed || !config.enabled || !config.chatSpeech) return;
+        if (active || stopping) return;
+        if (item.expiresAt <= now()) continue;
+        if (!snapshot().connected) {
+          speechQueue.length = 0;
+          skip('offline');
+          return;
+        }
+        speechQueue.shift();
+        chatSpeech = { id: item.id, petId: item.petId, state: 'running' };
+        try {
+          await command(
+            { action: 'speak', session, id: item.id, petId: item.petId, text: item.text, confirmed: true },
+            true,
+          );
+        } catch {
+          chatSpeech = { id: item.id, petId: item.petId, state: 'failed' };
+          speechQueue.length = 0;
+          return;
+        }
+        if (epoch !== speechEpoch) return;
+        if (receipts.find((receipt) => receipt.id === item.id)?.state !== 'reported-success') {
+          speechQueue.length = 0;
+          return;
+        }
+      }
+    } finally {
+      speechDraining = false;
+      // A stop can replace the queue while the previous check/worker is unwinding.
+      if (speechQueue.length && !active && !stopping && !disposed && !storageError) void drainSpeech();
     }
   };
+  const unsubscribe = options.state.onPetWrite((petId, leaf, data) => {
+    if (leaf !== 'say' || !data || typeof data !== 'object' || !('text' in data) || typeof data.text !== 'string')
+      return;
+    if (disposed || storageError || !config.enabled || !config.chatSpeech || config.petId !== petId || stopping) return;
+    const text = data.text.trim();
+    if (!text || ('clear' in data && data.clear === true)) return;
+    const id = randomUUID();
+    if (text.length > 50_000) {
+      chatSpeech = { id, petId, state: 'skipped', reason: 'too_long' };
+      return;
+    }
+    const chunks: string[] = [];
+    let chunk = '';
+    // Code-point iteration avoids splitting a UTF-16 surrogate pair at the SDK's 500-unit limit.
+    for (const point of text) {
+      if (chunk.length + point.length > 500) {
+        chunks.push(chunk);
+        chunk = '';
+      }
+      chunk += point;
+    }
+    if (chunk) chunks.push(chunk);
+    if (speechQueue.length + chunks.length > 100) {
+      chatSpeech = { id, petId, state: 'skipped', reason: 'queue_full' };
+      return;
+    }
+    speechQueue.push(
+      ...chunks.map((text, index) => ({
+        id: index === 0 ? id : randomUUID(),
+        petId,
+        text,
+        expiresAt: now() + 120_000,
+      })),
+    );
+    chatSpeech = { id, petId, state: 'queued' };
+    void drainSpeech();
+  });
   const confirmChatAction = async (id: string): Promise<void> => {
     const proposal = pendingAction;
     if (!proposal || proposal.id !== id || proposal.expiresAt <= now()) throw new Error('robot_proposal_expired');
@@ -389,7 +478,6 @@ export function createRobotService(options: {
           name: action.name,
           expiresAt: now() + 120_000,
         };
-      if (config.chatSpeech) void speakReply(context, reply.text);
     },
     async submit(input) {
       const request = robotRequestSchema.parse(input);
@@ -415,12 +503,13 @@ export function createRobotService(options: {
         writePrivateJson(configFile, request.config);
         config = request.config;
         cancelChat();
+        cancelSpeech();
         chatSpeech = undefined;
         session = randomUUID();
         armed = connected = false;
         telemetry = undefined;
         stopResult = undefined;
-        previousDescription = undefined;
+        previousStatus = undefined;
         error = '';
       } else if (request.action === 'check') await check();
       else if (request.action === 'arm') {
@@ -442,6 +531,8 @@ export function createRobotService(options: {
     },
     async dispose() {
       disposed = true;
+      unsubscribe();
+      cancelSpeech();
       cancelChat();
       armed = false;
       clearInterval(timer);

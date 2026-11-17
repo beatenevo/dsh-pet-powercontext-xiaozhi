@@ -196,8 +196,10 @@ test('robot observation waits for the worker result instead of treating queue ad
   );
   service.configure(settings);
   let finish!: () => void;
+  const { PollStateStore } = await import('../state.ts');
   const robot = createRobotService({
     userRoot: root,
+    state: new PollStateStore(),
     observability: service,
     monitor: false,
     run: async (_config, call) => {

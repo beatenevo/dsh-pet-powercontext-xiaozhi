@@ -11,7 +11,7 @@ export interface RobotAction {
 /** Operator-owned settings; enabling monitoring never authorizes motion. */
 export interface RobotConfig {
   enabled: boolean;
-  /** Opt-in forwarding for successful replies from petId only. */
+  /** Forward all new petId utterances with one opt-in: replies, whispers, sleep talk and robot feedback. */
   chatSpeech: boolean;
   /** Model-selected actions remain proposals until confirmed on site. */
   chatActions: boolean;
@@ -60,12 +60,12 @@ export interface RobotPendingAction {
   expiresAt: number;
 }
 
-/** Delivery status for the latest chat reply, separate from chat generation success. */
+/** Delivery status for pet speech, separate from text generation success; chatSpeech is the retained wire name. */
 export interface RobotChatSpeech {
   id: string;
   petId: string;
-  state: RobotCommand['state'] | 'checking' | 'skipped';
-  reason?: 'busy' | 'offline' | 'too_long' | 'empty' | 'cancelled';
+  state: RobotCommand['state'] | 'queued' | 'checking' | 'skipped';
+  reason?: 'busy' | 'offline' | 'too_long' | 'empty' | 'cancelled' | 'queue_full' | 'expired';
 }
 
 /** Snapshot shared by DSH settings and the standalone chat panel. */

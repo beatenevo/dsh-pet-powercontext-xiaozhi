@@ -15,6 +15,7 @@ export function makeRobotPanel(rt: RobotRuntime) {
     const speech = status?.chatSpeech?.petId === props.petId ? status.chatSpeech : undefined;
     const speechKey: RobotKey | undefined = speech
       ? {
+          queued: 'robotSpeechQueued' as const,
           checking: 'robotSpeechChecking' as const,
           running: 'robotRunning' as const,
           'reported-success': 'robotSpeechAccepted' as const,
@@ -30,6 +31,8 @@ export function makeRobotPanel(rt: RobotRuntime) {
           too_long: 'robotSpeechLong' as const,
           empty: 'robotSpeechEmpty' as const,
           cancelled: 'robotSpeechCancelled' as const,
+          queue_full: 'robotSpeechQueueFull' as const,
+          expired: 'robotSpeechExpired' as const,
         }[speech.reason]
       : undefined;
     const action = status?.config.actions.find((item) => item.key === selected) ?? status?.config.actions[0];

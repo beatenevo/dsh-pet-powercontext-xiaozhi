@@ -3859,7 +3859,7 @@ components:
         chatSpeech:
           type: boolean
           default: false
-          description: Forward newly generated replies from petId to robot TTS. Requires enabled. No history replay or delayed retries; replies over 500 characters are skipped.
+          description: Forward all new text utterances from petId to robot TTS, including replies, whispers, sleep talk and robot feedback. Requires enabled. One switch, independent of computer TTS. Long messages are split into Unicode-safe chunks of at most 500 UTF-16 code units; the transient queue holds at most 100 chunks, expiring after two minutes. Stop, configuration changes and restart discard the queue. Offline or failed delivery clears the backlog without retry; no history replay. Speech receipts never generate new speech.
         chatActions:
           type: boolean
           default: false
@@ -4006,11 +4006,20 @@ components:
           type: string
         state:
           type: string
-          enum: [checking, running, reported-success, failed, unknown, skipped]
+          enum:
+            [
+              queued,
+              checking,
+              running,
+              reported-success,
+              failed,
+              unknown,
+              skipped,
+            ]
         reason:
           type: string
-          enum: [busy, offline, too_long, empty, cancelled]
-      description: Latest chat reply delivery, independent of chat generation success. Controller acknowledgement does not prove speech playback completion.
+          enum: [busy, offline, too_long, empty, cancelled, queue_full, expired]
+      description: Current or most recent pet speech delivery, independent of text generation success. The chatSpeech field name is retained for compatibility. Controller acknowledgement does not prove speech playback completion.
     RobotSnapshot:
       type: object
       required:

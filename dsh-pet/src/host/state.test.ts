@@ -358,3 +358,26 @@ describe('PollStateStore.wait - pending waiting (long polling)', () => {
     assert.equal(store.waiterCount(), 0, 'No leakage');
   });
 });
+
+test('pet event subscribers observe new writes once and cannot break state publication', () => {
+  const state = new PollStateStore();
+  state.writePet('main', 'say', { text: 'Old' });
+  const seen: unknown[] = [];
+  state.onPetWrite(() => {
+    throw new Error('Optional consumer unavailable');
+  });
+  const unsubscribe = state.onPetWrite((petId, leaf, data) => {
+    seen.push({ petId, leaf, data });
+  });
+  state.read();
+  state.writePet('main', 'say', { text: 'First' });
+  state.writePet('main', 'say', { text: 'Second' });
+  state.read();
+  unsubscribe();
+  state.writePet('main', 'say', { text: 'After unsubscribe' });
+  assert.deepEqual(seen, [
+    { petId: 'main', leaf: 'say', data: { text: 'First' } },
+    { petId: 'main', leaf: 'say', data: { text: 'Second' } },
+  ]);
+  assert.deepEqual(state.read().pets.main.say.data, { text: 'After unsubscribe' });
+});

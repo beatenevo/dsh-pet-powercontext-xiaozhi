@@ -38,6 +38,8 @@ export type SectionName = 'balance' | 'workStatus' | 'notify' | 'config' | 'menu
  */
 export type PetLeafName = 'say' | 'anim' | 'position' | 'throw' | 'lock' | 'sleep';
 
+type PetWriteListener = (petId: string, leaf: PetLeafName, data: unknown) => void;
+
 /**
  * The complete form of S (the response body of GET /state). `counter` is the version number of the entire S = the
  * last written number, the top level rather than the leaf: the caller uses it as `?since=` to return.
@@ -117,6 +119,7 @@ export class PollStateStore {
    * be enlarged according to the number of windows).
    */
   declare private readonly waiters: Set<Waiter>;
+  declare private readonly petListeners: Set<PetWriteListener>;
 
   constructor() {
     this.last = 0;
@@ -139,6 +142,7 @@ export class PollStateStore {
     };
     this.pets = new Map();
     this.waiters = new Set();
+    this.petListeners = new Set();
   }
 
   /** Next counter. */
@@ -175,7 +179,22 @@ export class PollStateStore {
       this.pets.set(petId, entry);
     }
     entry[leaf] = { counter: this.next(), data };
+    for (const listener of this.petListeners) {
+      try {
+        listener(petId, leaf, data);
+      } catch {
+        // Optional consumers must not interrupt pet rendering or other listeners.
+      }
+    }
     this.wakeWaiters();
+  }
+
+  /** Observe each new pet event once, without replaying history or polling snapshots. */
+  onPetWrite(listener: PetWriteListener): () => void {
+    this.petListeners.add(listener);
+    return () => {
+      this.petListeners.delete(listener);
+    };
   }
 
   /**

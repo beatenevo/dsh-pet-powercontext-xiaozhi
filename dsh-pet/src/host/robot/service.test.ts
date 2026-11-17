@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { createRobotService, type RobotFeedback } from './service.ts';
+import { PollStateStore } from '../state.ts';
 import { defaultRobotConfig, robotConfigSchema } from './config.ts';
 import type { RobotCall, RobotRunner } from './worker.ts';
 import type { RobotResult } from '../../shared/robot.ts';
@@ -27,7 +28,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-async function harness(t: TestContext, transport?: RobotRunner) {
+async function harness(t: TestContext, transport?: RobotRunner, mirrorFeedback = false) {
   const root = mkdtempSync(join(tmpdir(), 'astra-service-'));
   const calls: RobotCall[] = [];
   const feedback: RobotFeedback[] = [];
@@ -36,13 +37,16 @@ async function harness(t: TestContext, transport?: RobotRunner) {
     calls.push(call);
     return transport ? transport(config, call, signal) : call.operation === 'status' ? healthy : success;
   };
+  const state = new PollStateStore();
   const options = {
     userRoot: root,
+    state,
     run,
     monitor: false,
     now: () => now,
     feedback: async (event: RobotFeedback) => {
       feedback.push(event);
+      if (mirrorFeedback) state.writePet(event.petId, 'say', { text: event.text });
     },
   };
   const service = createRobotService(options);
@@ -70,6 +74,7 @@ async function harness(t: TestContext, transport?: RobotRunner) {
     service.submit({ action: 'execute', session: service.snapshot().session, id, key, petId: 'main', confirmed: true });
   return {
     service,
+    state,
     calls,
     feedback,
     root,
@@ -199,9 +204,14 @@ test('restart preserves uncertain receipts, disarms control and rejects the old 
 
 test('status changes drive pet feedback without sending movement', async (t) => {
   let description = 'idle';
-  const h = await harness(t, async () => ({ ...healthy, telemetry: { ...healthy.telemetry!, description } }));
+  let actionCode = 520000;
+  const h = await harness(t, async () => ({
+    ...healthy,
+    telemetry: { ...healthy.telemetry!, description, actionCode },
+  }));
   await h.service.submit({ action: 'check' });
   description = 'working';
+  actionCode = 520001;
   await h.service.submit({ action: 'check' });
   await setImmediate();
   assert.equal(h.feedback.length, 1);
@@ -297,6 +307,7 @@ test('chat speech runs once, preserves the reply bubble and proposes movement un
     { key: 'greet', name: 'Greet' },
     { key: 'bow', name: 'Bow' },
   ]);
+  h.state.writePet('main', 'say', { text: 'Hello, I am your guide.' });
   h.service.completeChat(turn, { text: 'Hello, I am your guide.', actionKey: 'greet' });
   h.service.completeChat(turn, { text: 'Duplicate', actionKey: 'bow' });
   await setImmediate();
@@ -391,7 +402,7 @@ test('stop cancels speech waiting on a connection check without sending it later
   const status = deferred();
   const h = await harness(t, async (_config, call) => (call.operation === 'status' ? status.promise : success));
   await enableChat(h);
-  h.service.completeChat(h.service.beginChat('main')!, { text: 'Hello' });
+  h.state.writePet('main', 'say', { text: 'Hello' });
   await h.service.submit({ action: 'stop' });
   status.resolve(healthy);
   await setImmediate();
@@ -408,7 +419,7 @@ for (const stopBeforeReady of [false, true]) {
     const h = await harness(t, async (_config, call) => (call.operation === 'status' ? status.promise : success));
     await enableChat(h);
     const monitoring = h.service.submit({ action: 'check' });
-    h.service.completeChat(h.service.beginChat('main')!, { text: 'Hello after checking' });
+    h.state.writePet('main', 'say', { text: 'Hello after checking' });
     assert.equal(h.service.snapshot().chatSpeech?.state, 'checking');
     if (stopBeforeReady) await h.service.submit({ action: 'stop' });
     status.resolve(healthy);
@@ -420,13 +431,13 @@ for (const stopBeforeReady of [false, true]) {
   });
 }
 
-test('offline and overlong replies are skipped without automatic retry', async (t) => {
+test('offline and over-limit utterances are skipped without automatic retry', async (t) => {
   const h = await harness(t, async () => ({ ok: false, code: 'offline', message: 'Offline' }));
   await enableChat(h);
-  h.service.completeChat(h.service.beginChat('main')!, { text: 'x'.repeat(501) });
+  h.state.writePet('main', 'say', { text: 'x'.repeat(50_001) });
   assert.equal(h.service.snapshot().chatSpeech?.reason, 'too_long');
   assert.equal(h.calls.length, 0);
-  h.service.completeChat(h.service.beginChat('main')!, { text: 'Hello' });
+  h.state.writePet('main', 'say', { text: 'Hello' });
   await setImmediate();
   assert.equal(h.service.snapshot().chatSpeech?.reason, 'offline');
   assert.equal(
@@ -435,20 +446,21 @@ test('offline and overlong replies are skipped without automatic retry', async (
   );
 });
 
-test('busy robot replies are skipped and never queued behind the running command', async (t) => {
+test('pet speech waits for an active motion request without authorizing another movement', async (t) => {
   const pending = deferred();
   const h = await harness(t, async (_config, call) => (call.operation === 'execute' ? pending.promise : healthy));
   await enableChat(h);
   await h.arm();
   await h.execute();
-  h.service.completeChat(h.service.beginChat('main')!, { text: 'Do not queue me' });
-  assert.equal(h.service.snapshot().chatSpeech?.reason, 'busy');
+  h.state.writePet('main', 'say', { text: 'Queued status feedback' });
+  assert.equal(h.service.snapshot().chatSpeech?.state, 'queued');
   pending.resolve(success);
   await setImmediate();
   assert.equal(
     h.calls.some((call) => call.operation === 'speak'),
-    false,
+    true,
   );
+  assert.equal(h.calls.filter((call) => call.operation === 'execute').length, 1);
 });
 
 test('unreadable robot receipts disable automatic chat forwarding as well as manual commands', async (t) => {
@@ -460,4 +472,132 @@ test('unreadable robot receipts disable automatic chat forwarding as well as man
   assert.equal(robot.snapshot().error, 'robot_storage_unavailable');
   assert.equal(robot.beginChat('main'), undefined);
   assert.equal(h.calls.length, 0);
+});
+
+test('one opt-in speaks every new linked-pet utterance once, without history, clears or image-only events', async (t) => {
+  const h = await harness(t);
+  h.state.writePet('main', 'say', { text: 'Before enabling' });
+  await enableChat(h);
+  h.state.read();
+  h.state.writePet('another-pet', 'say', { text: 'Not the linked pet' });
+  h.state.writePet('main', 'say', { clear: true });
+  h.state.writePet('main', 'say', { image: 'image.png' });
+  h.state.writePet('main', 'anim', { text: 'Not speech' });
+  for (const text of ['回答', '碎碎念', '梦话', '机器人状态', '同一句', '同一句'])
+    h.state.writePet('main', 'say', { text });
+  h.state.read();
+  await setImmediate();
+  assert.deepEqual(
+    h.calls.filter((call) => call.operation === 'speak').map((call) => call.text),
+    ['回答', '碎碎念', '梦话', '机器人状态', '同一句', '同一句'],
+  );
+  await h.service.submit({ action: 'configure', config: { ...h.service.snapshot().config, chatSpeech: false } });
+  h.state.writePet('main', 'say', { text: 'After disabling' });
+  await setImmediate();
+  assert.equal(h.calls.filter((call) => call.operation === 'speak').length, 6);
+});
+
+test('long Unicode utterances are sent in order without truncation or split surrogate pairs', async (t) => {
+  const h = await harness(t);
+  await enableChat(h);
+  const text = '中'.repeat(499) + '🐱' + '好'.repeat(700);
+  h.state.writePet('main', 'say', { text });
+  h.state.writePet('main', 'say', { text: '接下来的碎碎念' });
+  await setImmediate();
+  const speech = h.calls.filter((call) => call.operation === 'speak').map((call) => call.text!);
+  assert.equal(speech.slice(0, -1).join(''), text);
+  assert.equal(speech[speech.length - 1], '接下来的碎碎念');
+  for (const chunk of speech) {
+    assert.ok(chunk.length <= 500);
+    assert.equal(chunk, Buffer.from(chunk, 'utf8').toString('utf8'));
+  }
+  assert.equal(h.service.snapshot().chatSpeech?.state, 'reported-success');
+});
+
+test('stop discards queued speech even when the old transport ignores cancellation', async (t) => {
+  const pending = deferred();
+  const h = await harness(t, async (_config, call) =>
+    call.operation === 'speak' ? pending.promise : call.operation === 'status' ? healthy : success,
+  );
+  await enableChat(h);
+  h.state.writePet('main', 'say', { text: 'Already sent' });
+  await setImmediate();
+  h.state.writePet('main', 'say', { text: 'Must not send after stop' });
+  await h.service.submit({ action: 'stop' });
+  pending.resolve(success);
+  await setImmediate();
+  assert.equal(h.calls.filter((call) => call.operation === 'speak').length, 1);
+  assert.equal(h.service.snapshot().commands[0].state, 'unknown');
+  assert.equal(h.service.snapshot().chatSpeech?.reason, 'cancelled');
+});
+
+test('uncertain speech is not retried and clears its remaining chunks and backlog', async (t) => {
+  const h = await harness(t, async (_config, call) =>
+    call.operation === 'status' ? healthy : { ok: false, code: 'timeout', message: 'Unknown playback' },
+  );
+  await enableChat(h);
+  h.state.writePet('main', 'say', { text: '长'.repeat(1001) });
+  h.state.writePet('main', 'say', { text: 'Queued' });
+  await setImmediate();
+  await h.service.submit({ action: 'check' });
+  assert.equal(h.calls.filter((call) => call.operation === 'speak').length, 1);
+  assert.equal(h.service.snapshot().commands[0].state, 'unknown');
+});
+
+test('speech queues are bounded and old messages expire instead of playing at a later exhibition moment', async (t) => {
+  const pending = deferred();
+  const h = await harness(t, async (_config, call) => (call.operation === 'execute' ? pending.promise : healthy));
+  await enableChat(h);
+  await h.arm();
+  await h.execute();
+  h.state.writePet('main', 'say', { text: '字'.repeat(50_000) });
+  h.state.writePet('main', 'say', { text: 'Queue overflow' });
+  assert.equal(h.service.snapshot().chatSpeech?.reason, 'queue_full');
+  h.advance(120_001);
+  pending.resolve(success);
+  await setImmediate();
+  assert.equal(h.service.snapshot().chatSpeech?.reason, 'expired');
+  assert.equal(h.calls.filter((call) => call.operation === 'speak').length, 0);
+});
+
+test('robot status and action feedback are spoken, but TTS acknowledgement descriptions cannot echo forever', async (t) => {
+  let telemetry = { ...healthy.telemetry! };
+  let acknowledgements = 0;
+  const h = await harness(
+    t,
+    async (_config, call) => {
+      if (call.operation === 'status') return { ...healthy, telemetry: { ...telemetry } };
+      if (call.operation === 'speak') telemetry.description = 'TTS acknowledgement ' + ++acknowledgements;
+      return success;
+    },
+    true,
+  );
+  await enableChat(h);
+  await h.service.submit({ action: 'check' });
+  telemetry = { ...telemetry, actionCode: 520001, description: 'Robot working' };
+  await h.service.submit({ action: 'check' });
+  await setImmediate();
+  for (let i = 0; i < 5; i++) {
+    await h.service.submit({ action: 'check' });
+    await setImmediate();
+  }
+  assert.deepEqual(
+    h.calls.filter((call) => call.operation === 'speak').map((call) => call.text),
+    ['Robot: Robot working'],
+  );
+  assert.equal(h.feedback.length, 1);
+  telemetry = { ...telemetry, actionCode: 520000, description: 'Idle' };
+  await h.service.submit({ action: 'check' });
+  await setImmediate();
+  await h.arm();
+  await h.execute();
+  await setImmediate();
+  assert.equal(h.calls.filter((call) => call.operation === 'execute').length, 1);
+  const spoken = h.calls.filter((call) => call.operation === 'speak').map((call) => call.text!);
+  assert.ok(spoken.includes('Robot: Greet requested.'));
+  assert.ok(spoken.some((text) => text.startsWith('Robot Greet: reported-success')));
+  const count = spoken.length;
+  await h.service.submit({ action: 'check' });
+  await setImmediate();
+  assert.equal(h.calls.filter((call) => call.operation === 'speak').length, count);
 });

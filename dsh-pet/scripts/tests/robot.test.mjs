@@ -82,9 +82,8 @@ createRoot(document.getElementById('root')).render(React.createElement(Panel,{pe
         state.busy = false;
         state.stopResult = {
           ok: false,
-          code: 'stop_unconfirmed',
-          message: 'Synthetic partial stop',
-          stops: { agv: { ok: false, message: 'Unconfirmed' } },
+          code: 'stop_unsupported',
+          message: 'Local wait cancelled; physical state remains unknown',
         };
       }
     }
@@ -104,12 +103,16 @@ beforeEach(() => {
       enabled: true,
       chatSpeech: false,
       chatActions: false,
-      address: '127.0.0.1:50051',
-      python: 'python3',
+      address: 'http://127.0.0.1:8182/hz-dual-robot-product/mcp',
+      version: 2,
+      directExecution: false,
       timeoutSeconds: 30,
       petId: 'main',
-      actions: [{ key: 'greet', name: 'Greeting', actionIds: [100, 101], petAnimation: '' }],
+      actions: [
+        { key: 'greet', name: 'Greeting', tool: 'startTeachProgram', target: '9007199254740993123', petAnimation: '' },
+      ],
     },
+    catalog: { programs: [{ id: '9007199254740993124', name: 'Wave' }], areas: [] },
     armed: false,
     busy: false,
     checking: false,
@@ -135,7 +138,7 @@ async function open(t) {
   t.after(() => page.close());
   await page.goto(origin);
   await page.getByText('Astra Pro 2.0 robot', { exact: true }).click();
-  await page.getByText('Connected', { exact: true }).waitFor();
+  await page.getByText('MCP connected (verify physical state on site)', { exact: true }).waitFor();
   return page;
 }
 
@@ -159,10 +162,10 @@ test('opening controls sends no motion; each selected action requires explicit o
   await page.getByText('Recent requests', { exact: true }).click();
   await page.getByText(/Greeting: Controller reported success/).waitFor();
   await page.getByText('Synthetic controller response', { exact: false }).waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Stop robot', exact: true }).isEnabled(), true);
+  assert.equal(await page.getByRole('button', { name: 'Cancel local wait', exact: true }).isEnabled(), true);
 });
 
-test('stop stays available during an unresolved execute request and partial acknowledgement stays visible', async (t) => {
+test('local cancellation stays available during an unresolved execute request without claiming a physical stop', async (t) => {
   const page = await open(t);
   delayExecute = true;
   t.after(() => releaseExecute?.());
@@ -170,40 +173,44 @@ test('stop stays available during an unresolved execute request and partial ackn
   await page.getByText('One action authorized', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Run selected physical action' }).click();
   await page.waitForFunction(() => document.querySelector('button.pet-robot-stop')?.disabled === false);
-  await page.getByRole('button', { name: 'Stop robot', exact: true }).click();
-  await page.getByText('Synthetic partial stop', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Cancel local wait', exact: true }).click();
+  await page.getByText('Local wait cancelled; physical state remains unknown', { exact: true }).waitFor();
   assert.deepEqual(
     requests.map((x) => x.action),
     ['arm', 'execute', 'stop'],
   );
-  await page.getByText('agv: ? Unconfirmed', { exact: true }).waitFor();
+  await page
+    .getByText(
+      'MCP has no stop tool. Cancelling a wait does not stop the robot. Verify on site; use the physical emergency stop when needed.',
+      { exact: true },
+    )
+    .waitFor();
   releaseExecute();
   await page.getByText('Physical actions are disarmed', { exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Run selected physical action' }).isDisabled(), true);
 });
 
-test('an empty taught action ID is rejected locally instead of becoming action zero', async (t) => {
+test('discovered program identifiers remain exact strings when saving MCP settings', async (t) => {
   const page = await open(t);
-  await page.getByText('Connection and taught actions', { exact: true }).click();
-  await page.getByLabel('Manufacturer-verified action IDs (comma-separated)', { exact: true }).fill('');
-  await page.getByRole('button', { name: 'Save robot configuration' }).click();
-  await page.getByText('Action IDs must be comma-separated non-negative integers.', { exact: true }).waitFor();
-  assert.equal(requests.length, 0);
-  await page.getByLabel('Manufacturer-verified action IDs (comma-separated)', { exact: true }).fill('105, 106');
-  await page.getByLabel('Robot runtime', { exact: true }).selectOption('bundled');
-  assert.equal(await page.getByLabel('Python path with SDK 2.0.0 installed').count(), 0);
+  await page.getByText('Robot connection', { exact: true }).click();
+  await page.getByText('Advanced: action mappings and timeout (optional)', { exact: true }).click();
+  await page.getByLabel('Discovered program or station', { exact: true }).selectOption('9007199254740993124');
   await page.getByRole('button', { name: 'Save robot configuration' }).click();
   await page.getByText('Disconnected or stale status', { exact: true }).waitFor();
-  assert.deepEqual(requests[0].config.actions[0].actionIds, [105, 106]);
-  assert.equal(requests[0].config.python, 'bundled');
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].action, 'configure');
+  assert.equal(requests[0].config.actions[0].target, '9007199254740993124');
+  assert.equal(requests[0].config.actions[0].tool, 'startTeachProgram');
+  assert.equal(requests[0].config.version, 2);
+  assert.equal(requests[0].config.directExecution, false);
   assert.equal(state.armed, false);
 });
 
 test('chat interaction switches save explicit opt-ins for the current pet', async (t) => {
   const page = await open(t);
-  await page.getByText('Connection and taught actions', { exact: true }).click();
+  await page.getByText('Robot connection', { exact: true }).click();
   const speech = page.getByRole('checkbox', { name: 'Speak all pet messages through the robot' });
-  const actions = page.getByRole('checkbox', { name: 'Suggest configured robot actions from chat' });
+  const actions = page.getByRole('checkbox', { name: 'Allow robot actions from chat' });
   assert.equal(await speech.isChecked(), false);
   assert.equal(await actions.isChecked(), false);
   await speech.check();

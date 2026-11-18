@@ -24,6 +24,7 @@ export function makeRobotSettings(rt: RobotRuntime) {
     return h('details', {
       children: [
         h('summary', { children: t('robotSetup') }),
+        h('p', { className: 'pet-robot-note', children: t('robotQuickStart') }),
         h('form', {
           onSubmit: (event: { preventDefault(): void }) => {
             event.preventDefault();
@@ -94,66 +95,73 @@ export function makeRobotSettings(rt: RobotRuntime) {
                     h('p', { className: 'pet-robot-note', children: t('robotDirectExecutionHint') }),
                   ],
                 }),
-                field(
-                  t('robotTimeout'),
-                  String(draft.timeoutSeconds),
-                  (value) => setDraft({ ...draft, timeoutSeconds: Number(value) }),
-                  'number',
-                ),
-                ...rows.map((item, index) => {
-                  const update = (change: Partial<typeof item>) =>
-                    setRows((old) => old.map((row, n) => (n === index ? { ...row, ...change } : row)));
-                  return h('div', {
-                    key: item.key,
-                    className: 'pet-robot-action-row',
-                    children: [
-                      field(t('robotName'), item.name, (name) => update({ name })),
-                      h('select', {
-                        value: item.tool,
-                        onChange: (event: { target: { value: 'startTeachProgram' | 'RobotAgvMove' } }) =>
-                          update({ tool: event.target.value, target: '' }),
+                h('details', {
+                  children: [
+                    h('summary', { children: t('robotAdvanced') }),
+                    field(
+                      t('robotTimeout'),
+                      String(draft.timeoutSeconds),
+                      (value) => setDraft({ ...draft, timeoutSeconds: Number(value) }),
+                      'number',
+                    ),
+                    ...rows.map((item, index) => {
+                      const update = (change: Partial<typeof item>) =>
+                        setRows((old) => old.map((row, n) => (n === index ? { ...row, ...change } : row)));
+                      return h('div', {
+                        key: item.key,
+                        className: 'pet-robot-action-row',
                         children: [
-                          h('option', { value: 'startTeachProgram', children: t('robotProgram') }),
-                          h('option', { value: 'RobotAgvMove', children: t('robotArea') }),
+                          field(t('robotName'), item.name, (name) => update({ name })),
+                          h('select', {
+                            value: item.tool,
+                            onChange: (event: { target: { value: 'startTeachProgram' | 'RobotAgvMove' } }) =>
+                              update({ tool: event.target.value, target: '' }),
+                            children: [
+                              h('option', { value: 'startTeachProgram', children: t('robotProgram') }),
+                              h('option', { value: 'RobotAgvMove', children: t('robotArea') }),
+                            ],
+                          }),
+                          h('select', {
+                            'aria-label': t('robotIds'),
+                            value: item.target,
+                            onChange: (event: { target: { value: string } }) => update({ target: event.target.value }),
+                            children: [
+                              h('option', { value: '', children: t('robotSelect') }),
+                              ...(item.target ? [h('option', { value: item.target, children: item.target })] : []),
+                              ...(item.tool === 'startTeachProgram'
+                                ? (props.catalog?.programs ?? []).map((p) => ({ id: p.id, name: p.name }))
+                                : (props.catalog?.areas ?? []).map((a) => ({ id: a.parameter, name: a.areaName }))
+                              ).map((entry) =>
+                                h('option', { value: entry.id, children: `${entry.name} (${entry.id})` }),
+                              ),
+                            ],
+                          }),
+                          field(t('robotAnimation'), item.petAnimation, (petAnimation) => update({ petAnimation })),
+                          h('button', {
+                            type: 'button',
+                            onClick: () => setRows((old) => old.filter((_, n) => n !== index)),
+                            children: t('robotRemove'),
+                          }),
                         ],
-                      }),
-                      h('select', {
-                        'aria-label': t('robotIds'),
-                        value: item.target,
-                        onChange: (event: { target: { value: string } }) => update({ target: event.target.value }),
-                        children: [
-                          h('option', { value: '', children: t('robotSelect') }),
-                          ...(item.target ? [h('option', { value: item.target, children: item.target })] : []),
-                          ...(item.tool === 'startTeachProgram'
-                            ? (props.catalog?.programs ?? []).map((p) => ({ id: p.id, name: p.name }))
-                            : (props.catalog?.areas ?? []).map((a) => ({ id: a.parameter, name: a.areaName }))
-                          ).map((entry) => h('option', { value: entry.id, children: `${entry.name} (${entry.id})` })),
-                        ],
-                      }),
-                      field(t('robotAnimation'), item.petAnimation, (petAnimation) => update({ petAnimation })),
-                      h('button', {
-                        type: 'button',
-                        onClick: () => setRows((old) => old.filter((_, n) => n !== index)),
-                        children: t('robotRemove'),
-                      }),
-                    ],
-                  });
-                }),
-                h('button', {
-                  type: 'button',
-                  disabled: rows.length >= 20,
-                  onClick: () =>
-                    setRows((old) => [
-                      ...old,
-                      {
-                        key: 'action-' + robotRequestId().slice(0, 8),
-                        name: '',
-                        tool: 'startTeachProgram',
-                        target: '',
-                        petAnimation: '',
-                      },
-                    ]),
-                  children: t('robotAdd'),
+                      });
+                    }),
+                    h('button', {
+                      type: 'button',
+                      disabled: rows.length >= 20,
+                      onClick: () =>
+                        setRows((old) => [
+                          ...old,
+                          {
+                            key: 'action-' + robotRequestId().slice(0, 8),
+                            name: '',
+                            tool: 'startTeachProgram',
+                            target: '',
+                            petAnimation: '',
+                          },
+                        ]),
+                      children: t('robotAdd'),
+                    }),
+                  ],
                 }),
                 h('button', { type: 'submit', children: t('robotSave') }),
               ],

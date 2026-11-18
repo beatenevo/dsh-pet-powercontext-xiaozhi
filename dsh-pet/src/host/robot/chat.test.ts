@@ -30,3 +30,34 @@ test('direct mode describes an attempted dispatch without claiming physical comp
   assert.match(prompt, /do not ask for another confirmation or claim physical completion/);
   assert.doesNotMatch(prompt, /say it awaits on-site confirmation/);
 });
+
+test('empty action mappings still explain discovered MCP tools and distinguish pet animations', () => {
+  const prompt = robotActionInstruction([], true, {
+    connected: true,
+    chatActions: true,
+    mappings: [],
+    catalog: {
+      tools: ['getTeachProgramList', 'startTeachProgram'],
+      programs: [{ id: '9223372036854775807', name: '挥手' }],
+      areas: [],
+    },
+  });
+  assert.match(prompt, /getTeachProgramList/);
+  assert.match(prompt, /挥手/);
+  assert.match(prompt, /9223372036854775807/);
+  assert.match(prompt, /Only entries in the action catalog/);
+  assert.match(prompt, /Never substitute a desktop pet animation/);
+  assert.doesNotMatch(prompt, /Append \[robot_action/);
+});
+
+test('unavailable discovery explains the failure instead of inventing live tools', () => {
+  const prompt = robotActionInstruction([], false, {
+    connected: false,
+    chatActions: false,
+    mappings: [],
+    error: 'robot_connection_failed',
+  });
+  assert.match(prompt, /robot_connection_failed/);
+  assert.match(prompt, /do not invent a tool list/);
+  assert.match(prompt, /enable chat actions/);
+});

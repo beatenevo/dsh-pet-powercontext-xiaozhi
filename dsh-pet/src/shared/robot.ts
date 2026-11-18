@@ -37,6 +37,8 @@ export interface RobotTelemetry {
 
 /** MCP 返回的可选动作目录。 */
 export interface RobotCatalog {
+  /** Tool names returned by runtime MCP discovery, not an assumed capability list. */
+  tools?: string[];
   programs: { id: string; name: string }[];
   areas: { areaName: string; parameter: string }[];
 }

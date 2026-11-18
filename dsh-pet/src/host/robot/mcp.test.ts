@@ -139,6 +139,8 @@ test('structured catalog, AGV mapping and empty speech success', async (t) => {
   const h = await server(t, { structured: true });
   const status = await runRobotWorker(h.config, { operation: 'status' });
   assert.equal(status.catalog?.programs[0].id, programId);
+  assert.ok(status.catalog?.tools?.includes('getTeachProgramList'));
+  assert.ok(status.catalog?.tools?.includes('startTeachProgram'));
   assert.equal(status.telemetry, undefined);
   assert.equal(
     (await runRobotWorker(h.config, { operation: 'execute', tool: 'RobotAgvMove', target: 'A01' })).ok,

@@ -4,13 +4,13 @@
 
 English · [简体中文](README.zh.md) · [Documentation](docs/en/README.md) · [Installation](docs/en/guides/installation.md) · [Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases)
 
-Drag the pet beside your work, give it a personality, and talk to it. Run it inside **DeepSeek Harness (DSH)** or as a **standalone app**. Optional **PowerContext 1.5.0** memory keeps facts and preferences available after they leave the recent conversation window.
+Drag the pet beside your work, give it a personality, and talk to it. Run it inside **DeepSeek Harness (DSH)** or as a **standalone app**. Optional **PowerContext + seekdb** memory keeps facts and preferences available after they leave the recent conversation window.
 
 Built on [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet).
 
-Development preview: [Astra Pro 2.0 MCP integration](docs/en/guides/robot.md) supports catalog discovery, teach programs, area movement and speech without client-side Python/SDK.
+Optional: [Astra Pro 2.0 MCP integration](docs/en/guides/robot.md) supports catalog discovery, teach programs, area movement and speech without client-side Python/SDK.
 
-Development preview: [AI Vision observability](docs/en/guides/observability.md) adds optional, content-free traces and links to the platform’s existing memory views. [Token comparison](docs/en/guides/token-comparison.md) compares answers and measured usage across three context strategies. These features are not included in the published npm `0.1.0-beta.1`.
+Optional: [AI Vision observability](docs/en/guides/observability.md) adds optional, content-free traces and links to the platform’s existing memory views. [Token comparison](docs/en/guides/token-comparison.md) compares answers and measured usage across three context strategies. These features are included in the v0.2.0 release package.
 
 ## See it in use
 
@@ -47,41 +47,64 @@ _The running DSH workspace, agent conversation and Pet chat panel together. Send
 
 _After background extraction, the pet recalls “Moonleaf” and “jasmine tea without sugar.” Recent chat is set to **0 rounds** for this demonstration: the model request contains recalled memories and the new question, with no past chat turns. Open **Remembered facts** to inspect the extracted facts._
 
-Recorded on **2026-11-11** in **DSH 0.2.2-rc.1**, with **PowerContext 1.5.0**, on Linux Chromium. These earlier GIFs retain the actual UI, including mixed-language controls. [Full-size chat screenshot](docs/assets/screenshots/dsh-chat.en.png) · [Recall and memory list](docs/assets/screenshots/dsh-facts.en.png) · [Media sources](docs/assets/README.md).
+Recorded on **2026-11-11** in **DSH 0.2.2-rc.1**, with **PowerContext + seekdb**, on Linux Chromium. These earlier GIFs retain the actual UI, including mixed-language controls. [Full-size chat screenshot](docs/assets/screenshots/dsh-chat.en.png) · [Recall and memory list](docs/assets/screenshots/dsh-facts.en.png) · [Media sources](docs/assets/README.md).
 
 </details>
 
 ## Start with one pet
 
-The [npm package](https://www.npmjs.com/package/dsh-pet-powercontext) is available on the **beta** channel, currently `0.1.0-beta.1`. Choose one option below; no source checkout or build is needed.
+These instructions install **v0.2.0** explicitly. Release archives are also available from [GitHub Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.2.0).
 
 ### Already using DSH
 
-With DSH installed and Node.js **24.9+**, run:
+With DSH and **Node.js 24.9+** installed, run:
 
 ```sh
-dsh plugin --profile web add dsh-pet-powercontext@beta
+dsh plugin --profile web add dsh-pet-powercontext@0.2.0
 ```
 
-For DSH desktop, replace `--profile web` with `--profile desktop`. Restart DSH, open **Settings → Pet Config**, and chat through **Pet chat** using your DSH model. If the upstream `dsh-pet` plugin is enabled, disable it first and keep its data directory.
+For DSH desktop, replace `--profile web` with `--profile desktop`. Restart DSH, open **Settings → Pet Config**, and use **Pet chat** in the sidebar. Disable the upstream `dsh-pet` plugin first if enabled; retain its data directory.
 
-### Windows: download and open
+### Standalone on Windows, macOS or Linux
 
-1. [Download the Windows x64 ZIP](https://github.com/ob-labs/dsh-pet-powercontext/releases/download/v0.1.0-beta.1/dsh-pet-win-x64.zip).
-2. Extract the whole ZIP and double-click **dsh-pet.exe**. No Node.js installation is needed.
-3. Choose **Open AI settings** from the pet's menu, select a provider, enter your API key and check the connection.
-
-### Standalone: one command
-
-With Node.js **22.12+** installed, run:
+With **Node.js 22.12+**, run in PowerShell or a terminal:
 
 ```sh
-npx --yes dsh-pet-powercontext@beta --setup
+npx --yes dsh-pet-powercontext@0.2.0 --setup
 ```
 
-Choose a model provider and check the connection in the setup page that opens. Keep the terminal running while using the pet. Start with chat; long-term memory is optional and can be enabled later.
+Select a chat model, enter its key and check the connection in the setup page. Keep the terminal running. The animated pet needs a desktop environment and may download Electron on first launch. Standalone mode does not require DSH.
 
-[First-pet tutorial](docs/en/tutorials/first-pet.md) · [Installation details and updates](docs/en/guides/installation.md) · [Model providers](docs/en/guides/models.md)
+Windows x64 uses native installation; enabling memory automatically prepares Python and seekdb. Local seekdb on Windows ARM64 is not supported. Real-service validation has completed on Linux; the full Windows x64 and macOS installation flows still require real-host validation. Check the actual [Release assets](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.2.0) for desktop downloads.
+
+### Configure models and enable memory
+
+1. **Configure chat first.** The DSH pet uses the host chat model: enter the MiniMax endpoint, model and subscription key below in DSH model settings. Standalone users enter them in the app's settings.
+2. **Open local long-term memory.** In DSH, open **Settings → Pet Config → Local long-term memory**, select MiniMax China and Qwen Beijing, and enter each service's key. Chat and memory extraction settings are saved separately.
+3. **Click Check and enable memory.** The app checks model connections, installs PowerContext 1.5.2 and seekdb, and starts the service. Initial installation requires internet access. Memory is optional.
+4. **Verify recall.** Tell the pet a distinctive preference and wait for it to appear in **Remembered facts**. Clear recent chat, then ask about it again. A synced status alone does not mean extraction has completed.
+
+| Setting                      | Value                                                                              |
+| ---------------------------- | ---------------------------------------------------------------------------------- |
+| Chat / extraction provider   | MiniMax China subscription                                                         |
+| Generation endpoint          | `https://api.minimax.cn/v1`                                                        |
+| Generation model             | `MiniMax-M3.1-Flash`                                                               |
+| Generation key               | Your `sk-cp-` subscription key; pay-as-you-go keys do not share subscription quota |
+| Embedding provider           | Bailian: Qwen Beijing                                                              |
+| Embedding endpoint           | `https://dashscope.aliyuncs.com/compatible-mode/v1`                                |
+| Embedding model              | `text-embedding-v4`                                                                |
+| Embedding key                | Your Bailian API key                                                               |
+| Dimensions / send dimensions | `1024` / enabled                                                                   |
+
+New setups use one local seekdb store. Existing SQLite configurations remain in place without automatic conversion. An existing store's embedding model, endpoint and dimensions cannot be switched in place. Model checks, chat, extraction and recall can incur usage charges.
+
+### Optional AI Vision and Token comparison
+
+AI Vision is a separate observability platform. Enter an existing platform's endpoint and credentials in observability settings, save and check the connection, then pause and resume memory to apply the configuration to the managed service. The plugin does not deploy AI Vision.
+
+Token comparison is an auxiliary experiment for comparing answers and usage across context strategies. Include extraction and embedding overhead; short conversations do not necessarily save tokens.
+
+[Installation](docs/en/guides/installation.md) · [Memory guide](docs/en/guides/memory.md) · [AI Vision](docs/en/guides/observability.md) · [Token comparison](docs/en/guides/token-comparison.md)
 
 ## What you can do
 
@@ -95,7 +118,7 @@ Choose a model provider and check the connection in the setup page that opens. K
 
 DSH session integration, speech recognition, provider balances and other host features depend on the runtime and available services. A remembered promise does not automatically create a reminder or execute an action.
 
-Presets include DeepSeek, OpenAI, Qwen, SiliconFlow, Volcengine Ark, Zhipu, Kimi, Ollama and an optional LiteLLM gateway. Chat, extraction and embeddings can use different providers. [Features](docs/en/reference/features.md) · [Animation gallery](docs/en/reference/gallery.md)
+Presets include MiniMax, DeepSeek, OpenAI, Qwen, SiliconFlow, Volcengine Ark, Zhipu, Kimi, Ollama and an optional LiteLLM gateway. Chat, extraction and embeddings can use different providers. [Features](docs/en/reference/features.md) · [Animation gallery](docs/en/reference/gallery.md)
 
 ## Why memory helps—and what it costs
 

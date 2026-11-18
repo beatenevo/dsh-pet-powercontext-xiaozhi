@@ -2,9 +2,7 @@
 
 [English](../../en/guides/installation.md) · 简体中文 · [文档首页](../README.md)
 
-**要连接 Astra Pro 2.0？** 请改用[安装与机器人互动教程](../tutorials/astra-first-interaction.md)中的精简预览包。下方已发布的 beta 包尚不包含机器人功能。
-
-已发布的 **beta** 通道当前提供 [0.1.0-beta.1](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.1.0-beta.1)。下面三种方式任选一种，均使用已发布的安装包，无需下载源码、安装 pnpm 或编译。
+以下命令明确安装 **v0.2.0**，也可以从 [GitHub Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.2.0) 下载发布包。MiniMax 套餐与百炼模型配置见 [README](../../../README.zh.md)。
 
 ## 把插件装进 DSH
 
@@ -16,31 +14,27 @@
 
 ```sh
 # DSH 浏览器版
-dsh plugin --profile web add dsh-pet-powercontext@beta
+dsh plugin --profile web add dsh-pet-powercontext@0.2.0
 ```
 
 如果使用 DSH 桌面应用，改用：
 
 ```sh
-dsh plugin --profile desktop add dsh-pet-powercontext@beta
+dsh plugin --profile desktop add dsh-pet-powercontext@0.2.0
 ```
 
 重启 DSH，打开「设置 → 桌宠配置」，再在右侧栏选择「Pet chat（桌宠对话）」。聊天沿用已配置的 DSH 模型。
 
-## Windows 桌面 ZIP
+## Windows 桌面下载
 
-1. [下载 dsh-pet-win-x64.zip](https://github.com/ob-labs/dsh-pet-powercontext/releases/download/v0.1.0-beta.1/dsh-pet-win-x64.zip)，适用于 Windows x64。
-2. 将**整个压缩包**解压到可写文件夹，打开解压后的目录，双击 **dsh-pet.exe**。不要单独移动可执行文件。
-3. 在桌宠菜单选择「打开 AI 设置」，选择服务商和模型、填写 API Key，再检查连接。
-
-ZIP 已包含桌面运行环境，无需安装 Node.js 或 DSH。这种方式独立运行桌宠；想在 DSH 内使用，请按上面的插件方式安装。
+可在 PowerShell 执行下方独立模式命令，或在 [v0.2.0 Release 附件](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.2.0)中查看对应平台的桌面包。若提供 ZIP，完整解压后再启动应用。不要用旧版 ZIP 验证 0.2.0 功能。
 
 ## 一条命令启动独立模式
 
 先安装 **Node.js 22.12+**，然后在任意目录执行：
 
 ```sh
-npx --yes dsh-pet-powercontext@beta --setup
+npx --yes dsh-pet-powercontext@0.2.0 --setup
 ```
 
 首次运行会下载安装包，图形桌宠还可能下载 Electron。在自动打开的设置页中选择服务商、填写 API Key、选择模型，再检查连接。使用期间保持终端运行，按 **Ctrl+C** 退出；下次仍执行同一条命令。
@@ -51,14 +45,14 @@ npx --yes dsh-pet-powercontext@beta --setup
 
 ## 按需开启记忆
 
-普通聊天不需要 PowerContext。DSH 用户进入「设置 → 桌宠配置 → 本机长期记忆」；独立模式用户在设置页开启记忆。程序会在用户目录准备 Python 和 PowerContext 环境，Windows ZIP 本身不含已安装的 PowerContext 服务。
+普通聊天不需要 PowerContext。DSH 用户进入「设置 → 桌宠配置 → 本机长期记忆」；独立模式用户在设置页开启记忆。程序会在用户目录自动准备 Python、PowerContext 1.5.2 和单个 seekdb 数据库，Windows ZIP 本身不含已安装的 PowerContext 服务。
 
-本机记忆自动安装支持 Linux/macOS，Windows 记忆安装仍为实验性支持。图文上手步骤见[养好第一只桌宠](../tutorials/first-pet.md)，详细配置与验证见[记忆指南](memory.md)。
+Windows x64 走原生安装。Linux 已完成真实服务验证；Windows x64 与 macOS 的完整安装仍待实机验证。Windows ARM64 暂不支持本机 seekdb。图文上手步骤见[养好第一只桌宠](../tutorials/first-pet.md)，详细配置与验证见[记忆指南](memory.md)。
 
 ## 更新与卸载
 
 - **DSH：**按原来的 profile 再执行一次 `add` 命令，然后重启 DSH。
-- **独立模式命令：**先退出进程，再执行同一条 `npx` 命令，使用当前 beta 版本。
+- **独立模式命令：**先退出进程，将 `@0.2.0` 换成目标发布版本，再执行 `npx` 命令。
 - **Windows ZIP：**先退出应用，到 [Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases) 下载需要的版本，完整解压到新文件夹。
 
 让 DSH 管理记忆目录前，先退出使用同一目录的独立进程。卸载 DSH 插件时执行：

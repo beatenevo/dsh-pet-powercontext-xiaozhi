@@ -4,13 +4,13 @@
 
 [English](README.md) · 简体中文 · [文档](docs/zh/README.md) · [安装](docs/zh/guides/installation.md) · [下载版本](https://github.com/ob-labs/dsh-pet-powercontext/releases)
 
-把她拖到工作区旁边，写一段人设，随时聊两句。桌宠既能作为 **DeepSeek Harness（DSH）插件**，也能 **独立运行**。可选的 **PowerContext 1.5.0** 长期记忆，让事实与偏好在退出近期聊天窗口后仍有机会被找回。
+把她拖到工作区旁边，写一段人设，随时聊两句。桌宠既能作为 **DeepSeek Harness（DSH）插件**，也能 **独立运行**。可选的 **PowerContext + seekdb** 长期记忆，让事实与偏好在退出近期聊天窗口后仍有机会被找回。
 
 本项目基于 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)。
 
-开发预览：[Astra Pro 2.0 MCP 接入](docs/zh/guides/robot.md)支持目录发现、示教程序、区域移动和语音播报，无需客户端 Python/SDK。
+可选功能：[Astra Pro 2.0 MCP 接入](docs/zh/guides/robot.md)支持目录发现、示教程序、区域移动和语音播报，无需客户端 Python/SDK。
 
-开发预览：[AI Vision 可观测性](docs/zh/guides/observability.md)提供可选、不含正文的链路采集，以及平台已有记忆视图的查看入口。[Token 对照](docs/zh/guides/token-comparison.md)可以比较三种上下文策略的回答与实测用量。这些功能尚未包含在 npm 已发布的 `0.1.0-beta.1` 中。
+可选功能：[AI Vision 可观测性](docs/zh/guides/observability.md)提供可选、不含正文的链路采集，以及平台已有记忆视图的查看入口。[Token 对照](docs/zh/guides/token-comparison.md)可以比较三种上下文策略的回答与实测用量。这些功能已包含在 v0.2.0 发布包中。
 
 ## 看看用起来的样子
 
@@ -47,41 +47,64 @@ _同一界面保留 DSH 工作区、Agent 会话和桌宠聊天面板，实际�
 
 _后台抽取后，桌宠再次答出项目名 Moonleaf 和“无糖茉莉花茶”。本次演示将近期聊天设为 **0 轮**：实际模型请求携带召回记忆和新问题，没有携带历史问答。展开「Remembered facts」可以查看抽取后的事实。_
 
-以上 GIF 于 **2026-11-11** 在 Linux Chromium 中实录，使用 **DSH 0.2.2-rc.1** 与 **PowerContext 1.5.0**，保留当时界面原有的中英文控件。[查看原尺寸聊天截图](docs/assets/screenshots/dsh-chat.en.png) · [召回与记忆列表](docs/assets/screenshots/dsh-facts.en.png) · [图文来源](docs/assets/README.md)。
+以上 GIF 于 **2026-11-11** 在 Linux Chromium 中实录，使用 **DSH 0.2.2-rc.1** 与 **PowerContext + seekdb**，保留当时界面原有的中英文控件。[查看原尺寸聊天截图](docs/assets/screenshots/dsh-chat.en.png) · [召回与记忆列表](docs/assets/screenshots/dsh-facts.en.png) · [图文来源](docs/assets/README.md)。
 
 </details>
 
 ## 先养好一只
 
-[npm 包](https://www.npmjs.com/package/dsh-pet-powercontext)已发布到 **beta** 通道，当前版本为 `0.1.0-beta.1`。下面任选一种方式，无需下载源码或编译。
+以下命令明确安装 **v0.2.0**，也可以从 [GitHub Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.2.0) 下载发布包。
 
 ### 已经在用 DSH
 
-已安装 DSH 和 **Node.js 24.9+** 时，在终端执行：
+安装 DSH 与 **Node.js 24.9+** 后，在终端执行：
 
 ```sh
-dsh plugin --profile web add dsh-pet-powercontext@beta
+dsh plugin --profile web add dsh-pet-powercontext@0.2.0
 ```
 
-DSH 桌面版把 `--profile web` 换成 `--profile desktop`。重启 DSH，打开「设置 → 桌宠配置」，通过「Pet chat（桌宠对话）」聊天，沿用 DSH 模型。如果已启用上游 `dsh-pet` 插件，先将其停用，保留数据目录。
+DSH 桌面版将 `--profile web` 换为 `--profile desktop`。重启 DSH，在「设置 → 桌宠配置」调整桌宠，在右侧栏「桌宠对话」中聊天。若已启用上游 `dsh-pet`，先停用它并保留数据目录。
 
-### Windows：下载后双击
+### 独立运行（Windows、macOS、Linux）
 
-1. [下载 Windows x64 ZIP](https://github.com/ob-labs/dsh-pet-powercontext/releases/download/v0.1.0-beta.1/dsh-pet-win-x64.zip)。
-2. 完整解压，双击 **dsh-pet.exe**，无需安装 Node.js。
-3. 在桌宠菜单选择「打开 AI 设置」，选择服务商、填写 API Key 并检查连接。
-
-### 独立模式：一条命令启动
-
-已安装 **Node.js 22.12+** 时，执行：
+安装 **Node.js 22.12+** 后，在 PowerShell 或终端执行：
 
 ```sh
-npx --yes dsh-pet-powercontext@beta --setup
+npx --yes dsh-pet-powercontext@0.2.0 --setup
 ```
 
-在自动打开的设置页中选择模型服务商并检查连接，使用期间保持终端运行。可以先聊天，长期记忆按需开启。
+在打开的设置页选择聊天模型、填写密钥并检查连接。使用期间保持终端运行；图形桌宠需要桌面环境，首次启动可能下载 Electron。独立运行不需要先安装 DSH。
 
-[小白上手教程](docs/zh/tutorials/first-pet.md) · [安装详情与更新](docs/zh/guides/installation.md) · [选择模型服务](docs/zh/guides/models.md)
+Windows x64 使用原生安装路径；长期记忆会自动准备 Python 和 seekdb。Windows ARM64 的本机 seekdb 暂不支持。Linux 已完成真实服务验证，Windows x64 和 macOS 的完整安装流程仍待实机验证。桌面安装包请以 [Release 附件](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.2.0)实际提供的文件为准。
+
+### 配置模型并开启长期记忆
+
+1. **先配置聊天模型。** DSH 桌宠沿用宿主聊天模型；在 DSH 模型设置中使用下表的 MiniMax 地址、模型与订阅 Key。独立模式在自己的设置页填写。
+2. **打开本机长期记忆。** DSH 进入「设置 → 桌宠配置 → 本机长期记忆」，选择 MiniMax 中国端与通义千问·北京，填写各自密钥。聊天模型与记忆整理模型的配置分别保存。
+3. **点击「检查并启用记忆」。** 程序检查模型连接，自动安装 PowerContext 1.5.2 和 seekdb，并启动服务。首次安装需要联网，记忆功能按需开启。
+4. **验证记忆。** 告诉桌宠一条独特偏好，等待「记得的事」出现对应事实；清空近期聊天后再追问，检查是否召回。仅显示「已同步」不代表整理已完成。
+
+| 配置项                     | 值                                                  |
+| -------------------------- | --------------------------------------------------- |
+| 聊天 / 记忆整理服务        | MiniMax 中国端套餐订阅                              |
+| 生成接口地址               | `https://api.minimax.cn/v1`                         |
+| 生成模型                   | `MiniMax-M3.1-Flash`                                |
+| 生成密钥                   | 自己的 `sk-cp-` 订阅 Key；按量 Key 不共用套餐额度   |
+| 向量服务                   | 百炼：通义千问·北京                                 |
+| Embedding 接口地址         | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| Embedding 模型             | `text-embedding-v4`                                 |
+| Embedding 密钥             | 自己的百炼 API Key                                  |
+| 向量维度 / dimensions 参数 | `1024` / 勾选发送                                   |
+
+新配置使用一个本机 seekdb 记忆库；已有 SQLite 配置继续沿用，不自动转换。已有库的向量模型、地址与维度不能直接切换。模型检查、聊天、记忆整理和检索都可能产生用量。
+
+### 按需接入 AI Vision 与 Token 对照
+
+AI Vision 是可选的外部可观测平台。在可观测性设置中填写已有平台地址与认证信息，保存并检查连接；暂停再恢复记忆，使新配置应用到本机记忆服务。插件不会自动部署 AI Vision 平台。
+
+Token 对照是辅助实验功能，用于比较不同上下文策略的回答与用量。请把记忆整理与向量化开销计入比较；短对话不保证节省 Token。
+
+[安装详情](docs/zh/guides/installation.md) · [记忆指南](docs/zh/guides/memory.md) · [AI Vision](docs/zh/guides/observability.md) · [Token 对照](docs/zh/guides/token-comparison.md)
 
 ## 桌宠与记忆分别做什么
 
@@ -95,7 +118,7 @@ npx --yes dsh-pet-powercontext@beta --setup
 
 会话联动、语音识别、服务商余额等能力取决于运行方式和宿主服务。聊天中记住一句承诺，不会自动创建提醒或执行动作。
 
-模型预设包括 DeepSeek、OpenAI、通义千问、硅基流动、火山方舟、智谱、Kimi、Ollama 和可选 LiteLLM 网关。聊天、记忆整理与 Embedding 可以使用不同服务商。[功能说明](docs/zh/reference/features.md) · [动画预览](docs/zh/reference/gallery.md)
+模型预设包括 MiniMax、DeepSeek、OpenAI、通义千问、硅基流动、火山方舟、智谱、Kimi、Ollama 和可选 LiteLLM 网关。聊天、记忆整理与 Embedding 可以使用不同服务商。[功能说明](docs/zh/reference/features.md) · [动画预览](docs/zh/reference/gallery.md)
 
 ## 为什么接记忆，token 又省在哪里
 

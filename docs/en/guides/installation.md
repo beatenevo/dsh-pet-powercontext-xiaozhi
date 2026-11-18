@@ -2,9 +2,7 @@
 
 English · [简体中文](../../zh/guides/installation.md) · [Documentation](../README.md)
 
-**Connecting Astra Pro 2.0?** Use the slim preview in the [installation and robot interaction tutorial](../tutorials/astra-first-interaction.md). The published beta packages below do not include robot support.
-
-The published **beta** channel currently provides [0.1.0-beta.1](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.1.0-beta.1). Choose one of the three options below. All use published packages; no source checkout, pnpm or build step is needed.
+These commands install **v0.2.0** explicitly. Release archives are also available from [GitHub Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.2.0). See the [README](../../../README.md) for MiniMax subscription and Bailian model settings.
 
 ## Add the plugin to DSH
 
@@ -16,31 +14,27 @@ Run the command for **your DSH profile**:
 
 ```sh
 # DSH browser profile
-dsh plugin --profile web add dsh-pet-powercontext@beta
+dsh plugin --profile web add dsh-pet-powercontext@0.2.0
 ```
 
 For the DSH desktop app, use this command instead:
 
 ```sh
-dsh plugin --profile desktop add dsh-pet-powercontext@beta
+dsh plugin --profile desktop add dsh-pet-powercontext@0.2.0
 ```
 
 Restart DSH, open **Settings → Pet Config**, then select **Pet chat** in the right sidebar. Chat uses your configured DSH model.
 
-## Windows desktop ZIP
+## Windows desktop downloads
 
-1. [Download dsh-pet-win-x64.zip](https://github.com/ob-labs/dsh-pet-powercontext/releases/download/v0.1.0-beta.1/dsh-pet-win-x64.zip) for Windows x64.
-2. Extract the **whole archive** to a writable folder. Open the extracted folder and double-click **dsh-pet.exe**; keep its neighboring files together.
-3. In the pet's menu, choose **Open AI settings**, select a provider and model, enter your API key and check the connection.
-
-The ZIP includes the desktop runtime, so you do not need to install Node.js or DSH. It runs as a standalone pet. To use the pet inside DSH, follow the plugin instructions above.
+Use the standalone command below in PowerShell, or check the [v0.2.0 Release assets](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.2.0) for a desktop package for your platform. When a ZIP is available, extract the entire archive before launching the app. Do not use an older release ZIP to try v0.2.0 features.
 
 ## Start standalone with one command
 
 Install Node.js **22.12+** if needed, then run the following command from any folder:
 
 ```sh
-npx --yes dsh-pet-powercontext@beta --setup
+npx --yes dsh-pet-powercontext@0.2.0 --setup
 ```
 
 The first launch downloads the package and, for graphical pets, may download Electron. In the setup page that opens, choose a provider, enter your API key, select a model and check the connection. Keep the terminal running while using the pet; press **Ctrl+C** to stop it. Run the same command next time.
@@ -51,14 +45,14 @@ Graphical pets need a desktop session. Headless machines can use the standalone 
 
 ## Enable memory when you need it
 
-Chat works without PowerContext. In DSH, open **Settings → Pet Config → Local long-term memory**; in standalone mode, enable memory in the setup page. The setup prepares Python and PowerContext in your user directory. The Windows ZIP does not include an installed PowerContext service.
+Chat works without PowerContext. In DSH, open **Settings → Pet Config → Local long-term memory**; in standalone mode, enable memory in the setup page. The setup automatically prepares Python, PowerContext 1.5.2 and a single seekdb database in your user directory. The Windows ZIP does not include an installed PowerContext service.
 
-Automatic local memory installation supports Linux/macOS; Windows memory installation remains experimental. Follow [Your first pet](../tutorials/first-pet.md) for the illustrated walkthrough or [memory setup](memory.md) for configuration and verification.
+Windows x64 uses native installation. Linux has real-service validation; Windows x64 and macOS still require full real-host validation. Windows ARM64 local seekdb is unsupported. Follow [Your first pet](../tutorials/first-pet.md) for the illustrated walkthrough or [memory setup](memory.md) for configuration and verification.
 
 ## Update and remove
 
 - **DSH:** run the same `add` command for your profile, then restart DSH.
-- **Standalone command:** stop the process and run the `npx` command again to use the current beta.
+- **Standalone command:** stop the process and replace `@0.2.0` with the desired release version and run the `npx` command again.
 - **Windows ZIP:** exit the app, download the desired version from [Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases), and extract it to a new folder. Keep the complete folder together.
 
 Stop a standalone process before having DSH manage the same memory directory. To remove the DSH plugin, run:

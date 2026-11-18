@@ -2,47 +2,63 @@ version: 1
 english: README.md
 chinese: README.zh.md
 headings:
-  - en: dsh-pet-powercontext
-    zh: dsh-pet-powercontext
+  - en: "dsh-pet-powercontext"
+    zh: "dsh-pet-powercontext"
     en_sha256: 4066d4f82c87fafd64e3e0298d1d086f31c6b82e8092b2b57b3080b272ec9f66
     zh_sha256: 4066d4f82c87fafd64e3e0298d1d086f31c6b82e8092b2b57b3080b272ec9f66
-  - en: See it in use
-    zh: 看看用起来的样子
+  - en: "See it in use"
+    zh: "看看用起来的样子"
     en_sha256: cce88ce5f668c8ef569d14f47810d86284d72adc4ae03376893b277ff692041c
     zh_sha256: bcb7c151356896f45cd4b69cc577830428bf1b4f0886264099a108fbb87d2233
-  - en: Start with one pet
-    zh: 先养好一只
+  - en: "DSH, the pet and its memories"
+    zh: "DSH、桌宠与记忆在同一个工作区"
+    en_sha256: 1b2fd4baf98aefd759ebe9e7edc92c231cde8df7a8d9b3907f4a84e8e6706b6f
+    zh_sha256: f9625ffc8bed582ef5d438eab6481cf589702c7ee2ac048dac309f8864d26fcd
+  - en: "Compare answers and token usage"
+    zh: "并排看回答，也看 Token 开销"
+    en_sha256: 420d2a6ca40b405a965d82dd55850fc0bfd3f08a63425f05953204780711ee5d
+    zh_sha256: ededcfdcc1efe2701829bb644f663282d1e3291d8b87fb5465bffa599ffeb967
+  - en: "Follow a pet reply in AI Vision"
+    zh: "在 AI Vision 中追踪一次桌宠回复"
+    en_sha256: 288dabfc37859e28e4e353c58b57230391abb3312f77aee8037ad59eda8b349e
+    zh_sha256: d60eb68c6f02c78ade3fb038fe6f279a193156d5dceffd0342976057d416147a
+  - en: "Start with one pet"
+    zh: "先养好一只"
     en_sha256: 247a90d2818cf3b16fd59d6ccc04da6d8b4261f7b399d075c1c80a33bf0e8eb2
     zh_sha256: 71ba4df56d75d4af41f1331ba2089f61775dd538f8d257a1e749222ba590e86a
-  - en: Already using DSH
-    zh: 已经在用 DSH
+  - en: "Already using DSH"
+    zh: "已经在用 DSH"
     en_sha256: c758b595a6f4d56802b01a4e008cb4e119c95a6a1f65d28fbf6d9b08a883b275
     zh_sha256: d1c74230f6e0b92e80217fa7af173a8f8559d86bdbe122b3f9e18d3c54d08ae3
-  - en: "Windows: download and open"
-    zh: Windows：下载后双击
-    en_sha256: 2bc70383dc781620e9ebbe8a4ad95c5f2ed73237a7592b12b16c25f764506b74
-    zh_sha256: 7c3532bf48b075ed67379f84a84e3d1204187a828ec7be2ef15f8e897234e7d5
-  - en: "Standalone: one command"
-    zh: 独立模式：一条命令启动
-    en_sha256: fb92d0e777f46e3d04d2532c4e3d53701b60f738d23ed8f90e6568b4a8cd8c49
-    zh_sha256: 1e3942f387afa335af90242ab85e0306940ef070d80f6801c892d96e3ecaf5c4
-  - en: What you can do
-    zh: 桌宠与记忆分别做什么
+  - en: "Standalone on Windows, macOS or Linux"
+    zh: "独立运行（Windows、macOS、Linux）"
+    en_sha256: fc6ce295b023f3ae414970b6817048f33cddde88727dda89a8ac44bde295084f
+    zh_sha256: d9035359e491ca3cb25038668f84faf3be18ba5105fe6f42ae02a33c782f5246
+  - en: "Configure models and enable memory"
+    zh: "配置模型并开启长期记忆"
+    en_sha256: ebdd2a8c9cef6c60e83c4cdbbad7f375efadc8bb02e8f203a3ba0786315a6396
+    zh_sha256: 0b0b163c199827399f03ce9eb215f041530211bb558791a2b333ff11e377836a
+  - en: "Optional AI Vision and Token comparison"
+    zh: "按需接入 AI Vision 与 Token 对照"
+    en_sha256: a69fa5b56b5bd38f66c7c6350ebb52a83bac4da7d118bfd73af08fb6bd520991
+    zh_sha256: 1af8426026177033f5e0900afcf04f94e8461d69d415ad9461269995bd7cdfdb
+  - en: "What you can do"
+    zh: "桌宠与记忆分别做什么"
     en_sha256: f42148c5762e904b9a58eb75bf0058593e9f2684eb44c43723f2348db1ef852e
     zh_sha256: 3f8e56c8fbcc9c216a0227b70784873a7608584ff50b9c2f39c8ad3731b78503
-  - en: Why memory helps—and what it costs
-    zh: 为什么接记忆，token 又省在哪里
+  - en: "Why memory helps—and what it costs"
+    zh: "为什么接记忆，token 又省在哪里"
     en_sha256: a3700ec4f507512991c9a2f4dcd7251147a173e1fe7b5a070a3aa92f1bd51b0f
     zh_sha256: 92537d653e5b03dfb4c53b2ca51784bc31bd15e3545ec8c86fc5ea365e3a7935
-  - en: Keep control of your data
-    zh: 数据与控制权
+  - en: "Keep control of your data"
+    zh: "数据与控制权"
     en_sha256: da4b83b7de9fca0d218123a8f14731c39430a5d7ea7c91221538546d34be7ab3
     zh_sha256: 9cde781f4150ee70a4cb2951456da309a8da40e9144274a55c9ea5cf99e11b36
-  - en: Documentation and development
-    zh: 文档与开发
+  - en: "Documentation and development"
+    zh: "文档与开发"
     en_sha256: 319281471ea4bb8008bc33b6c0e8493373e0f49d4d3478c7ea8024d489ab77e7
     zh_sha256: 19140a763c92a62a82d3dc193e3306f8ebd9ba26fe20df762e1d6ce9612534d6
-  - en: Credits and licensing
-    zh: 致谢与许可
+  - en: "Credits and licensing"
+    zh: "致谢与许可"
     en_sha256: 8f55a700872e648fd1923f1484d0131cbdbb6cda133976dd29a72a9078e92ef2
     zh_sha256: eb26b7a35f1bab779b9f18e34697a805edc2df50d91a05e06c8aa745347ff35a

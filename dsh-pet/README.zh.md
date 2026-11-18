@@ -11,35 +11,64 @@ kind: package-reference
 
 ## 概述
 
-面向 DeepSeek Harness 和独立运行的动画桌宠：聊天、人设、语音、动画、提醒，以及每只宠物独立的 PowerContext 1.5.0 长期记忆。本包在上游桌宠的基础上加入可选的 PowerContext 记忆。
+面向 DeepSeek Harness 和独立运行的动画桌宠：聊天、人设、语音、动画、提醒，以及PowerContext + seekdb 长期记忆。本包在上游桌宠的基础上加入可选的 PowerContext 记忆。
 
 <a id="use"></a>
 
 ## 使用本包
 
-已发布的 **beta** 通道当前提供 `0.1.0-beta.1`。下面任选一种方式，无需下载源码或编译。
+以下命令明确安装 **v0.2.0**，也可以从 [GitHub Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.2.0) 下载发布包。
 
-**DSH 插件**：已安装 DSH 和 Node.js 24.9+ 时，执行：
+### 已经在用 DSH
 
-```sh
-dsh plugin --profile web add dsh-pet-powercontext@beta
-```
-
-DSH 桌面版把 `--profile web` 换成 `--profile desktop`。重启 DSH，打开「设置 → 桌宠配置」，通过「Pet chat（桌宠对话）」使用 DSH 模型聊天。若已启用上游 `dsh-pet` 插件，先将其停用；保留共用的数据目录，以继续使用原配置和记忆。
-
-**Windows 应用**：[下载 Windows x64 ZIP](https://github.com/ob-labs/dsh-pet-powercontext/releases/download/v0.1.0-beta.1/dsh-pet-win-x64.zip)，完整解压后双击 **dsh-pet.exe**，无需安装 Node.js。在桌宠菜单选择「打开 AI 设置」配置模型。
-
-**独立模式命令**：已安装 Node.js 22.12+ 时，执行：
+安装 DSH 与 **Node.js 24.9+** 后，在终端执行：
 
 ```sh
-npx --yes dsh-pet-powercontext@beta --setup
+dsh plugin --profile web add dsh-pet-powercontext@0.2.0
 ```
 
-在设置页中选择服务商、填写 API Key 并检查连接，使用期间保持终端运行。详见[安装与更新指南](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/zh/guides/installation.md)。
+DSH 桌面版将 `--profile web` 换为 `--profile desktop`。重启 DSH，在「设置 → 桌宠配置」调整桌宠，在右侧栏「桌宠对话」中聊天。若已启用上游 `dsh-pet`，先停用它并保留数据目录。
 
-长期记忆按需开启。DSH 用户进入「设置 → 桌宠配置 → 本机长期记忆」；独立模式用户在设置页开启。聊天、记忆整理和向量服务可分别选择服务商，预设支持 DeepSeek、OpenAI、通义千问、硅基流动、火山方舟、智谱、Kimi、Ollama 和可选 LiteLLM 网关。详见[模型配置](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/zh/guides/models.md)。
+### 独立运行（Windows、macOS、Linux）
 
-DSH 新记忆配置默认使用 MiniMax 中国端套餐订阅与百炼 `text-embedding-v4`（1024 维）。启用后自动准备隔离的 Python、固定版本的 PowerContext 发布包和单个 seekdb 数据库，无需 Git；已有 SQLite 配置保持不变。AI Vision 按需接入，修改后重启记忆服务生效。Windows x64 使用原生安装路径，Windows/macOS 仍待真实机器验收。
+安装 **Node.js 22.12+** 后，在 PowerShell 或终端执行：
+
+```sh
+npx --yes dsh-pet-powercontext@0.2.0 --setup
+```
+
+在打开的设置页选择聊天模型、填写密钥并检查连接。使用期间保持终端运行；图形桌宠需要桌面环境，首次启动可能下载 Electron。独立运行不需要先安装 DSH。
+
+Windows x64 使用原生安装路径；长期记忆会自动准备 Python 和 seekdb。Windows ARM64 的本机 seekdb 暂不支持。Linux 已完成真实服务验证，Windows x64 和 macOS 的完整安装流程仍待实机验证。桌面安装包请以 [Release 附件](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.2.0)实际提供的文件为准。
+
+### 配置模型并开启长期记忆
+
+1. **先配置聊天模型。** DSH 桌宠沿用宿主聊天模型；在 DSH 模型设置中使用下表的 MiniMax 地址、模型与订阅 Key。独立模式在自己的设置页填写。
+2. **打开本机长期记忆。** DSH 进入「设置 → 桌宠配置 → 本机长期记忆」，选择 MiniMax 中国端与通义千问·北京，填写各自密钥。聊天模型与记忆整理模型的配置分别保存。
+3. **点击「检查并启用记忆」。** 程序检查模型连接，自动安装 PowerContext 1.5.2 和 seekdb，并启动服务。首次安装需要联网，记忆功能按需开启。
+4. **验证记忆。** 告诉桌宠一条独特偏好，等待「记得的事」出现对应事实；清空近期聊天后再追问，检查是否召回。仅显示「已同步」不代表整理已完成。
+
+| 配置项                     | 值                                                  |
+| -------------------------- | --------------------------------------------------- |
+| 聊天 / 记忆整理服务        | MiniMax 中国端套餐订阅                              |
+| 生成接口地址               | `https://api.minimax.cn/v1`                         |
+| 生成模型                   | `MiniMax-M3.1-Flash`                                |
+| 生成密钥                   | 自己的 `sk-cp-` 订阅 Key；按量 Key 不共用套餐额度   |
+| 向量服务                   | 百炼：通义千问·北京                                 |
+| Embedding 接口地址         | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| Embedding 模型             | `text-embedding-v4`                                 |
+| Embedding 密钥             | 自己的百炼 API Key                                  |
+| 向量维度 / dimensions 参数 | `1024` / 勾选发送                                   |
+
+新配置使用一个本机 seekdb 记忆库；已有 SQLite 配置继续沿用，不自动转换。已有库的向量模型、地址与维度不能直接切换。模型检查、聊天、记忆整理和检索都可能产生用量。
+
+### 按需接入 AI Vision 与 Token 对照
+
+AI Vision 是可选的外部可观测平台。在可观测性设置中填写已有平台地址与认证信息，保存并检查连接；暂停再恢复记忆，使新配置应用到本机记忆服务。插件不会自动部署 AI Vision 平台。
+
+Token 对照是辅助实验功能，用于比较不同上下文策略的回答与用量。请把记忆整理与向量化开销计入比较；短对话不保证节省 Token。
+
+[安装详情](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/zh/guides/installation.md) · [记忆指南](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/zh/guides/memory.md) · [AI Vision](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/zh/guides/observability.md) · [Token 对照](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/zh/guides/token-comparison.md)
 
 <a id="implementation"></a>
 

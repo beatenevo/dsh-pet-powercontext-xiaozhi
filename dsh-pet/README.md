@@ -11,35 +11,64 @@ English · [简体中文](README.zh.md) · [Full project guide](https://github.c
 
 ## Overview
 
-An animated desktop companion for DeepSeek Harness and standalone use: chat, configurable personality, voice, animation, reminders and optional per-pet PowerContext 1.5.0 memory. This package adds optional PowerContext memory to the upstream desktop pet.
+An animated desktop companion for DeepSeek Harness and standalone use: chat, configurable personality, voice, animation, reminders and optional PowerContext + seekdb long-term memory. This package adds optional PowerContext memory to the upstream desktop pet.
 
 <a id="use"></a>
 
 ## Use this package
 
-The published **beta** channel currently provides `0.1.0-beta.1`. Choose one option; no source checkout or build is needed.
+These instructions install **v0.2.0** explicitly. Release archives are also available from [GitHub Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.2.0).
 
-**DSH plugin** — with DSH installed and Node.js 24.9+, run:
+### Already using DSH
 
-```sh
-dsh plugin --profile web add dsh-pet-powercontext@beta
-```
-
-For DSH desktop, replace `--profile web` with `--profile desktop`. Restart DSH, open **Settings → Pet Config**, and use **Pet chat** with your DSH model. Disable the upstream `dsh-pet` plugin first if enabled; keep the shared data directory to retain configuration and memories.
-
-**Windows app** — [download the Windows x64 ZIP](https://github.com/ob-labs/dsh-pet-powercontext/releases/download/v0.1.0-beta.1/dsh-pet-win-x64.zip), extract the whole archive and double-click **dsh-pet.exe**. No Node.js installation is needed. Choose **Open AI settings** from the pet's menu to configure your model.
-
-**Standalone command** — with Node.js 22.12+, run:
+With DSH and **Node.js 24.9+** installed, run:
 
 ```sh
-npx --yes dsh-pet-powercontext@beta --setup
+dsh plugin --profile web add dsh-pet-powercontext@0.2.0
 ```
 
-Choose a provider, enter your API key and check the connection in the setup page. Keep the terminal running while using the pet. [Installation details and updates](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/en/guides/installation.md).
+For DSH desktop, replace `--profile web` with `--profile desktop`. Restart DSH, open **Settings → Pet Config**, and use **Pet chat** in the sidebar. Disable the upstream `dsh-pet` plugin first if enabled; retain its data directory.
 
-Long-term memory is optional. In DSH, use **Settings → Pet Config → Local long-term memory**; standalone users can enable it in the setup page. Chat, extraction and embeddings can use separate providers, including DeepSeek, OpenAI, Qwen, SiliconFlow, Ark, Zhipu, Kimi, Ollama and optional LiteLLM gateways. See [model configuration](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/en/guides/models.md).
+### Standalone on Windows, macOS or Linux
 
-New DSH memory setups default to MiniMax China subscription generation and Bailian `text-embedding-v4` (1024 dimensions). Enabling memory prepares isolated Python, the pinned PowerContext release and a single seekdb database automatically; Git is not required. Existing SQLite settings remain unchanged. AI Vision is optional and takes effect for the managed server after a memory restart. Native Windows x64 and macOS installation still require real-host qualification.
+With **Node.js 22.12+**, run in PowerShell or a terminal:
+
+```sh
+npx --yes dsh-pet-powercontext@0.2.0 --setup
+```
+
+Select a chat model, enter its key and check the connection in the setup page. Keep the terminal running. The animated pet needs a desktop environment and may download Electron on first launch. Standalone mode does not require DSH.
+
+Windows x64 uses native installation; enabling memory automatically prepares Python and seekdb. Local seekdb on Windows ARM64 is not supported. Real-service validation has completed on Linux; the full Windows x64 and macOS installation flows still require real-host validation. Check the actual [Release assets](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.2.0) for desktop downloads.
+
+### Configure models and enable memory
+
+1. **Configure chat first.** The DSH pet uses the host chat model: enter the MiniMax endpoint, model and subscription key below in DSH model settings. Standalone users enter them in the app's settings.
+2. **Open local long-term memory.** In DSH, open **Settings → Pet Config → Local long-term memory**, select MiniMax China and Qwen Beijing, and enter each service's key. Chat and memory extraction settings are saved separately.
+3. **Click Check and enable memory.** The app checks model connections, installs PowerContext 1.5.2 and seekdb, and starts the service. Initial installation requires internet access. Memory is optional.
+4. **Verify recall.** Tell the pet a distinctive preference and wait for it to appear in **Remembered facts**. Clear recent chat, then ask about it again. A synced status alone does not mean extraction has completed.
+
+| Setting                      | Value                                                                              |
+| ---------------------------- | ---------------------------------------------------------------------------------- |
+| Chat / extraction provider   | MiniMax China subscription                                                         |
+| Generation endpoint          | `https://api.minimax.cn/v1`                                                        |
+| Generation model             | `MiniMax-M3.1-Flash`                                                               |
+| Generation key               | Your `sk-cp-` subscription key; pay-as-you-go keys do not share subscription quota |
+| Embedding provider           | Bailian: Qwen Beijing                                                              |
+| Embedding endpoint           | `https://dashscope.aliyuncs.com/compatible-mode/v1`                                |
+| Embedding model              | `text-embedding-v4`                                                                |
+| Embedding key                | Your Bailian API key                                                               |
+| Dimensions / send dimensions | `1024` / enabled                                                                   |
+
+New setups use one local seekdb store. Existing SQLite configurations remain in place without automatic conversion. An existing store's embedding model, endpoint and dimensions cannot be switched in place. Model checks, chat, extraction and recall can incur usage charges.
+
+### Optional AI Vision and Token comparison
+
+AI Vision is a separate observability platform. Enter an existing platform's endpoint and credentials in observability settings, save and check the connection, then pause and resume memory to apply the configuration to the managed service. The plugin does not deploy AI Vision.
+
+Token comparison is an auxiliary experiment for comparing answers and usage across context strategies. Include extraction and embedding overhead; short conversations do not necessarily save tokens.
+
+[Installation](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/en/guides/installation.md) · [Memory guide](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/en/guides/memory.md) · [AI Vision](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/en/guides/observability.md) · [Token comparison](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/en/guides/token-comparison.md)
 
 <a id="implementation"></a>
 
@@ -85,3 +114,19 @@ Chat needs model credentials. Host-specific features require their DSH services.
 Use `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm check:cycles`, `pnpm check:runtime`, `pnpm check:openapi`, `pnpm test`, `pnpm test:ui` and `pnpm build` before delivery.
 
 See the [release instructions](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/en/guides/releases.md) for workflow setup. Artwork terms and credits ship in [ASSET-LICENSE.md](ASSET-LICENSE.md).
+
+## Local API access settings
+
+**DSH plugin:** open **Settings → Pet Config → API access token**, enter a 43-character token using letters, digits, underscores or hyphens, and save. External clients send it in `X-DSH-Pet-Token`. The new token takes effect immediately and invalidates the old token. It is stored privately in `dsh-pet/interface-access-token.json`, survives restarts, and is not echoed by settings. Only an authenticated DSH session can change it; DSH login credentials and internal IPC are unaffected.
+
+Select a pet on the same page and save an **API Pet ID** alias. Default and custom characters are supported. Leave it empty to use the internal ID; chat history and memory remain in place.
+
+**Standalone:** open **Settings → API access token**, enter a random token with the same format, and save. The server, desktop requests and current settings page switch immediately. Update external clients and reopen other settings pages from the pet menu. The token is stored privately in `dsh-pet/access-token.json`; without a saved value, each launch generates a new token. Saved values are not echoed.
+
+**Settings → Configuration → API Pet ID** sets the external `?pet=` alias, such as `demo-fish`. Changing it preserves history, assets and the PowerContext scope. Desktop requests may continue using the internal ID, and response status keys retain that ID. Aliases must not conflict with another instance's ID or alias. Clearing an alias restores the internal ID without moving or deleting data.
+
+| Source                               | Responsibility                                                    |
+| ------------------------------------ | ----------------------------------------------------------------- |
+| `src/standalone/access-token.ts`     | Authenticated token rotation and current settings cookie refresh. |
+| `src/standalone/request-security.ts` | Private token loading, validation and immediate switching.        |
+| `src/host/config/api-id.ts`          | External Pet ID resolution and cross-instance conflict checks.    |

@@ -91,11 +91,11 @@ export const runRobotWorker: RobotRunner = async (config, call, signal) => {
     }
     if (call.operation === 'speak') await invoke('textToSpeech', { text: call.text ?? '' }, true);
     else if (call.tool === 'startTeachProgram') {
-      const programs = programsSchema.parse(await list('getTeachProgramList'));
+      const programs = programsSchema.parse(call.catalog?.programs ?? (await list('getTeachProgramList')));
       if (!programs.some((item) => item.id === call.target)) throw new Error('invalid_target');
       await invoke(call.tool, { teachProgramId: call.target! }, true);
     } else if (call.tool === 'RobotAgvMove') {
-      const areas = areasSchema.parse(await list('getAreaInfo'));
+      const areas = areasSchema.parse(call.catalog?.areas ?? (await list('getAreaInfo')));
       if (!areas.some((item) => item.parameter === call.target)) throw new Error('invalid_target');
       await invoke(call.tool, { station: call.target! }, true);
     } else throw new Error('unsupported_tool');

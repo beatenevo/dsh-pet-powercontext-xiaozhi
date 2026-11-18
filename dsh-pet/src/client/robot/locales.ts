@@ -55,7 +55,7 @@ export const robotZh = {
   robotDirectActionPending: '动作等待直接执行',
   robotSavedDirect: '配置已保存。现在可与桌宠对话，让机器人执行已有示教程序。',
   robotChatOptionsHint:
-    '一个播报开关覆盖当前桌宠的聊天回答、碎碎念、梦话和机器人状态提示，不重播历史。默认逐次确认动作；开启直接执行模式后跳过确认。',
+    '一个播报开关覆盖当前桌宠的聊天回答、碎碎念和梦话，不重播历史。默认逐次确认动作；开启直接执行模式后跳过确认。',
   robotChatSpeechLabel: '桌宠播报',
   robotSpeechQueued: '排队等待播报',
   robotSpeechQueueFull: '播报队列已满，本条已跳过',
@@ -137,7 +137,7 @@ export const robotEn: Record<RobotKey, string> = {
   robotDirectActionPending: 'Action waiting for direct execution',
   robotSavedDirect: 'Configuration saved. Ask the pet to run an existing robot teach program.',
   robotChatOptionsHint:
-    'One speech switch covers this pet’s replies, whispers, sleep talk and robot status messages. History is not replayed. Actions require confirmation unless direct execution mode is enabled.',
+    'One speech switch covers this pet’s replies, whispers and sleep talk. Robot receipts remain in the panel. History is not replayed. Actions require confirmation unless direct execution mode is enabled.',
   robotChatSpeechLabel: 'Pet speech',
   robotSpeechQueued: 'Waiting in the speech queue',
   robotSpeechQueueFull: 'Speech queue full; message skipped',

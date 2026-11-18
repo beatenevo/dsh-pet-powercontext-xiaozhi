@@ -322,9 +322,9 @@ test('chat speech runs once, preserves the reply bubble and proposes movement un
   await setImmediate();
   assert.deepEqual(
     h.calls.map((call) => call.operation),
-    ['status', 'speak', 'status', 'execute'],
+    ['status', 'speak', 'execute'],
   );
-  assert.deepEqual(h.calls[3].target, '100');
+  assert.deepEqual(h.calls.find((call) => call.operation === 'execute')?.target, '100');
   assert.ok(h.feedback.some((event) => event.animation === 'Wave'));
   assert.equal(h.service.snapshot().pendingAction, undefined);
   await assert.rejects(h.service.submit(request), /robot_proposal_expired/);
@@ -556,18 +556,14 @@ test('speech queues are bounded and old messages expire instead of playing at a 
   assert.equal(h.calls.filter((call) => call.operation === 'speak').length, 0);
 });
 
-test('robot status and action feedback are spoken, but TTS acknowledgement descriptions cannot echo forever', async (t) => {
+test('robot status and action receipts do not create speech without explicit forwarding', async (t) => {
   let telemetry = { ...healthy.telemetry! };
   let acknowledgements = 0;
-  const h = await harness(
-    t,
-    async (_config, call) => {
-      if (call.operation === 'status') return { ...healthy, telemetry: { ...telemetry } };
-      if (call.operation === 'speak') telemetry.description = 'TTS acknowledgement ' + ++acknowledgements;
-      return success;
-    },
-    true,
-  );
+  const h = await harness(t, async (_config, call) => {
+    if (call.operation === 'status') return { ...healthy, telemetry: { ...telemetry } };
+    if (call.operation === 'speak') telemetry.description = 'TTS acknowledgement ' + ++acknowledgements;
+    return success;
+  });
   await enableChat(h);
   await h.service.submit({ action: 'check' });
   telemetry = { ...telemetry, actionCode: 520001, description: 'Robot working' };
@@ -579,7 +575,7 @@ test('robot status and action feedback are spoken, but TTS acknowledgement descr
   }
   assert.deepEqual(
     h.calls.filter((call) => call.operation === 'speak').map((call) => call.text),
-    ['Robot: Robot working'],
+    [],
   );
   assert.equal(h.feedback.length, 1);
   telemetry = { ...telemetry, actionCode: 520000, description: 'Idle' };
@@ -590,8 +586,7 @@ test('robot status and action feedback are spoken, but TTS acknowledgement descr
   await setImmediate();
   assert.equal(h.calls.filter((call) => call.operation === 'execute').length, 1);
   const spoken = h.calls.filter((call) => call.operation === 'speak').map((call) => call.text!);
-  assert.ok(spoken.includes('Robot: Greet requested.'));
-  assert.ok(spoken.some((text) => text.startsWith('Robot Greet: reported-success')));
+  assert.deepEqual(spoken, []);
   const count = spoken.length;
   await h.service.submit({ action: 'check' });
   await setImmediate();
@@ -734,7 +729,7 @@ test('direct mode executes after speech finishes without overlapping physical ca
   await setImmediate();
   assert.deepEqual(
     h.calls.map((call) => call.operation),
-    ['status', 'speak', 'status', 'execute'],
+    ['status', 'speak', 'execute'],
   );
 });
 
@@ -862,7 +857,10 @@ for (const scenario of ['execute', 'removed', 'unsupported', 'manual', 'cancelle
     } else {
       assert.equal(context.actions.length, 1);
       assert.equal(context.actions[0].name, '挥手');
-      if (scenario === 'removed') programs = [];
+      if (scenario === 'removed') {
+        programs = [];
+        h.advance(15_001);
+      }
       if (scenario === 'cancelled') await h.service.submit({ action: 'disarm' });
       h.service.completeChat(context, { text: 'Attempting wave', actionKey: context.actions[0].key });
       h.service.completeChat(context, { text: 'Duplicate', actionKey: context.actions[0].key });
@@ -877,3 +875,20 @@ for (const scenario of ['execute', 'removed', 'unsupported', 'manual', 'cancelle
     }
   });
 }
+
+test('one fresh discovery covers chat, speech and direct execution', async (t) => {
+  const catalog = { tools: ['startTeachProgram'], programs: [{ id: '100', name: 'Greet' }], areas: [] };
+  const h = await harness(t, async (_config, call) =>
+    call.operation === 'status' ? { ...healthy, catalog } : success,
+  );
+  await enableDirect(h, true);
+  const context = (await h.service.prepareChat('main'))!;
+  h.state.writePet('main', 'say', { text: 'Waving' });
+  h.service.completeChat(context, { text: 'Waving', actionKey: 'greet' });
+  await setImmediate();
+  assert.deepEqual(
+    h.calls.map((call) => call.operation),
+    ['status', 'speak', 'execute'],
+  );
+  assert.deepEqual(h.calls[2].catalog, catalog);
+});

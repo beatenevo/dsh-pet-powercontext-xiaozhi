@@ -54,23 +54,18 @@ async function harness(t: TestContext, display: string) {
     const result = await service.submit({ action: 'stop' });
     assert.equal(result.stopResult?.ok, false);
     await setImmediate();
-    assert.equal(responses.length, 1);
+    assert.equal(responses.length, 0);
     return result.stopResult!;
   };
   return { state, lookup, petId, responses, stop, service, configPaths };
 }
 
 for (const display of ['web', 'desktop', 'both']) {
-  test(`robot feedback appears on a pet displayed on ${display}`, async (t) => {
+  test(`robot receipts remain silent for a pet displayed on ${display}`, async (t) => {
     const h = await harness(t, display);
     const result = await h.stop();
-    assert.equal(h.responses[0].kind, 'json');
-    assert.deepEqual((h.responses[0] as { obj: unknown }).obj, { ok: true });
-    assert.deepEqual(h.state.read().pets[h.petId]?.say?.data, {
-      text: result.message,
-      duration: 10_000,
-      anim: false,
-    });
+    assert.ok(result.message);
+    assert.equal(h.state.read().pets[h.petId]?.say, undefined);
   });
 }
 
@@ -79,8 +74,7 @@ test('robot feedback respects exclusive pet ownership', async (t) => {
   assert.equal(h.lookup.lock.acquire({ petId: h.petId }).ok, true);
   const before = h.state.read().pets[h.petId].say;
   await h.stop();
-  assert.equal(h.responses[0].kind, 'json');
-  assert.equal((h.responses[0] as { obj: { reason: string } }).obj.reason, 'lock-required');
+  assert.deepEqual(h.responses, []);
   assert.deepEqual(h.state.read().pets[h.petId].say, before);
 });
 

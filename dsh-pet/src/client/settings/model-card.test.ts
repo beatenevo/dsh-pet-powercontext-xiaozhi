@@ -100,7 +100,7 @@ describe('ModelCard——Dialogue switch', () => {
   });
 });
 
-test('offers optional DSH sharing and hides private connection inputs in that mode', () => {
+test('hides legacy DSH sharing without silently changing saved settings', () => {
   let changed: unknown;
   const tree = ModelCard(
     props(allOff, {
@@ -114,7 +114,14 @@ test('offers optional DSH sharing and hides private connection inputs in that mo
   const select = nodes.find((node) => node.tag === 'select' && node.props.value === 'dsh-powercontext');
   assert.ok(select);
   assert.ok(nodes.some((node) => node.tag === 'option' && node.props.value === 'native'));
-  assert.ok(nodes.some((node) => node.tag === 'option' && node.props.value === 'dsh-powercontext'));
+  const legacy = nodes.find((node) => node.tag === 'option' && node.props.value === 'dsh-powercontext');
+  assert.equal(legacy?.props.hidden, true);
+  assert.equal(legacy?.props.disabled, true);
+  assert.equal(changed, undefined);
+  assert.deepEqual(
+    nodes.filter((node) => node.tag === 'option' && !node.props.hidden).map((node) => node.props.value),
+    ['native', 'powercontext'],
+  );
   assert.equal(
     nodes.some((node) => node.tag === 'input' && node.props.type === 'url'),
     false,

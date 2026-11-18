@@ -92,7 +92,8 @@ function petCard() {
     petBar(),
     avatarRow(pet),
     textField('pet-name', '显示名', pet.name || '', (value) => { pet.name = value; }),
-    textField('pet-id', '标识（id）', pet.id, (value) => { pet.id = value.trim(); }, { disabled: true, hint: '标识决定素材目录与记忆文件，建好之后不能在这里改。' }),
+    textField('pet-api-id', '接口 Pet ID', pet.apiId || pet.id, (value) => { pet.apiId = value.trim(); }, { hint: '外部请求的 pet 参数使用这个值。修改后仍使用原聊天记录与记忆；内部实例 ID 保持不变。留空恢复使用内部 ID。' }),
+    textField('pet-id', '内部实例 ID', pet.id, (value) => { pet.id = value.trim(); }, { disabled: true, hint: '内部身份保持稳定，用于关联素材、聊天记录与长期记忆。' }),
     make('div', { class: 'grid2' }, [
       numberField('pet-size', '画框大小（px）', pet.size, (value) => { pet.size = value; }, { min: 1, step: 1 }),
       textField('pet-size-percent', '占屏宽度（%）', sizePercent, (value) => {

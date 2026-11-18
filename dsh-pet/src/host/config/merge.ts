@@ -172,6 +172,7 @@ function mergePet(
 
   return {
     id,
+    ...(typeof p.apiId === 'string' && isValidPetId(p.apiId.trim()) ? { apiId: p.apiId.trim() } : {}),
     name,
     size: petNumber(p.size, base.size, 1, label, 'size', id),
     ...petSizePercentField(p.sizePercent, base.sizePercent, label, id),

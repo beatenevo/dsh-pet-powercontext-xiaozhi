@@ -3752,7 +3752,8 @@ components:
       in: query
       required: true
       description: |
-        Target pet id (`pets[].id` in configuration) - **required**.
+        Target pet ID (`pets[].apiId` when configured, otherwise `pets[].id`) - **required**.
+        API aliases resolve to the stable internal instance before access checks and execution; history, state keys and memory ownership retain the internal ID.
 
         Not given / empty string / completely blank → `ok: false` + `reason: pet-required`;
         Given but this pet is not included in the configuration → `ok: false` + `reason: unknown-pet`.
@@ -5714,6 +5715,10 @@ components:
           description:
             Pet id. **The file name cannot contain invalid characters** (Windows reserved character + control
             character)
+        apiId:
+          type: string
+          maxLength: 64
+          description: Optional external pet query alias. Must not collide with any other alias or internal ID. Empty clears it; omission preserves the saved value. Changing it retains the internal instance and all memory.
         name:
           type: string
           description: Display name; when left blank, the host will process it as `id` and issue an alarm.

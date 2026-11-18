@@ -110,12 +110,22 @@ async function boot(): Promise<void> {
   let port = 0;
 
   // The same security model as CLI: the token is only passed to the browser via "# token = of the configuration page address" and is not entered in the log.
-  const security = createRequestSecurity();
+  let updateHelperToken: ((token: string) => void) | undefined;
+  const security = createRequestSecurity({
+    file: join(dshHomeDir(), 'dsh-pet', 'access-token.json'),
+    onRotate(token) {
+      process.env.DSH_PET_SITE_URL = `http://127.0.0.1:${port}/standalone-ai/#token=${token}`;
+      updateHelperToken?.(token);
+    },
+  });
   const ai = createStandaloneAi(dshHomeDir(), logger);
   const setup = createSetup(
     dshHomeDir(),
     ai,
-    setupMemoryBinding(() => `http://127.0.0.1:${port}`, security.token),
+    setupMemoryBinding(
+      () => `http://127.0.0.1:${port}`,
+      () => security.token,
+    ),
   );
   const context = createStandaloneContext({
     port: () => port,
@@ -164,12 +174,13 @@ async function boot(): Promise<void> {
       session.defaultSession,
       origin,
       join(packageRoot, 'runtime/electron-helper/index.html'),
-      security.token,
+      () => security.token,
     );
   });
   process.env.DSH_PET_APP_TOKEN = security.token;
   try {
-    createRequire(import.meta.url)(helperMain);
+    const helper = createRequire(import.meta.url)(helperMain) as { updateAccessToken(token: string): void };
+    updateHelperToken = helper.updateAccessToken;
   } finally {
     delete process.env.DSH_PET_APP_TOKEN;
   }

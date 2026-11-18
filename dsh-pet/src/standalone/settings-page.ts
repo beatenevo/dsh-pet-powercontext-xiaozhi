@@ -16,6 +16,7 @@ import { ROUTE_SEGMENT } from '../shared/constants.ts';
 import { DEFAULT_FONT, FONT_PRESETS } from '../shared/fonts.ts';
 import { DEFAULT_PHYSICS } from '../shared/physics.ts';
 import { DEFAULT_WEIGHTS } from '../shared/weights.ts';
+import { accessTokenScript } from './settings-page/script/access-token.ts';
 import { aiScript } from './settings-page/script/ai.ts';
 import { avatarScript } from './settings-page/script/avatar.ts';
 import { bootScript } from './settings-page/script/boot.ts';
@@ -66,6 +67,7 @@ export const settingsScript = [
   setupModelsScript(),
   setupScript(),
   observabilityScript(),
+  accessTokenScript(),
   bootScript(),
   'boot();',
   '})();',

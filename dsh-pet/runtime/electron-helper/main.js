@@ -74,7 +74,7 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 // manual start-desktop stream. In BRIDGE mode, the host decides whether to exit (see quitApp of startTray).
 const APP_MODE = process.env.DSH_PET_APP_MODE === '1';
 // It is only used by the application's own requests in the same process and will never appear in the renderer address or log.
-const APP_TOKEN = APP_MODE ? process.env.DSH_PET_APP_TOKEN : undefined;
+let APP_TOKEN = APP_MODE ? process.env.DSH_PET_APP_TOKEN : undefined;
 app.setName('dsh-pet-electron-helper');
 // Windows taskbar grouping: When AppUserModelID is not set, the window is assigned to the name electron.exe, and the
 // taskbar button appears unexpectedly and displays the Electron default icon. Must be called before ready; use
@@ -232,7 +232,7 @@ const ORIGIN = new URL(process.env.DSH_PET_CONFIG_URL || 'http://127.0.0.1:3080/
 const TRAY_PLATFORM = trayPlatform(process.platform);
 
 /** Channel with host: bridge uses pipeline + local callback, otherwise HTTP is directly connected. */
-const bridge = createBridge({ isBridge: BRIDGE, prefix: BRIDGE_PREFIX, origin: ORIGIN, token: APP_TOKEN });
+const bridge = createBridge({ isBridge: BRIDGE, prefix: BRIDGE_PREFIX, origin: ORIGIN, token: () => APP_TOKEN });
 
 /** Window capabilities: window creation, whole window click-through mirroring, pet status broadcast, two real-time pumps. */
 const petWindows = createWindows({
@@ -366,3 +366,8 @@ app.on('window-all-closed', () => {
   if (process.env.DSH_PET_IN_PROCESS === '1') return;
   app.quit();
 });
+
+/** Refresh in-process host credentials without restarting desktop windows. */
+module.exports.updateAccessToken = (token) => {
+  APP_TOKEN = token;
+};

@@ -27,6 +27,7 @@ export const settingsPage = `<!doctype html>
 <button type="button" class="navCell" role="tab" id="tab-chat" data-tab="chat" data-title="对话" aria-controls="panel-chat" aria-selected="true"><svg class="navGlyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.4h10a1.1 1.1 0 0 1 1.1 1.1v5.6A1.1 1.1 0 0 1 13 11.2H8.2L5 13.6v-2.4H3a1.1 1.1 0 0 1-1.1-1.1V4.5A1.1 1.1 0 0 1 3 3.4Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg><span class="navLabel">对话</span></button>
 <button type="button" class="navCell" role="tab" id="tab-config" data-tab="config" data-title="配置" aria-controls="panel-config" aria-selected="false"><svg class="navGlyph" viewBox="0 0 16 16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M2.6 4.6h10.8M2.6 11.4h10.8"/><circle cx="6.2" cy="4.6" r="1.6" fill="currentColor" stroke="none"/><circle cx="9.8" cy="11.4" r="1.6" fill="currentColor" stroke="none"/></g></svg><span class="navLabel">配置</span></button>
 <button type="button" class="navCell" role="tab" id="tab-observation" data-tab="observation" data-title="AI Vision" aria-controls="panel-observation" aria-selected="false"><span class="navLabel">AI Vision</span></button>
+<button type="button" class="navCell" role="tab" id="tab-access" data-tab="access" data-title="接口访问 Token" aria-controls="panel-access" aria-selected="false"><span class="navLabel">接口访问 Token</span></button>
 </div></nav>
 <div class="sideFoot">独立模式</div>
 </aside>
@@ -34,6 +35,13 @@ export const settingsPage = `<!doctype html>
 <div class="topbar"><h1 class="pageTitle" id="page-title">对话</h1><span class="dirty" id="dirty" hidden>有未保存的改动</span></div>
 <div class="options">
 ${setupPanel}
+<section class="panel" id="panel-access" role="tabpanel" aria-labelledby="tab-access" hidden><div class="scroll"><div class="card">
+<div class="cardHead"><h2 class="cardTitle">接口访问 Token</h2></div>
+<p class="cardHint">保存后立即生效，无需重启；旧 Token 随即失效，外部调用方需同步更新。固定值仅保存在本机，重启后继续使用。</p>
+<form id="access-token-form"><div class="field"><label for="access-token">新的访问 Token</label><input id="access-token" type="password" autocomplete="new-password" spellcheck="false" minlength="43" maxlength="43" pattern="[A-Za-z0-9_-]{43}" required><p class="fieldHint">填写 43 位字母、数字、下划线或短横线。留空不会更改，也不会回显当前凭证。</p></div>
+<button class="btn primary" type="submit">保存并立即生效</button><p class="status" id="access-token-status" role="status" aria-live="polite"></p></form>
+<p class="cardHint">外部请求使用 X-DSH-Pet-Token 请求头；pet 参数用于指定目标桌宠实例，与访问 Token 不同。</p>
+</div></div></section>
 <section class="panel" id="panel-observation" role="tabpanel" aria-labelledby="tab-observation" hidden><div class="scroll"><div class="card" id="observation-panel"><div class="cardHead"><h2 class="cardTitle">AI Vision 可观测性</h2></div></div></div></section>
 <section class="panel" id="panel-config" role="tabpanel" aria-labelledby="tab-config" hidden>
 <div class="scroll">

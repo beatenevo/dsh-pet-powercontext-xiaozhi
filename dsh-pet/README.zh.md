@@ -81,3 +81,15 @@ npx --yes dsh-pet-powercontext@beta --setup
 交付前执行 `pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm check:cycles`、`pnpm check:runtime`、`pnpm check:openapi`、`pnpm test`、`pnpm test:ui`、`pnpm build`。
 
 发布设置与操作见[发布说明](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/zh/guides/releases.md)。素材许可与署名随包附在 [ASSET-LICENSE.md](ASSET-LICENSE.md)。
+
+## 本机接口访问设置
+
+独立桌面应用中打开「设置 → 接口访问 Token」，填入 43 位字母、数字、下划线或短横线组成的随机凭证，点击「保存并立即生效」。保存成功后服务端、桌面请求和当前设置页同步切换，旧凭证失效，无需重启。外部程序须更新 `X-DSH-Pet-Token` 请求头；其它已打开的设置页请从桌宠菜单重新打开。固定值保存在本机私有 `dsh-pet/access-token.json` 中，重启后继续使用；尚未设置时仍按启动随机生成。不会在页面回显已保存的值。
+
+「设置 → 配置 → 接口 Pet ID」用于指定外部调用的 `?pet=` 参数，例如 `demo-fish`。它是稳定内部实例的对外别名：修改后聊天记录、素材和 PowerContext 记忆空间继续沿用，内部 ID 仍可供桌面端使用，返回的状态键也保持内部 ID。留空恢复内部 ID；别名不得与任何其它实例的 ID 或别名冲突。此操作不搬移、不删除历史数据。
+
+| 源码                                 | 职责                                          |
+| ------------------------------------ | --------------------------------------------- |
+| `src/standalone/access-token.ts`     | 认证后保存、轮换凭证并刷新当前设置页 Cookie。 |
+| `src/standalone/request-security.ts` | 私有凭证加载、校验与即时切换。                |
+| `src/host/config/api-id.ts`          | 外部 Pet ID 解析及跨条目冲突检查。            |

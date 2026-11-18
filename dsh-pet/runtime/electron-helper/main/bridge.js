@@ -140,11 +140,12 @@ function createBridge({ isBridge, prefix, origin, token }) {
   /** Communication with host handlePetRoute: bridge mode uses pipeline, manual start-desktop flow returns to HTTP direct connection */
   async function hostRequest(method, url, body) {
     if (isBridge) return bridgeRequest(method, url, body);
+    const currentToken = typeof token === 'function' ? token() : token;
     const resp = await fetch(origin + url, {
       method,
       headers: {
         ...(body ? { 'content-type': 'application/json' } : {}),
-        ...(token ? { 'X-DSH-Pet-Token': token } : {}),
+        ...(currentToken ? { 'X-DSH-Pet-Token': currentToken } : {}),
       },
       body,
     });

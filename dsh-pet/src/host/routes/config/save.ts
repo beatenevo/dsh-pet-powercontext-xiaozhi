@@ -15,6 +15,7 @@ import {
   userConfigUnparsable,
 } from '../../config.ts';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { petAddressConflicts } from '../../config/api-id.ts';
 import { resetUapiCache } from '../../uapi.ts';
 import { type RouteResult } from '../../http.ts';
 import type { PetRouteDeps, RouteInput } from '../types.ts';
@@ -65,6 +66,8 @@ async function saveUserLayer(deps: PetRouteDeps, input: RouteInput): Promise<Rou
         userFile: userConfigPath,
       });
     }
+    const conflicts = petAddressConflicts(readAllConfig(configPaths), 'main', clean.pets as Record<string, unknown>[]);
+    if (conflicts.length) return failResult('bad-request', '接口 Pet ID 与其它实例冲突：' + conflicts.join('、'));
     await mkdir(userRoot, { recursive: true });
     await writeFile(userConfigPath, JSON.stringify(clean, null, 2), 'utf8');
     // Invalidate cached weather so the selected city takes effect on the next query.
@@ -75,7 +78,9 @@ async function saveUserLayer(deps: PetRouteDeps, input: RouteInput): Promise<Rou
     // the client is filled.
     return okResult(readAllConfig(configPaths));
   } catch (e) {
-    ctx.logger?.warn?.(`[dsh-pet] config save failed: ${e instanceof Error ? e.message : String(e)}`);
+    ctx.logger?.warn?.(
+      `[dsh-pet] config save failed: ${userConfigPath}: ${e instanceof Error ? e.message : String(e)}`,
+    );
     return failResult('generate-error', 'failed to save config');
   }
 }

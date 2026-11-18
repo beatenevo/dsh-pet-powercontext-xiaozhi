@@ -1,5 +1,6 @@
 'use strict';
 const { BrowserWindow, desktopCapturer, screen } = require('electron');
+const { readFileSync } = require('node:fs');
 const { decideWindowIgnore } = require('../pointer-target.js');
 /**
  * ipc from renderer to main process: window following, flight state, collision forwarding, click-through flip, input
@@ -152,7 +153,19 @@ function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
     // token-equivalent login state is only enabled when it is the same as the target origin and will never be taken to
     // other sites; when the variable cannot be obtained, the behavior is the same as before.
     let target = url;
-    const authed = process.env.DSH_PET_SITE_URL || '';
+    let authed = process.env.DSH_PET_SITE_URL || '';
+    // A standalone child cannot observe its parent's updated environment after rotation.
+    const runtimeFile = process.env.DSH_PET_RUNTIME_FILE;
+    if (openTarget === 'standalone' && runtimeFile) {
+      try {
+        const runtime = JSON.parse(readFileSync(runtimeFile, 'utf8'));
+        if (runtime.name === 'dsh-pet-standalone' && new URL(runtime.settingsUrl).origin === new URL(url).origin) {
+          authed = runtime.settingsUrl;
+        }
+      } catch {
+        /* Retain the startup URL if the runtime manifest is unavailable. */
+      }
+    }
     if (/^https?:[/][/]/.test(authed)) {
       try {
         if (new URL(authed).origin === new URL(url).origin) target = authed;

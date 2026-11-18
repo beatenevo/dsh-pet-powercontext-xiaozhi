@@ -136,6 +136,9 @@ export function createDesktopSpawn(deps: DesktopSpawnInput) {
           DSH_PET_CONFIG_URL: configUrl,
           // Authenticated site URL (including this process startup token): only for the first item of "Open" of helper, it is not allowed to appear in any logs
           DSH_PET_SITE_URL: siteUrl,
+          ...(resolveOpenTarget(siteUrl, isDesktopHost()) === 'standalone'
+            ? { DSH_PET_RUNTIME_FILE: join(dshHomeDir(), 'dsh-pet', 'standalone-runtime.json') }
+            : {}),
           // The host form determines the direction and copy of the first item in the menu (the "open" item with the
           // same name, three forms and three semantics):
           // desktop = DSH desktop application → evoke the application main window ( helper go to dsh :// open )

@@ -100,13 +100,16 @@ export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
     const patch = (next: Partial<PanelData>): void => setData((prev) => ({ ...prev, ...next }));
     const fail = (error: unknown): void => patch({ error: error instanceof Error ? error.message : String(error) });
 
+    const historyRevision = useRef(0);
+
     /** Reread the history of a certain pet; the failure only falls on error, and there is no silent clear message. */
     const reload = async (petId: string): Promise<void> => {
       if (petId === '') return;
+      const revision = ++historyRevision.current;
       try {
         const sessionId = rt.readSessionId?.();
         const snapshot = await fetchHistory(petId, sessionId);
-        if (rt.readSessionId?.() !== sessionId) return;
+        if (revision !== historyRevision.current || rt.readSessionId?.() !== sessionId) return;
         setData((prev) => (prev.petId === petId ? { ...prev, ...snapshot } : prev));
       } catch (error) {
         fail(error);

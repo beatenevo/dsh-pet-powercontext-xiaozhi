@@ -10,13 +10,15 @@ export interface RobotAction {
   petAnimation: string;
 }
 
-/** Operator-owned settings; enabling monitoring never authorizes motion. */
+/** Operator-owned settings; direct execution requires an explicit opt-in. */
 export interface RobotConfig {
   enabled: boolean;
   /** Forward all new petId utterances with one opt-in: replies, whispers, sleep talk and robot feedback. */
   chatSpeech: boolean;
-  /** Model-selected actions remain proposals until confirmed on site. */
+  /** Allow chat to select configured physical actions. */
   chatActions: boolean;
+  /** Execute chat-selected actions without per-action clicks; defaults to false. */
+  directExecution: boolean;
   address: string;
   /** MCP 配置版本；旧 SDK 配置迁移时禁用。 */
   version: 2;
@@ -61,7 +63,7 @@ export interface RobotCommand {
   message: string;
 }
 
-/** One reply's physical action proposal; never persisted or executed without confirmation. */
+/** One reply's transient action, awaiting confirmation or opted-in direct dispatch. */
 export interface RobotPendingAction {
   id: string;
   petId: string;

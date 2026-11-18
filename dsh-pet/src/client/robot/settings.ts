@@ -32,7 +32,15 @@ export function makeRobotSettings(rt: RobotRuntime) {
                 ...draft,
                 actions: rows,
               };
-              void props.save(config).then((ok) => setMessage(ok ? t('robotSaved') : t('robotRequestError')));
+              void props
+                .save(config)
+                .then((ok) =>
+                  setMessage(
+                    ok
+                      ? t(config.directExecution && config.chatActions ? 'robotSavedDirect' : 'robotSaved')
+                      : t('robotRequestError'),
+                  ),
+                );
             } catch {
               setMessage(t('robotInvalidIds'));
             }
@@ -57,7 +65,7 @@ export function makeRobotSettings(rt: RobotRuntime) {
                   className: 'pet-robot-chat-options',
                   children: [
                     h('strong', { children: t('robotChatTitle') }),
-                    ...(['chatSpeech', 'chatActions'] as const).map((key) =>
+                    ...(['chatSpeech', 'chatActions', 'directExecution'] as const).map((key) =>
                       h('label', {
                         key,
                         children: [
@@ -65,13 +73,25 @@ export function makeRobotSettings(rt: RobotRuntime) {
                             type: 'checkbox',
                             checked: draft[key] === true,
                             onChange: (event: { target: { checked: boolean } }) =>
-                              setDraft({ ...draft, [key]: event.target.checked }),
+                              setDraft({
+                                ...draft,
+                                [key]: event.target.checked,
+                                ...(key === 'directExecution' && event.target.checked ? { chatActions: true } : {}),
+                                ...(key === 'chatActions' && !event.target.checked ? { directExecution: false } : {}),
+                              }),
                           }),
-                          t(key === 'chatSpeech' ? 'robotChatSpeechOption' : 'robotChatActionsOption'),
+                          t(
+                            key === 'chatSpeech'
+                              ? 'robotChatSpeechOption'
+                              : key === 'chatActions'
+                                ? 'robotChatActionsOption'
+                                : 'robotDirectExecutionOption',
+                          ),
                         ],
                       }),
                     ),
                     h('p', { className: 'pet-robot-note', children: t('robotChatOptionsHint') }),
+                    h('p', { className: 'pet-robot-note', children: t('robotDirectExecutionHint') }),
                   ],
                 }),
                 field(

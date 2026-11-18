@@ -53,10 +53,11 @@ function normLeaf(value: unknown): StateLeaf | null {
 export async function fetchState(
   baseUrl = ROUTE_PATH + '/state',
   wait?: { since: number; timeoutMs: number },
+  signal?: AbortSignal,
 ): Promise<PollState | null> {
   try {
     const url = wait ? `${baseUrl}?since=${wait.since}&timeout=${wait.timeoutMs}` : baseUrl;
-    const res = await fetch(url, { cache: 'no-store' });
+    const res = await fetch(url, { cache: 'no-store', signal });
     if (!res.ok) return null;
     const raw = (await res.json().catch(() => null)) as {
       ok?: unknown;

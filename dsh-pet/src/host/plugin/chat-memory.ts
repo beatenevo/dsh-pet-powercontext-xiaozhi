@@ -695,6 +695,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
             pool,
             actions,
             robotActions: robotChat?.actions,
+            robotDirectExecution: robotChat?.directExecution,
             preferred: configuredModel(found.conf, 'chatModel'),
             image,
           });

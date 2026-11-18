@@ -22,3 +22,11 @@ test('catalog instructions distinguish proposals from authorized physical moveme
   assert.match(prompt, /on-site confirmation/);
   assert.match(prompt, /current user explicitly asks/);
 });
+
+test('direct mode describes an attempted dispatch without claiming physical completion', () => {
+  const prompt = robotActionInstruction(actions, true);
+  assert.match(prompt, /Direct execution mode is enabled/);
+  assert.match(prompt, /current user explicitly asks/);
+  assert.match(prompt, /do not ask for another confirmation or claim physical completion/);
+  assert.doesNotMatch(prompt, /say it awaits on-site confirmation/);
+});

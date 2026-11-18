@@ -777,7 +777,6 @@ for (const connected of [true, false]) {
     const robot = createRobotService({
       userRoot: ws.userRoot,
       state,
-      monitor: false,
       run: async (_config, call) => {
         calls.push(call);
         return call.operation === 'status'

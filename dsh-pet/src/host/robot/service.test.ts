@@ -42,7 +42,6 @@ async function harness(t: TestContext, transport?: RobotRunner, mirrorFeedback =
     userRoot: root,
     state,
     run,
-    monitor: false,
     now: () => now,
     feedback: async (event: RobotFeedback) => {
       feedback.push(event);
@@ -615,4 +614,187 @@ test('legacy SDK configuration is disabled but can be replaced with MCP configur
     config: { ...defaultRobotConfig(), enabled: true, address: 'http://localhost:8182/mcp' },
   });
   assert.equal(migrated.snapshot().error, '');
+});
+
+test('idle controllers do not initialize MCP periodically; manual speech checks on demand without echoing receipts', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const h = await harness(t, undefined, true);
+  await enableChat(h);
+  t.mock.timers.tick(60_000);
+  await setImmediate();
+  assert.equal(h.calls.length, 0);
+  await h.service.submit({
+    action: 'speak',
+    session: h.service.snapshot().session,
+    id: randomUUID(),
+    petId: 'main',
+    text: 'Only say this',
+    confirmed: true,
+  });
+  await setImmediate();
+  assert.deepEqual(
+    h.calls.map((call) => call.operation),
+    ['status', 'speak'],
+  );
+  assert.equal(h.calls[1].text, 'Only say this');
+  assert.deepEqual(h.feedback, []);
+  assert.equal(h.service.snapshot().commands[0]?.state, 'reported-success');
+  t.mock.timers.tick(60_000);
+  await setImmediate();
+  assert.equal(h.calls.length, 2);
+});
+
+test('manual speech failures remain visible in receipts without feeding speech back into the pet', async (t) => {
+  const h = await harness(
+    t,
+    async (_config, call) =>
+      call.operation === 'status'
+        ? healthy
+        : {
+            ok: false,
+            code: 'execution_unknown',
+            message: 'Result unknown',
+          },
+    true,
+  );
+  await enableChat(h);
+  await h.service.submit({
+    action: 'speak',
+    session: h.service.snapshot().session,
+    id: randomUUID(),
+    petId: 'main',
+    text: 'Uncertain delivery',
+    confirmed: true,
+  });
+  await setImmediate();
+  assert.deepEqual(h.feedback, []);
+  assert.equal(h.service.snapshot().commands[0]?.state, 'unknown');
+  assert.equal(h.calls.filter((call) => call.operation === 'speak').length, 1);
+});
+
+async function enableDirect(h: Awaited<ReturnType<typeof harness>>, speech = false) {
+  await h.service.submit({
+    action: 'configure',
+    config: {
+      ...h.service.snapshot().config,
+      chatActions: true,
+      chatSpeech: speech,
+      directExecution: true,
+    },
+  });
+}
+
+test('direct mode dispatches one allowlisted chat action without a confirmation request', async (t) => {
+  const h = await harness(t);
+  await enableDirect(h);
+  const context = h.service.beginChat('main')!;
+  assert.equal(context.directExecution, true);
+  h.service.completeChat(context, { text: 'Attempting greeting', actionKey: 'greet' });
+  h.service.completeChat(context, { text: 'Duplicate', actionKey: 'greet' });
+  await setImmediate();
+  assert.deepEqual(
+    h.calls.map((call) => call.operation),
+    ['status', 'execute'],
+  );
+  assert.equal(h.calls[1].target, '100');
+  assert.equal(h.service.snapshot().pendingAction, undefined);
+  assert.equal(h.service.snapshot().armed, false);
+  assert.equal(h.service.snapshot().commands[0].state, 'reported-success');
+});
+
+test('direct mode waits for speech and cancellation discards the queued action', async (t) => {
+  const speech = deferred();
+  const h = await harness(t, async (_config, call) =>
+    call.operation === 'status' ? healthy : call.operation === 'speak' ? speech.promise : success,
+  );
+  await enableDirect(h, true);
+  const context = h.service.beginChat('main')!;
+  h.state.writePet('main', 'say', { text: 'Greeting' });
+  h.service.completeChat(context, { text: 'Greeting', actionKey: 'greet' });
+  await setImmediate();
+  assert.equal(h.calls.filter((call) => call.operation === 'execute').length, 0);
+  await h.service.submit({ action: 'disarm' });
+  speech.resolve(success);
+  await setImmediate();
+  assert.equal(h.calls.filter((call) => call.operation === 'execute').length, 0);
+});
+
+test('direct mode executes after speech finishes without overlapping physical calls', async (t) => {
+  const speech = deferred();
+  const h = await harness(t, async (_config, call) =>
+    call.operation === 'status' ? healthy : call.operation === 'speak' ? speech.promise : success,
+  );
+  await enableDirect(h, true);
+  const context = h.service.beginChat('main')!;
+  h.state.writePet('main', 'say', { text: 'Greeting' });
+  h.service.completeChat(context, { text: 'Greeting', actionKey: 'greet' });
+  await setImmediate();
+  assert.equal(h.calls.filter((call) => call.operation === 'execute').length, 0);
+  speech.resolve(success);
+  await setImmediate();
+  assert.deepEqual(
+    h.calls.map((call) => call.operation),
+    ['status', 'speak', 'status', 'execute'],
+  );
+});
+
+test('direct mode rejects unknown actions and does not retry uncertain movement', async (t) => {
+  const h = await harness(t, async (_config, call) =>
+    call.operation === 'status' ? healthy : { ok: false, code: 'timeout', message: 'Unknown' },
+  );
+  await enableDirect(h);
+  const invalid = h.service.beginChat('main')!;
+  h.service.completeChat(invalid, { text: '', actionKey: 'invented' });
+  await setImmediate();
+  assert.equal(h.calls.length, 0);
+  const context = h.service.beginChat('main')!;
+  h.service.completeChat(context, { text: '', actionKey: 'greet' });
+  await setImmediate();
+  h.service.completeChat(context, { text: '', actionKey: 'greet' });
+  await h.service.submit({ action: 'check' });
+  assert.equal(h.calls.filter((call) => call.operation === 'execute').length, 1);
+  assert.equal(h.service.snapshot().commands[0].state, 'unknown');
+});
+
+test('switching off direct mode invalidates old replies and restores confirmation', async (t) => {
+  const h = await harness(t);
+  await enableDirect(h);
+  const old = h.service.beginChat('main')!;
+  await h.service.submit({ action: 'configure', config: { ...h.service.snapshot().config, directExecution: false } });
+  h.service.completeChat(old, { text: '', actionKey: 'greet' });
+  const current = h.service.beginChat('main')!;
+  h.service.completeChat(current, { text: '', actionKey: 'greet' });
+  await setImmediate();
+  assert.equal(h.calls.length, 0);
+  assert.equal(h.service.snapshot().pendingAction?.key, 'greet');
+});
+
+test('cancelling a direct action during its connection check prevents dispatch', async (t) => {
+  const status = deferred();
+  const h = await harness(t, async (_config, call) => (call.operation === 'status' ? status.promise : success));
+  await enableDirect(h);
+  const context = h.service.beginChat('main')!;
+  h.service.completeChat(context, { text: '', actionKey: 'greet' });
+  await setImmediate();
+  await h.service.submit({ action: 'stop' });
+  status.resolve(healthy);
+  await setImmediate();
+  assert.equal(h.calls.filter((call) => call.operation === 'execute').length, 0);
+});
+
+test('direct actions expire behind speech and are never dispatched later', async (t) => {
+  const speech = deferred();
+  const h = await harness(t, async (_config, call) =>
+    call.operation === 'status' ? healthy : call.operation === 'speak' ? speech.promise : success,
+  );
+  await enableDirect(h, true);
+  const context = h.service.beginChat('main')!;
+  h.state.writePet('main', 'say', { text: 'Greeting' });
+  h.service.completeChat(context, { text: 'Greeting', actionKey: 'greet' });
+  await setImmediate();
+  h.advance(120_001);
+  speech.resolve(success);
+  await setImmediate();
+  assert.equal(h.calls.filter((call) => call.operation === 'execute').length, 0);
+  assert.match(h.service.snapshot().error, /robot_proposal_expired/);
 });

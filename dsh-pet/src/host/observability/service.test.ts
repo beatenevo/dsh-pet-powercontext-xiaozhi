@@ -201,7 +201,6 @@ test('robot observation waits for the worker result instead of treating queue ad
     userRoot: root,
     state: new PollStateStore(),
     observability: service,
-    monitor: false,
     run: async (_config, call) => {
       if (call.operation === 'status')
         return {

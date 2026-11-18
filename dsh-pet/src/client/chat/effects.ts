@@ -6,7 +6,9 @@
  * is passed in from ./state, and no state is maintained here.
  * @module dsh-pet/src/client/chat/effects
  */
-import { getStateSnapshot, subscribeStateSnapshot } from '../state-service.ts';
+import { fetchState } from '../../shared/state.ts';
+import { runStatePoll } from '../pet/state-poll.ts';
+import { STATE_FALLBACK_MS, STATE_WAIT_MS } from '../pet/timings.ts';
 import { fetchChatConfig, fetchOrphans } from './api.ts';
 import { INPUT_MAX_HEIGHT } from './metrics.ts';
 import type { ChatPanelRuntime } from './runtime.ts';
@@ -82,18 +84,42 @@ export function createChatEffects(rt: ChatPanelRuntime): (input: ChatEffectsInpu
       // eslint-disable-next-line react-hooks/exhaustive-deps -- Handles are stable references.
     }, [data.draft]);
 
-    // Pet replies also update pets.<id>.say. Refresh history when its counter changes so an open panel sees new
-    // replies without rereading storage on every poll.
+    // Chat windows also run without a mounted pet renderer (and its page-local state subscription).
     useEffect(() => {
       const petId = data.petId;
       if (petId === '') return;
-      let last = getStateSnapshot()?.pets[petId]?.say?.counter ?? 0;
-      return subscribeStateSnapshot((snapshot) => {
-        const counter = snapshot.pets[petId]?.say?.counter ?? 0;
-        if (counter === last) return;
-        last = counter;
-        void reload(petId);
+      const controller = new AbortController();
+      let last: string | undefined;
+      let refreshing = false;
+      let dirty = false;
+      const refresh = async (): Promise<void> => {
+        dirty = true;
+        if (refreshing) return;
+        refreshing = true;
+        try {
+          while (dirty && !controller.signal.aborted) {
+            dirty = false;
+            await reload(petId);
+          }
+        } finally {
+          refreshing = false;
+        }
+      };
+      void runStatePoll({
+        fetch: (wait) => fetchState(undefined, wait, controller.signal),
+        waitMs: STATE_WAIT_MS,
+        fallbackMs: STATE_FALLBACK_MS,
+        isAlive: () => !controller.signal.aborted,
+        onState: (snapshot) => {
+          const pet = snapshot.pets[petId];
+          const revision = JSON.stringify([pet?.say?.counter ?? 0, pet?.anim?.counter ?? 0]);
+          if (revision === last) return;
+          last = revision;
+          // Refresh the first snapshot too: a reply may arrive between history loading and subscription.
+          void refresh();
+        },
       });
+      return () => controller.abort();
       // Resubscribe only when the pet changes; reload is recreated each render.
       // eslint-disable-next-line react-hooks/exhaustive-deps -- Dependencies are explained above.
     }, [data.petId]);

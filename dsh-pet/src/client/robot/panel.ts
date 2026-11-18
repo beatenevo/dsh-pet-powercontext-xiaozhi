@@ -11,6 +11,8 @@ export function makeRobotPanel(rt: RobotRuntime) {
     const { snapshot: status, error, pending, send } = useRobotState(rt);
     const [selected, setSelected] = useState('');
     const [text, setText] = useState('');
+    const direct = status?.config.directExecution && status.config.chatActions;
+    const proposalTitle = direct ? 'robotDirectActionPending' : 'robotProposalTitle';
     const proposal = status?.pendingAction?.petId === props.petId ? status.pendingAction : undefined;
     const speech = status?.chatSpeech?.petId === props.petId ? status.chatSpeech : undefined;
     const speechKey: RobotKey | undefined = speech
@@ -37,10 +39,6 @@ export function makeRobotPanel(rt: RobotRuntime) {
       : undefined;
     const action = status?.config.actions.find((item) => item.key === selected) ?? status?.config.actions[0];
     const blocked = !status || pending || status.busy || status.stopping;
-    const ready =
-      status?.connected &&
-      (!status.telemetry ||
-        (status.telemetry.actionCode === 520000 && status.telemetry.modes.every((mode) => mode === 1)));
     const button = (label: RobotKey, body: unknown, disabled = false, danger = false) =>
       h('button', {
         type: 'button',
@@ -56,7 +54,7 @@ export function makeRobotPanel(rt: RobotRuntime) {
         h('summary', {
           children: [
             h('span', { children: t('robotTitle') }),
-            proposal ? h('span', { className: 'pet-robot-badge', children: t('robotProposalTitle') }) : null,
+            proposal ? h('span', { className: 'pet-robot-badge', children: t(proposalTitle) }) : null,
           ],
         }),
         h('div', {
@@ -70,6 +68,7 @@ export function makeRobotPanel(rt: RobotRuntime) {
                   ? t('robotConnected')
                   : t('robotDisconnected'),
             }),
+            direct ? h('p', { role: 'status', children: t('robotDirectExecutionActive') }) : null,
             h('div', {
               className: 'pet-robot-buttons',
               children: [
@@ -98,19 +97,24 @@ export function makeRobotPanel(rt: RobotRuntime) {
                       ? h('div', {
                           className: 'pet-robot-proposal',
                           children: [
-                            h('p', { children: t('robotProposalTitle') }),
+                            h('p', { children: t(proposalTitle) }),
                             h('strong', { className: 'pet-robot-proposal-name', children: proposal.name }),
-                            h('p', { className: 'pet-robot-note', children: t('robotProposalHint') }),
-                            button(
-                              'robotConfirmProposal',
-                              {
-                                action: 'confirm-chat-action',
-                                session: status?.session,
-                                id: proposal.id,
-                                confirmed: true,
-                              },
-                              blocked || !!status?.checking || proposal.expiresAt <= Date.now(),
-                            ),
+                            h('p', {
+                              className: 'pet-robot-note',
+                              children: t(direct ? 'robotDirectExecutionHint' : 'robotProposalHint'),
+                            }),
+                            direct
+                              ? null
+                              : button(
+                                  'robotConfirmProposal',
+                                  {
+                                    action: 'confirm-chat-action',
+                                    session: status?.session,
+                                    id: proposal.id,
+                                    confirmed: true,
+                                  },
+                                  blocked || !!status?.checking || proposal.expiresAt <= Date.now(),
+                                ),
                             button(
                               'robotDismissProposal',
                               { action: 'dismiss-chat-action', session: status?.session, id: proposal.id },
@@ -143,7 +147,7 @@ export function makeRobotPanel(rt: RobotRuntime) {
                     button(
                       'robotArm',
                       { action: 'arm', session: status?.session, confirmed: true },
-                      blocked || !ready || status.armed,
+                      blocked || !status?.config.enabled || !!status?.checking || !!status?.armed,
                     ),
                     button('robotDisarm', { action: 'disarm' }, !status?.armed),
                   ],
@@ -190,7 +194,7 @@ export function makeRobotPanel(rt: RobotRuntime) {
                 }),
                 h('button', {
                   type: 'button',
-                  disabled: blocked || !status?.connected || !text.trim() || !props.petId,
+                  disabled: blocked || !status?.config.enabled || !!status?.checking || !text.trim() || !props.petId,
                   onClick: () =>
                     void send({
                       action: 'speak',

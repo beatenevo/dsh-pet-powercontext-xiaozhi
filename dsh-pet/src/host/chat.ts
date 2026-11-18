@@ -126,8 +126,10 @@ export interface ChatGenerateInput {
   readonly pool?: readonly MemeEntry[];
   /** List of actions that can be performed (transmitted when the dialogue linkage switch is turned on, from animations.categories); empty / default = neither injected nor parsed. */
   readonly actions?: readonly string[];
-  /** Physical action proposals only; execution requires a separate operator confirmation. */
+  /** Allowlisted physical actions; execution follows the operator-selected confirmation mode. */
   readonly robotActions?: readonly RobotChatAction[];
+  /** Reflect the operator mode in reply wording; the host owns dispatch authorization. */
+  readonly robotDirectExecution?: boolean;
   /** Entry individually specified model (chatModel); Default/leave blank = only use the model of the current session. */
   readonly preferred?: ModelRef;
   /** Pictures attached to this round; default = plain text request, the data path is the same as before adding pictures. */
@@ -172,6 +174,7 @@ export async function generateChat(input: ChatGenerateInput): Promise<ChatGenera
         pool,
         actions,
         robotActions: input.robotActions ?? [],
+        robotDirectExecution: input.robotDirectExecution === true,
         image,
         recalledContext: input.recalledContext,
       });
@@ -203,6 +206,7 @@ interface GenerateOnce {
   readonly pool: MemeEntry[];
   readonly actions: string[];
   readonly robotActions: readonly RobotChatAction[];
+  readonly robotDirectExecution: boolean;
   readonly image?: PetImageRef;
 }
 
@@ -240,7 +244,7 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
   const instruction =
     (wantImage ? imageInstruction(pool) : '') +
     (wantAction ? actionInstruction(actions) : '') +
-    robotActionInstruction(once.robotActions);
+    robotActionInstruction(once.robotActions, once.robotDirectExecution);
   const content: Record<string, unknown>[] = [
     ...(once.recalledContext ? [{ type: 'text', text: recalledContextText(once.recalledContext) }] : []),
     { type: 'text', text: instruction === '' ? userText : userText + instruction },

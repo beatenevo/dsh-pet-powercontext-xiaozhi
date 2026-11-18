@@ -39,7 +39,6 @@ export function createRobotService(options: {
   run?: RobotRunner;
   feedback?: (event: RobotFeedback) => Promise<void>;
   now?: () => number;
-  monitor?: boolean;
 }): RobotService {
   const transport = options.run ?? runRobotWorker;
   const run: RobotRunner = (config, call, signal) => {
@@ -87,6 +86,7 @@ export function createRobotService(options: {
   let previousStatus: string | undefined;
   let chatContext: RobotChatContext | undefined;
   let chatCompleted = false;
+  let directDispatching = false;
   let pendingAction: RobotPendingAction | undefined;
   let chatSpeech: RobotChatSpeech | undefined;
   // Bound transient speech to 100 chunks (at most 50,000 UTF-16 code units), never persisted or replayed.
@@ -227,8 +227,8 @@ export function createRobotService(options: {
     } catch {
       /* The storage fault blocks future commands. */
     }
-    // Automatic speech receipts belong in the panel; they must not replace the pet's answer bubble.
-    if (!disposed && !automaticSpeech)
+    // Speech receipts stay in the panel so they cannot become another spoken utterance.
+    if (!disposed && item.kind !== 'speak')
       notify({ petId: item.petId, text: `Robot ${item.key}: ${item.state}. ${item.message}` });
     void drainSpeech();
   };
@@ -293,7 +293,7 @@ export function createRobotService(options: {
       request.action === 'execute'
         ? { operation: 'execute', requestId: request.id, tool: action!.tool, target: action!.target }
         : { operation: 'speak', text: request.text };
-    if (!automaticSpeech)
+    if (request.action !== 'speak')
       notify({
         petId: request.petId,
         text: `Robot: ${item.key} requested.`,
@@ -376,11 +376,13 @@ export function createRobotService(options: {
         if (epoch !== speechEpoch) return;
         if (receipts.find((receipt) => receipt.id === item.id)?.state !== 'reported-success') {
           speechQueue.length = 0;
+          if (config.directExecution) cancelChat();
           return;
         }
       }
     } finally {
       speechDraining = false;
+      void dispatchDirectAction();
       // A stop can replace the queue while the previous check/worker is unwinding.
       if (speechQueue.length && !active && !stopping && !disposed && !storageError) void drainSpeech();
     }
@@ -455,8 +457,39 @@ export function createRobotService(options: {
       armed = false;
     }
   };
-  const timer = options.monitor === false ? undefined : setInterval(() => void check(), 5000);
-  timer?.unref();
+  const dispatchDirectAction = async (): Promise<void> => {
+    const proposal = pendingAction;
+    if (
+      !proposal ||
+      !config.directExecution ||
+      !config.chatActions ||
+      directDispatching ||
+      speechDraining ||
+      speechQueue.length ||
+      active ||
+      stopping ||
+      disposed ||
+      storageError
+    )
+      return;
+    directDispatching = true;
+    try {
+      // Reuse proposal identity, freshness checks and one-shot dispatch; failed attempts are never retried.
+      if (statusOperation) await statusOperation;
+      if (pendingAction !== proposal || disposed || speechDraining || active) return;
+      await confirmChatAction(proposal.id);
+    } catch (cause) {
+      // Speech can begin during discovery; its completion will resume this not-yet-dispatched proposal.
+      if (pendingAction === proposal && (speechDraining || active)) return;
+      if (pendingAction === proposal) {
+        pendingAction = undefined;
+        error = 'robot_direct_action_failed: ' + (cause instanceof Error ? cause.message : 'unknown');
+      }
+    } finally {
+      directDispatching = false;
+      if (pendingAction && pendingAction !== proposal) void dispatchDirectAction();
+    }
+  };
   return {
     snapshot,
     beginChat(petId) {
@@ -476,6 +509,7 @@ export function createRobotService(options: {
         session,
         petId,
         actions: config.chatActions ? config.actions.map(({ key, name }) => ({ key, name })) : [],
+        directExecution: config.directExecution,
       };
       return structuredClone(chatContext);
     },
@@ -491,6 +525,7 @@ export function createRobotService(options: {
           name: action.name,
           expiresAt: now() + 120_000,
         };
+      void dispatchDirectAction();
     },
     async submit(input) {
       const request = robotRequestSchema.parse(input);
@@ -527,6 +562,8 @@ export function createRobotService(options: {
         error = '';
       } else if (request.action === 'check') await check();
       else if (request.action === 'arm') {
+        if (!snapshot().connected) await check();
+        if (disposed || request.session !== session) throw new Error('robot_session_changed');
         if (
           active ||
           stopping ||
@@ -537,6 +574,8 @@ export function createRobotService(options: {
           throw new Error('robot_not_ready');
         armed = true;
       } else {
+        if (request.action === 'speak' && !snapshot().connected) await check();
+        if (disposed || request.session !== session) throw new Error('robot_session_changed');
         cancelChat();
         command(request);
       }
@@ -548,7 +587,6 @@ export function createRobotService(options: {
       cancelSpeech();
       cancelChat();
       armed = false;
-      clearInterval(timer);
       statusAbort?.abort();
       if (stopping) await stopOperation?.catch(() => {});
       else if (active) await stop();

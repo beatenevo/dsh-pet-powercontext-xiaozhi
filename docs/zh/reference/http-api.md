@@ -193,7 +193,7 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 
 `GET /dsh-pet-7340/robot` 读取缓存状态；JSON `POST` 提交 `configure`、`check`、`arm`、`disarm`、`execute`、`speak`、`stop`、`confirm-chat-action` 或 `dismiss-chat-action`。动作需要当前会话和显式确认，`execute` 还会消耗单次授权。业务失败返回 `ok: false`。独立版读写均需要会话认证。安装与行为见[机器人指南](../guides/robot.md)，完整字段见 OpenAPI 的 `RobotRequest` / `RobotSnapshot`。
 
-机器人播报和对话动作推荐通过 `RobotConfig.chatSpeech` 和 `chatActions` 主动开启，均默认关闭，并绑定 `petId`。`RobotSnapshot.pendingAction` 包含推荐标识和过期时间；确认请求提交该标识、当前会话及 `confirmed: true`，不接受客户端指定 SDK 参数。服务端重新检查控制器状态并只消耗一次推荐。`chatSpeech` 覆盖关联桌宠的所有新文字气泡：回答、碎碎念、梦话和机器人反馈，与电脑 TTS 无关。它独立于文本生成报告排队、播报或跳过状态，不重播历史。长文本按最多 500 个 UTF-16 编码单元拆分，临时队列最多保存 100 段、等待两分钟。停止、修改配置或重启会清空队列；离线或播报失败会清空待播内容且不重试。参见[对话联动](../guides/robot.md#播报回答与对话推荐动作)。
+机器人播报和对话动作推荐通过 `RobotConfig.chatSpeech` 和 `chatActions` 主动开启，均默认关闭，并绑定 `petId`。`RobotConfig.directExecution` 默认关闭；开启且 `chatActions` 为真时，对话动作自动进入同一检查与串行执行链路，不再等待确认请求。失败、超时不重试，待执行动作不在重启后重放。 `RobotSnapshot.pendingAction` 包含推荐标识和过期时间；确认请求提交该标识、当前会话及 `confirmed: true`，不接受客户端指定 SDK 参数。服务端重新检查控制器状态并只消耗一次推荐。`chatSpeech` 覆盖关联桌宠的所有新文字气泡：回答、碎碎念、梦话和机器人反馈，与电脑 TTS 无关。它独立于文本生成报告排队、播报或跳过状态，不重播历史。长文本按最多 500 个 UTF-16 编码单元拆分，临时队列最多保存 100 段、等待两分钟。停止、修改配置或重启会清空队列；离线或播报失败会清空待播内容且不重试。参见[对话联动](../guides/robot.md#播报回答与对话推荐动作)。
 
 ## 环境查询
 

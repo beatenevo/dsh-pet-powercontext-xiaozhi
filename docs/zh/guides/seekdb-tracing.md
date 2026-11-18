@@ -4,6 +4,8 @@
 
 ## 安装与启动
 
+在 DSH 的「设置 → 桌宠配置 → 本机长期记忆」填写模型配置后，点击「检查并启用记忆」即可自动安装。新配置默认使用 seekdb，已有 SQLite 配置保持不变。以下命令用于手工部署独立服务。
+
 手工部署需要 Python 3.12+，以及支持嵌入式 seekdb 的 Linux/macOS 环境。PowerContext 使用固定版本的 Python 发布包，无需安装 Git。在仓库根目录执行；使用 npm 安装时，将路径替换为包内 `runtime/powercontext`：
 
 ```bash

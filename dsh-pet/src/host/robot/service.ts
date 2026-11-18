@@ -229,8 +229,10 @@ export function createRobotService(options: {
     if (automaticSpeech && (chatSpeech?.id === item.id || chatSpeech?.state === 'queued'))
       chatSpeech = { id: item.id, petId: item.petId, state: item.state };
     // The old idle sample must not authorize another motion after a command returns.
-    statusAbort?.abort();
-    connected = false;
+    if (item.kind === 'execute' || !result.ok) {
+      statusAbort?.abort();
+      connected = false;
+    }
     try {
       persist();
     } catch {
@@ -298,13 +300,21 @@ export function createRobotService(options: {
       throw cause;
     }
     const abort = new AbortController();
-    statusAbort?.abort();
-    connected = false;
+    if (request.action === 'execute') {
+      statusAbort?.abort();
+      connected = false;
+    }
     active = { receipt: item, abort };
     stopResult = undefined;
     const call: RobotCall =
       request.action === 'execute'
-        ? { operation: 'execute', requestId: request.id, tool: action!.tool, target: action!.target }
+        ? {
+            operation: 'execute',
+            requestId: request.id,
+            tool: action!.tool,
+            target: action!.target,
+            catalog: catalog && structuredClone(catalog),
+          }
         : { operation: 'speak', text: request.text };
     if (request.action !== 'speak')
       notify({
@@ -365,7 +375,7 @@ export function createRobotService(options: {
           continue;
         }
         chatSpeech = { id: item.id, petId: item.petId, state: 'checking' };
-        await check();
+        if (!snapshot().connected) await check();
         if (epoch !== speechEpoch || disposed || !config.enabled || !config.chatSpeech) return;
         if (active || stopping) return;
         if (item.expiresAt <= now()) continue;
@@ -444,8 +454,8 @@ export function createRobotService(options: {
     if (!proposal || proposal.id !== id || proposal.expiresAt <= now()) throw new Error('robot_proposal_expired');
     if (!config.enabled || !config.chatActions) throw new Error('robot_chat_disabled');
     if (active || stopping || checking) throw new Error('robot_busy');
-    // Confirmation is bound to this proposal and a new status sample, never to a previous generic arm.
-    await check();
+    // Confirmation is bound to this proposal and a fresh status sample, never to a previous generic arm.
+    if (!snapshot().connected) await check();
     if (disposed || pendingAction !== proposal || proposal.expiresAt <= now())
       throw new Error('robot_proposal_expired');
     if (

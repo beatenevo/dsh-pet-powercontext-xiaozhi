@@ -39,6 +39,8 @@ Choose a provider, enter your API key and check the connection in the setup page
 
 Long-term memory is optional. In DSH, use **Settings → Pet Config → Local long-term memory**; standalone users can enable it in the setup page. Chat, extraction and embeddings can use separate providers, including DeepSeek, OpenAI, Qwen, SiliconFlow, Ark, Zhipu, Kimi, Ollama and optional LiteLLM gateways. See [model configuration](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/en/guides/models.md).
 
+New DSH memory setups default to MiniMax China subscription generation and Bailian `text-embedding-v4` (1024 dimensions). Enabling memory prepares isolated Python, the pinned PowerContext release and a single seekdb database automatically; Git is not required. Existing SQLite settings remain unchanged. AI Vision is optional and takes effect for the managed server after a memory restart. Native Windows x64 and macOS installation still require real-host qualification.
+
 <a id="implementation"></a>
 
 ## Understand the implementation

@@ -1,6 +1,6 @@
 # PowerContext + seekdb integration runtime
 
-This optional Python entrypoint is shipped with the npm package. Selecting **seekdb** in local memory setup installs the pinned dependencies into an isolated runtime and starts this server. The managed lifecycle owns one server and one persistent memory database.
+This optional Python entrypoint is shipped with the npm package. Enabling local long-term memory on a fresh installation installs the pinned dependencies into an isolated runtime and starts this server. The managed lifecycle owns one server and one persistent memory database.
 
 Linux, macOS and Windows x64 use native isolated Python runtimes. Windows downloads the Windows uv build, creates a managed Python 3.12 environment and installs the Windows x64 seekdb wheel; WSL is not required. PowerContext is installed from its pinned Python release; Git is not required. Ensure curl and tar are available on the host before setup. Windows ARM64 Python is not supported by the pinned seekdb distribution. Windows and macOS have not been verified on physical hosts in this change; Linux installation and lifecycle have been exercised.
 

@@ -20,7 +20,7 @@ export OTEL_EXPORTER_OTLP_TRACES_HEADERS='Authorization=Basic%20BASE64_OF_AGENT_
 .venv-seekdb/bin/python dsh-pet/runtime/powercontext/server.py --sql-text
 ```
 
-Use the same endpoint, Agent and credentials as [pet observability](observability.md). Replace placeholders privately. The entrypoint retains PowerContext authentication and network-binding validation. For managed installation, select seekdb in the local memory setup page; the application prepares Python and database dependencies. The requirements pin the PowerContext release and database drivers; rerun integration checks when upgrading them.
+Use the same endpoint, Agent and credentials as [pet observability](observability.md). Replace placeholders privately. The entrypoint retains PowerContext authentication and network-binding validation. For managed installation, enable local long-term memory on a fresh installation (seekdb is the default); the application prepares Python and database dependencies. The requirements pin the PowerContext release and database drivers; rerun integration checks when upgrading them.
 
 Use a fresh seekdb directory or an existing directory migrated through PowerContext's supported workflow. Run only one server per directory. SQLite data is not converted automatically; use PowerContext export/import before switching. This entrypoint rejects SQLite fallback. Initial schema migration can take several minutes; wait for readiness before sending chat requests.
 

@@ -39,6 +39,8 @@ npx --yes dsh-pet-powercontext@beta --setup
 
 长期记忆按需开启。DSH 用户进入「设置 → 桌宠配置 → 本机长期记忆」；独立模式用户在设置页开启。聊天、记忆整理和向量服务可分别选择服务商，预设支持 DeepSeek、OpenAI、通义千问、硅基流动、火山方舟、智谱、Kimi、Ollama 和可选 LiteLLM 网关。详见[模型配置](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/zh/guides/models.md)。
 
+DSH 新记忆配置默认使用 MiniMax 中国端套餐订阅与百炼 `text-embedding-v4`（1024 维）。启用后自动准备隔离的 Python、固定版本的 PowerContext 发布包和单个 seekdb 数据库，无需 Git；已有 SQLite 配置保持不变。AI Vision 按需接入，修改后重启记忆服务生效。Windows x64 使用原生安装路径，Windows/macOS 仍待真实机器验收。
+
 <a id="implementation"></a>
 
 ## 理解实现

@@ -292,7 +292,11 @@ test('abort, save changes, and dispose cancel in-flight requests; concurrency st
         const outcome = collect(ai.stream({ ...options, signal: controller.signal }));
         const rejected = assert.rejects(outcome, /cancelled|timed out/);
         await start;
-        await assert.rejects(collect(ai.stream(options)), /busy/);
+        const queuedController = new AbortController();
+        const queued = collect(ai.stream({ ...options, signal: queuedController.signal }));
+        const queuedRejected = assert.rejects(queued, /cancelled/);
+        queuedController.abort();
+        await queuedRejected;
         if (mode === 'abort') controller.abort();
         if (mode === 'save') await ai.saveSettings({ clearKey: true });
         if (mode === 'dispose') ai.dispose();
@@ -597,5 +601,68 @@ test('MiniMax China requests final stream usage without changing other compatibl
         { headers: { 'content-type': 'text/event-stream' } },
       );
     },
+  );
+});
+
+test('concurrent generations wait in order and cancelled waiters never reach the model', async () => {
+  let started!: () => void;
+  const start = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let calls = 0;
+  await fixture(
+    async (ai) => {
+      const first = collect(ai.stream(options));
+      await start;
+      const abort = new AbortController();
+      const cancelled = assert.rejects(collect(ai.stream({ ...options, signal: abort.signal })), /cancelled/);
+      const second = collect(ai.stream(options));
+      abort.abort();
+      await cancelled;
+      assert.equal(calls, 1);
+      release();
+      assert.equal(await first, 'reply-1');
+      assert.equal(await second, 'reply-2');
+      assert.equal(calls, 2);
+    },
+    async () => {
+      const index = ++calls;
+      if (index === 1) {
+        started();
+        await held;
+      }
+      return openAiResponse(`reply-${index}`);
+    },
+    'openai-compatible',
+  );
+});
+
+test('saving settings invalidates queued generations before any new model request', async () => {
+  let started!: () => void;
+  const start = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  let calls = 0;
+  await fixture(
+    async (ai) => {
+      const first = assert.rejects(collect(ai.stream(options)), /cancelled|timed out/);
+      await start;
+      const second = assert.rejects(collect(ai.stream(options)), /cancelled/);
+      await ai.saveSettings(profilePatch({ model: 'replacement' }));
+      await Promise.all([first, second]);
+      assert.equal(calls, 1);
+    },
+    async (_url, init) => {
+      calls++;
+      started();
+      return await new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      });
+    },
+    'openai-compatible',
   );
 });

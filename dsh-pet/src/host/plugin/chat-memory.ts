@@ -563,7 +563,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     observe(
       'chat',
       async () => {
-        const robotChat = deps.robot?.beginChat(petId);
+        const robotChat = await deps.robot?.prepareChat(petId);
         // Query optional weather outside the journal lock so it does not block other conversations.
         const env = await environmentForPrompt();
         return withMemoryLock(async () => {
@@ -696,6 +696,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
             actions,
             robotActions: robotChat?.actions,
             robotDirectExecution: robotChat?.directExecution,
+            robotCapabilities: robotChat?.capabilities,
             preferred: configuredModel(found.conf, 'chatModel'),
             image,
           });

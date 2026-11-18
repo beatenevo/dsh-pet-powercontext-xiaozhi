@@ -22,7 +22,12 @@ import { modelCandidates, modelLabel, type ModelRef } from './model-selection.ts
 import { historyStampOf } from './time-context.ts';
 import { recalledContextText } from './memory-context.ts';
 import type { PetObservability } from './observability/service.ts';
-import { extractRobotAction, robotActionInstruction, type RobotChatAction } from './robot/chat.ts';
+import {
+  extractRobotAction,
+  robotActionInstruction,
+  type RobotChatAction,
+  type RobotChatCapabilities,
+} from './robot/chat.ts';
 
 /** Generate failure reason (identical to the WhisperState failure branch of shared/whisper.ts). */
 export type ChatGenerateResult =
@@ -130,6 +135,8 @@ export interface ChatGenerateInput {
   readonly robotActions?: readonly RobotChatAction[];
   /** Reflect the operator mode in reply wording; the host owns dispatch authorization. */
   readonly robotDirectExecution?: boolean;
+  /** Actual discovery results, including unavailable or disabled-action states. */
+  readonly robotCapabilities?: RobotChatCapabilities;
   /** Entry individually specified model (chatModel); Default/leave blank = only use the model of the current session. */
   readonly preferred?: ModelRef;
   /** Pictures attached to this round; default = plain text request, the data path is the same as before adding pictures. */
@@ -175,6 +182,7 @@ export async function generateChat(input: ChatGenerateInput): Promise<ChatGenera
         actions,
         robotActions: input.robotActions ?? [],
         robotDirectExecution: input.robotDirectExecution === true,
+        robotCapabilities: input.robotCapabilities,
         image,
         recalledContext: input.recalledContext,
       });
@@ -207,6 +215,7 @@ interface GenerateOnce {
   readonly actions: string[];
   readonly robotActions: readonly RobotChatAction[];
   readonly robotDirectExecution: boolean;
+  readonly robotCapabilities?: RobotChatCapabilities;
   readonly image?: PetImageRef;
 }
 
@@ -244,7 +253,7 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
   const instruction =
     (wantImage ? imageInstruction(pool) : '') +
     (wantAction ? actionInstruction(actions) : '') +
-    robotActionInstruction(once.robotActions, once.robotDirectExecution);
+    robotActionInstruction(once.robotActions, once.robotDirectExecution, once.robotCapabilities);
   const content: Record<string, unknown>[] = [
     ...(once.recalledContext ? [{ type: 'text', text: recalledContextText(once.recalledContext) }] : []),
     { type: 'text', text: instruction === '' ? userText : userText + instruction },

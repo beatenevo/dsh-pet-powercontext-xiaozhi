@@ -288,7 +288,7 @@ test('old configurations keep chat forwarding off and only the linked pet can st
   assert.equal(robotConfigSchema.parse(old).chatSpeech, false);
   assert.equal(robotConfigSchema.parse(old).chatActions, false);
   const h = await harness(t);
-  assert.equal(h.service.beginChat('main'), undefined);
+  assert.deepEqual(h.service.beginChat('main')?.actions, []);
   await enableChat(h);
   assert.equal(h.service.beginChat('another-pet'), undefined);
   assert.equal(h.calls.length, 0);
@@ -798,3 +798,82 @@ test('direct actions expire behind speech and are never dispatched later', async
   assert.equal(h.calls.filter((call) => call.operation === 'execute').length, 0);
   assert.match(h.service.snapshot().error, /robot_proposal_expired/);
 });
+
+test('chat discovers actual MCP tools and programs even without action mappings', async (t) => {
+  const catalog = {
+    tools: ['getTeachProgramList', 'startTeachProgram'],
+    programs: [{ id: '9223372036854775807', name: '挥手' }],
+    areas: [],
+  };
+  const h = await harness(t, async () => ({ ...healthy, catalog }));
+  await h.service.submit({ action: 'configure', config: { ...h.service.snapshot().config, actions: [] } });
+  const context = await h.service.prepareChat('main');
+  assert.deepEqual(context?.capabilities?.catalog, catalog);
+  assert.deepEqual(context?.actions, []);
+  assert.equal(context?.capabilities?.chatActions, false);
+  await h.service.prepareChat('main');
+  assert.deepEqual(
+    h.calls.map((call) => call.operation),
+    ['status'],
+    'Fresh discovery is reused',
+  );
+  assert.equal(await h.service.prepareChat('another-pet'), undefined);
+});
+
+test('chat capability discovery cannot dispatch a cancelled action', async (t) => {
+  const pending = deferred();
+  const h = await harness(t, async () => pending.promise);
+  await enableDirect(h);
+  const preparing = h.service.prepareChat('main');
+  await setImmediate();
+  await h.service.submit({ action: 'disarm' });
+  pending.resolve(healthy);
+  assert.equal(await preparing, undefined);
+  assert.equal(h.calls.filter((call) => call.operation === 'execute').length, 0);
+});
+
+for (const scenario of ['execute', 'removed', 'unsupported', 'manual', 'cancelled'] as const) {
+  test(`discovered teach programs without manual mappings: ${scenario}`, async (t) => {
+    const target = '9223372036854775807';
+    let programs = [{ id: target, name: '挥手' }];
+    const h = await harness(t, async (_config, call) =>
+      call.operation === 'status'
+        ? {
+            ...healthy,
+            catalog: {
+              tools:
+                scenario === 'unsupported' ? ['getTeachProgramList'] : ['getTeachProgramList', 'startTeachProgram'],
+              programs,
+              areas: [],
+            },
+          }
+        : success,
+    );
+    await enableDirect(h);
+    await h.service.submit({
+      action: 'configure',
+      config: { ...h.service.snapshot().config, actions: [], directExecution: scenario !== 'manual' },
+    });
+    const context = (await h.service.prepareChat('main'))!;
+    assert.deepEqual(h.service.snapshot().config.actions, []);
+    if (scenario === 'unsupported' || scenario === 'manual') {
+      assert.deepEqual(context.actions, []);
+      h.service.completeChat(context, { text: 'Unknown', actionKey: 'invented' });
+    } else {
+      assert.equal(context.actions.length, 1);
+      assert.equal(context.actions[0].name, '挥手');
+      if (scenario === 'removed') programs = [];
+      if (scenario === 'cancelled') await h.service.submit({ action: 'disarm' });
+      h.service.completeChat(context, { text: 'Attempting wave', actionKey: context.actions[0].key });
+      h.service.completeChat(context, { text: 'Duplicate', actionKey: context.actions[0].key });
+    }
+    await setImmediate();
+    const executions = h.calls.filter((call) => call.operation === 'execute');
+    assert.equal(executions.length, scenario === 'execute' ? 1 : 0);
+    if (scenario === 'execute') {
+      assert.equal(executions[0].target, target);
+      assert.equal(executions[0].tool, 'startTeachProgram');
+      await assert.rejects(h.execute(randomUUID(), context.actions[0].key), /robot_unknown_action/);
+    }
+  });
+}

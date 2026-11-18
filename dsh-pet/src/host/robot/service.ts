@@ -7,7 +7,13 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { readPrivateJson, writePrivateJson } from '../../standalone/ai-storage.ts';
-import type { RobotChatSpeech, RobotPendingAction, RobotResult, RobotSnapshot } from '../../shared/robot.ts';
+import type {
+  RobotAction,
+  RobotChatSpeech,
+  RobotPendingAction,
+  RobotResult,
+  RobotSnapshot,
+} from '../../shared/robot.ts';
 import type { RobotChatContext } from './chat.ts';
 import { defaultRobotConfig, robotConfigSchema, robotRequestSchema, type RobotRequest } from './config.ts';
 import { readRobotJournal, writeRobotJournal, type RobotReceipt } from './journal.ts';
@@ -27,6 +33,7 @@ export interface RobotService {
   snapshot(): RobotSnapshot;
   submit(input: unknown): Promise<RobotSnapshot>;
   beginChat(petId: string): RobotChatContext | undefined;
+  prepareChat(petId: string): Promise<RobotChatContext | undefined>;
   completeChat(context: RobotChatContext, reply: { text: string; actionKey?: string }): void;
   dispose(): Promise<void>;
 }
@@ -85,6 +92,7 @@ export function createRobotService(options: {
   let statusOperation: Promise<void> | undefined;
   let previousStatus: string | undefined;
   let chatContext: RobotChatContext | undefined;
+  let chatActions: RobotAction[] = [];
   let chatCompleted = false;
   let directDispatching = false;
   let pendingAction: RobotPendingAction | undefined;
@@ -101,6 +109,7 @@ export function createRobotService(options: {
   };
   const cancelChat = (): void => {
     chatContext = undefined;
+    chatActions = [];
     pendingAction = undefined;
   };
   const currentChat = (context: RobotChatContext): boolean =>
@@ -235,9 +244,13 @@ export function createRobotService(options: {
   const command = (
     request: Extract<RobotRequest, { action: 'execute' | 'speak' }>,
     automaticSpeech = false,
+    discoveredAction?: RobotAction,
   ): Promise<void> => {
     if (storageError) throw new Error('robot_storage_unavailable');
-    const action = request.action === 'execute' ? config.actions.find((item) => item.key === request.key) : undefined;
+    const action =
+      request.action === 'execute'
+        ? (discoveredAction ?? config.actions.find((item) => item.key === request.key))
+        : undefined;
     if (request.action === 'execute' && !action) throw new Error('robot_unknown_action');
     const fingerprint = createHash('sha256')
       .update(
@@ -442,16 +455,31 @@ export function createRobotService(options: {
       (telemetry && (telemetry.actionCode !== 520000 || telemetry.modes.some((mode) => mode !== 1)))
     )
       throw new Error('robot_not_ready');
+    const action = chatActions.find((item) => item.key === proposal.key);
+    if (!action) throw new Error('robot_unknown_action');
+    if (!config.actions.some((item) => item.key === action.key)) {
+      // Revalidate ephemeral targets after refresh; never retarget a queued request by name.
+      if (
+        !config.directExecution ||
+        !catalog?.tools?.includes('startTeachProgram') ||
+        !catalog.programs.some((program) => program.id === action.target && program.name === action.name)
+      )
+        throw new Error('robot_unknown_action');
+    }
     armed = true;
     try {
-      command({
-        action: 'execute',
-        session,
-        id: proposal.id,
-        key: proposal.key,
-        petId: proposal.petId,
-        confirmed: true,
-      });
+      command(
+        {
+          action: 'execute',
+          session,
+          id: proposal.id,
+          key: proposal.key,
+          petId: proposal.petId,
+          confirmed: true,
+        },
+        false,
+        action,
+      );
       cancelChat();
     } finally {
       armed = false;
@@ -493,17 +521,11 @@ export function createRobotService(options: {
   return {
     snapshot,
     beginChat(petId) {
-      if (
-        disposed ||
-        storageError ||
-        !config.enabled ||
-        config.petId !== petId ||
-        (!config.chatSpeech && !config.chatActions)
-      )
-        return;
+      if (disposed || storageError || !config.enabled || config.petId !== petId) return;
       cancelChat();
       armed = false;
       chatCompleted = false;
+      chatActions = config.chatActions ? structuredClone(config.actions) : [];
       chatContext = {
         id: randomUUID(),
         session,
@@ -513,10 +535,44 @@ export function createRobotService(options: {
       };
       return structuredClone(chatContext);
     },
+    async prepareChat(petId) {
+      const context = this.beginChat(petId);
+      if (!context) return;
+      if (!snapshot().connected && !active && !stopping) await check();
+      if (!currentChat(context)) return;
+      if (
+        config.chatActions &&
+        config.directExecution &&
+        snapshot().connected &&
+        catalog?.tools?.includes('startTeachProgram')
+      ) {
+        for (const program of catalog.programs) {
+          if (chatActions.some((action) => action.tool === 'startTeachProgram' && action.target === program.id))
+            continue;
+          // Host-generated keys bind this turn to exact string IDs without persisting operator mappings.
+          chatActions.push({
+            key: `discovered_${randomUUID()}`,
+            name: program.name,
+            tool: 'startTeachProgram',
+            target: program.id,
+            petAnimation: '',
+          });
+        }
+      }
+      context.actions = chatActions.map(({ key, name }) => ({ key, name }));
+      context.capabilities = {
+        connected: snapshot().connected,
+        chatActions: config.chatActions,
+        catalog: snapshot().connected && catalog ? structuredClone(catalog) : undefined,
+        mappings: chatActions.map(({ key, tool, target }) => ({ key, tool, target })),
+        error: error || undefined,
+      };
+      return context;
+    },
     completeChat(context, reply) {
       if (!currentChat(context) || storageError || chatCompleted) return;
       chatCompleted = true;
-      const action = config.chatActions && config.actions.find((item) => item.key === reply.actionKey);
+      const action = config.chatActions && chatActions.find((item) => item.key === reply.actionKey);
       if (action)
         pendingAction = {
           id: randomUUID(),

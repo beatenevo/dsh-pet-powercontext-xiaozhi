@@ -784,6 +784,11 @@ for (const connected of [true, false]) {
               ok: connected,
               code: 'status',
               message: 'Local fixture',
+              catalog: {
+                tools: ['getTeachProgramList', 'startTeachProgram'],
+                programs: [{ id: '100', name: '挥手' }],
+                areas: [],
+              },
               telemetry: { actionCode: 520000, description: 'Idle', modes: [1, 1, 1] },
             }
           : { ok: true, code: 'reported_success', message: 'Local fixture accepted' };
@@ -822,6 +827,11 @@ for (const connected of [true, false]) {
     assert.deepEqual(result, { ok: true, text: reply });
     await flush();
     assert.match(userTextOf(captured[0]), /robot_action:KEY/);
+    assert.match(userTextOf(captured[0]), /Host-observed robot MCP capabilities/);
+    if (connected) {
+      assert.match(userTextOf(captured[0]), /getTeachProgramList/);
+      assert.match(userTextOf(captured[0]), /挥手/);
+    }
     assert.match(userTextOf(captured[0]), /"name":"打招呼"/);
     assert.equal(readMessages(ws.userRoot)[1].content, reply);
     assert.equal(records.find((entry) => entry.leaf === 'say')?.data.text, reply);

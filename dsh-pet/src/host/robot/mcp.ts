@@ -86,7 +86,7 @@ export const runRobotWorker: RobotRunner = async (config, call, signal) => {
         ok: true,
         code: 'connected',
         message: 'MCP 已连接；设备姿态与停止状态需现场确认。',
-        catalog: { programs, areas },
+        catalog: { programs, areas, tools: tools.map((tool) => tool.name) },
       };
     }
     if (call.operation === 'speak') await invoke('textToSpeech', { text: call.text ?? '' }, true);

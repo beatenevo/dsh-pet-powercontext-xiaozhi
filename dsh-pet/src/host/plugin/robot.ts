@@ -20,7 +20,7 @@ export function registerRobot(
     observability,
     async feedback(event) {
       const query = '?pet=' + encodeURIComponent(event.petId) + '&surface=any';
-      await route()(ROUTE_SEGMENT + '/broadcast' + query, 'POST', JSON.stringify({ text: event.text, anim: false }));
+      // Command receipts belong in the robot panel, never in pet speech or the TTS forwarding loop.
       if (event.animation)
         await route()(ROUTE_SEGMENT + '/anim' + query, 'POST', JSON.stringify({ name: event.animation }));
     },

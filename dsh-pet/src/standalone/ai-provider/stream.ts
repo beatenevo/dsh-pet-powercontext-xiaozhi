@@ -47,7 +47,7 @@ function normalizeFailure(runtime: AiRuntime, controller: AbortController, error
  * @returns accepts the DSH request object and produces an asynchronous sequence of text increments.
  */
 export function createTextStream(runtime: AiRuntime): (options: unknown) => AsyncIterable<StandaloneStreamChunk> {
-  return async function* stream(options) {
+  const generate = async function* (options: unknown): AsyncGenerator<StandaloneStreamChunk> {
     if (!runtime.ready()) throw new Error('Standalone AI is not ready. Configure and enable the model first.');
     const settings = runtime.store.current();
     const { request, signal: callerSignal } = parseRequest(options, settings.model);
@@ -87,6 +87,33 @@ export function createTextStream(runtime: AiRuntime): (options: unknown) => Asyn
       if (runtime.active === controller) runtime.active = undefined;
       // return() may wait for pending reads; only observes results, never blocks cancellation.
       void iterator.return?.().catch(() => runtime.logger.debug('Standalone AI transport closed.'));
+    }
+  };
+  let tail = Promise.resolve();
+  let queued = 0;
+  return async function* stream(options) {
+    if (!runtime.ready()) throw new Error('Standalone AI is not ready. Configure and enable the model first.');
+    const settings = runtime.store.current();
+    const { signal } = parseRequest(options, settings.model);
+    if (queued >= 16) throw new Error('Standalone AI request queue is full. Please wait.');
+    const previous = tail;
+    let release!: () => void;
+    const slot = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // A cancelled waiter must not let later requests overtake the current owner.
+    tail = previous.then(() => slot);
+    queued++;
+    const deadline = AbortSignal.timeout(settings.timeoutMs);
+    const waiting = AbortSignal.any([deadline, ...(signal ? [signal] : [])]);
+    try {
+      await abortable(previous, waiting);
+      if (!runtime.ready() || runtime.store.current() !== settings)
+        throw new Error('Standalone AI request cancelled after settings changed.');
+      yield* generate({ ...(options as Record<string, unknown>), signal: waiting });
+    } finally {
+      queued--;
+      release();
     }
   };
 }

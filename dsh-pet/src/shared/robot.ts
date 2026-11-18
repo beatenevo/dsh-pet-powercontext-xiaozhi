@@ -13,7 +13,7 @@ export interface RobotAction {
 /** Operator-owned settings; direct execution requires an explicit opt-in. */
 export interface RobotConfig {
   enabled: boolean;
-  /** Forward all new petId utterances with one opt-in: replies, whispers, sleep talk and robot feedback. */
+  /** Forward all new petId utterances with one opt-in: replies, whispers and sleep talk; command receipts are excluded. */
   chatSpeech: boolean;
   /** Allow chat to select configured physical actions. */
   chatActions: boolean;

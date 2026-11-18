@@ -189,3 +189,18 @@ test('timeout never replays commands and cancellation cannot claim a stop', asyn
   assert.equal((await runRobotWorker(h.config, { operation: 'stop' })).code, 'stop_unsupported');
   assert.equal(h.calls.length, count);
 });
+
+test('a host-validated catalog avoids a duplicate directory call before dispatch', async (t) => {
+  const h = await server(t);
+  const discovery = await runRobotWorker(h.config, { operation: 'status' });
+  assert.ok(discovery.catalog);
+  const result = await runRobotWorker(h.config, {
+    operation: 'execute',
+    tool: 'startTeachProgram',
+    target: programId,
+    catalog: discovery.catalog,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(h.calls.filter((call) => call.params?.name === 'getTeachProgramList').length, 1);
+  assert.equal(h.calls.filter((call) => call.params?.name === 'startTeachProgram').length, 1);
+});

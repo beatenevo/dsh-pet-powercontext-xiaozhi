@@ -3,6 +3,8 @@ import type { ChatMemoryConfig } from './chat-memory-config.ts';
 
 /** Public model parameters filled in by user; key submitted via separate write request. */
 export interface MemorySetupModels {
+  /** 存储引擎，旧配置缺省为 SQLite。 */
+  database?: 'sqlite' | 'seekdb';
   baseUrl: string;
   model: string;
   embeddingBaseUrl: string;

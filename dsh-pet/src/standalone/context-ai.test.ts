@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { createStandaloneContext } from './context.ts';
+import { BlockAssembler } from './shims/dsh-llm.ts';
 
 const logger = { info() {}, warn() {}, error() {}, debug() {} };
 
@@ -41,8 +42,15 @@ test('configured standalone context delegates model contracts without changing s
   assert.deepEqual(await llm.listModels('standalone'), await ai.listModels());
   assert.equal(await llm.resolveModelInfo(), undefined);
   const chunks = [];
-  for await (const chunk of llm.stream({})) chunks.push(chunk);
+  const assembler = new BlockAssembler();
+  for await (const chunk of llm.stream({})) {
+    chunks.push(chunk);
+    assembler.push(chunk);
+  }
   assert.deepEqual(chunks, [{ type: 'text', text: '你好' }]);
+  // Comparison requires both completed text and DSH's terminal-state accessor.
+  assert.equal(assembler.finish.kind, 'stop');
+  assert.deepEqual(assembler.blocks(), [{ type: 'text', text: '你好' }]);
   await context.dispose();
   await context.dispose();
   assert.deepEqual(ai.calls, ['dispose']);

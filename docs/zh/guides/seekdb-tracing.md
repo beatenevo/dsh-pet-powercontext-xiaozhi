@@ -4,7 +4,7 @@
 
 ## 安装与启动
 
-需要 Python 3.12+、Git，以及支持嵌入式 seekdb 的 Linux/macOS 环境。在仓库根目录执行；使用 npm 安装时，将路径替换为包内 `runtime/powercontext`：
+手工部署需要 Python 3.12+，以及支持嵌入式 seekdb 的 Linux/macOS 环境。PowerContext 使用固定版本的 Python 发布包，无需安装 Git。在仓库根目录执行；使用 npm 安装时，将路径替换为包内 `runtime/powercontext`：
 
 ```bash
 python3.12 -m venv .venv-seekdb
@@ -22,7 +22,7 @@ export OTEL_EXPORTER_OTLP_TRACES_HEADERS='Authorization=Basic%20BASE64_OF_AGENT_
 .venv-seekdb/bin/python dsh-pet/runtime/powercontext/server.py --sql-text
 ```
 
-OTLP 端点、Agent 和凭据必须与桌宠的[可观测配置](observability.md)一致。示例凭据需要替换，不要把真实值提交到 Git。服务沿用 PowerContext 的认证和网络暴露校验，不绕过认证。`requirements.txt` 固定经验证的 PowerContext 源码版本及 seekdb/MySQL 驱动；升级这些依赖时须重跑集成测试。
+OTLP 端点、Agent 和凭据必须与桌宠的[可观测配置](observability.md)一致。示例凭据需要替换，不要把真实值提交到 Git。服务沿用 PowerContext 的认证和网络暴露校验，不绕过认证。`requirements.txt` 固定经验证的 PowerContext 发布版本及 seekdb/MySQL 驱动；升级这些依赖时须重跑集成测试。
 
 数据库目录应为新目录或已完成受支持迁移的 seekdb 数据目录。同一目录只运行一个 Server。SQLite 数据不会自动转成 seekdb；切换前按 PowerContext 的导出／导入流程迁移。入口拒绝 SQLite 回退。首次建库需要执行迁移，可能持续数分钟；等待服务就绪后再发起对话。
 

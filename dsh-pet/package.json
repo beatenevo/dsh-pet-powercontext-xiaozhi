@@ -1,6 +1,6 @@
 {
   "name": "dsh-pet-powercontext",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Animated desktop pet for DeepSeek Harness with PowerContext long-term memory, chat, voice and independent model configuration.",
   "icon": "assets/logo.png",
   "keywords": [

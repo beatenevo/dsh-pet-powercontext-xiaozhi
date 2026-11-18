@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, existsSync, readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
-import { memoryProcessEnv, runMemoryCommand } from './memory-install.ts';
+import { installMemoryRuntime, memoryProcessEnv, runMemoryCommand } from './memory-install.ts';
 
 test('Python runtime accepts DSH IPv6 proxy bypasses without changing the host environment', () => {
   const previous = { NO_PROXY: process.env.NO_PROXY, no_proxy: process.env.no_proxy };
@@ -54,5 +54,46 @@ test(
     const stopped = readFileSync(heartbeat, 'utf8');
     await delay(150);
     assert.equal(readFileSync(heartbeat, 'utf8'), stopped);
+  },
+);
+
+// Linux 上用可执行替身检查 Windows 调度契约；不代表 Windows 系统验收。
+test(
+  'Windows seekdb validates its native Python runtime and rejects an unavailable ARM64 wheel',
+  { skip: process.platform !== 'linux' },
+  async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pet-native-windows-'));
+    const python = join(directory, 'venv', 'Scripts', 'python.exe');
+    const capture = join(directory, 'arguments.json');
+    mkdirSync(join(directory, 'venv', 'Scripts'), { recursive: true });
+    writeFileSync(
+      python,
+      `#!${process.execPath}
+require('node:fs').writeFileSync(${JSON.stringify(capture)}, JSON.stringify(process.argv.slice(2)));
+`,
+      { mode: 0o700 },
+    );
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    const arch = Object.getOwnPropertyDescriptor(process, 'arch')!;
+    try {
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+      Object.defineProperty(process, 'arch', { value: 'x64' });
+      const result = await installMemoryRuntime(directory, new AbortController().signal, undefined, 'seekdb');
+      assert.equal(result, python);
+      const args = JSON.parse(readFileSync(capture, 'utf8')) as string[];
+      assert.equal(args[0], '-c');
+      assert.match(args[1], /import uvicorn, pylibseekdb, pymysql/);
+      assert.match(args[1], /assert version\("powercontext"\) == /);
+      assert.doesNotMatch(args[1], /direct_url|commit_id/);
+      Object.defineProperty(process, 'arch', { value: 'arm64' });
+      await assert.rejects(
+        installMemoryRuntime(directory, new AbortController().signal, undefined, 'seekdb'),
+        /seekdb_unsupported_architecture/,
+      );
+    } finally {
+      Object.defineProperty(process, 'platform', platform);
+      Object.defineProperty(process, 'arch', arch);
+      rmSync(directory, { recursive: true, force: true });
+    }
   },
 );

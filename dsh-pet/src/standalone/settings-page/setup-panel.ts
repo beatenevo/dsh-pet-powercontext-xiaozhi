@@ -27,10 +27,12 @@ export const setupPanel = `
 <div class="field" id="setup-reuse-row" hidden><label><input id="setup-reuse" type="checkbox"> 沿用当前聊天配置</label><p id="setup-saved-chat" class="fieldHint"></p></div>
 <div class="field"><label for="setup-provider">聊天服务商</label><select id="setup-provider">${providerOptions()}</select></div>
 <div class="field"><label for="setup-url">聊天接口地址</label><input id="setup-url" type="url" required maxlength="2048" value="https://api.deepseek.com" spellcheck="false"></div>
-<div class="field"><label for="setup-key">聊天 API 密钥</label><input id="setup-key" type="password" maxlength="4096" autocomplete="new-password"><p id="setup-key-hint" class="fieldHint">密钥只保存在本机。</p></div>
+<div class="field"><label for="setup-key">聊天 API 密钥</label><input id="setup-key" type="password" maxlength="4096" autocomplete="new-password"><p id="setup-key-hint" class="fieldHint">密钥只保存在本机。MiniMax 套餐请填写 sk-cp- 开头的订阅 Key，按量 API Key 不共用订阅额度。</p></div>
+<p class="fieldHint">MiniMax 套餐请使用 sk-cp- 开头的订阅 Key；记忆整理可沿用此模型，向量模型需另配百炼。</p>
 ${modelField('setup', '聊天模型', 'deepseek-flash')}
 <p class="fieldHint">获取列表后，在模型输入框中选择，也可直接填写模型 ID。列表不代表账户已开通或模型已验证。Ollama 请先在本机安装并下载模型；LiteLLM 需自行部署网关。</p>
-<div class="field"><label><input id="setup-memory" type="checkbox"> 开启本机长期记忆</label><p class="fieldHint">自动准备 PowerContext 1.5.0，以后随桌宠启停。连接检查、聊天、记忆整理和检索可能产生模型费用。</p></div>
+<div class="field"><label><input id="setup-memory" type="checkbox"> 开启本机长期记忆</label><p class="fieldHint">自动准备 PowerContext 与所选数据库，以后随桌宠启停。连接检查、聊天、记忆整理和检索可能产生模型费用。</p></div>
+<div class="field"><label for="setup-database">记忆数据库</label><input id="setup-database" type="text" value="seekdb" readonly><p class="fieldHint">已有库不能直接切换存储类型。seekdb 在本机隔离环境安装，Windows x64 使用原生 Python 和 seekdb，无需 WSL。自动安装固定版本的 Python 发布包，无需 Git；请确认 curl、tar 可用。Windows ARM64 原生 Python 暂不支持；Windows 路径尚未实机验收。</p></div>
 <details id="setup-model-details"><summary>记忆模型：独立选择整理和向量服务</summary>
 <div id="setup-embedding-fields" hidden>
 <div class="field"><label><input id="setup-generation-reuse" type="checkbox" checked> 记忆整理沿用聊天模型</label></div>

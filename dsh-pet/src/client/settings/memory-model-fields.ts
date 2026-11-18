@@ -5,15 +5,19 @@ import type { MemorySetupModels } from '../../shared/memory-setup.ts';
 import type { SettingsRuntime } from './runtime.ts';
 import { INPUT_CLASS, makeUiKit } from './ui.ts';
 
+const GENERATION_PRESET = MODEL_PRESETS.find((entry) => entry.id === 'minimax-cn')!;
+const EMBEDDING_PRESET = MODEL_PRESETS.find((entry) => entry.id === 'qwen-cn')!;
+
 /** The credentials only exist in the edit draft and are not read back from the status interface. */
 export const EMPTY_MEMORY_DRAFT = {
-  baseUrl: '',
-  model: '',
+  database: 'seekdb' as 'sqlite' | 'seekdb',
+  baseUrl: GENERATION_PRESET.baseUrl,
+  model: GENERATION_PRESET.model,
   apiKey: '',
-  embeddingBaseUrl: '',
-  embeddingModel: '',
+  embeddingBaseUrl: EMBEDDING_PRESET.baseUrl,
+  embeddingModel: EMBEDDING_PRESET.embedding!.model,
   embeddingApiKey: '',
-  embeddingDimension: '',
+  embeddingDimension: String(EMBEDDING_PRESET.embedding!.dimension),
   embeddingSendDimensions: true,
 };
 /** The forms of the two roles share status and are submitted by the wizard. */
@@ -31,7 +35,7 @@ export function makeMemoryModelFields(rt: SettingsRuntime) {
     models?: MemorySetupModels;
   }) {
     const { draft, embedding, locked, update } = props;
-    const [preset, setPreset] = useState('custom');
+    const [preset, setPreset] = useState(embedding ? 'qwen-cn' : 'minimax-cn');
     const [models, setModels] = useState<Array<{ id: string; name: string }>>([]);
     const [notice, setNotice] = useState('');
     const [loading, setLoading] = useState(false);
@@ -46,6 +50,9 @@ export function makeMemoryModelFields(rt: SettingsRuntime) {
         (embedding && sameModelEndpoint(url, props.models.embeddingBaseUrl)));
     const kind = embedding ? 'embedding' : 'generation';
     const listId = 'memory-model-list-' + kind;
+    useEffect(() => {
+      setPreset(MODEL_PRESETS.find((entry) => sameModelEndpoint(entry.baseUrl, url))?.id ?? 'custom');
+    }, [url]);
     useEffect(() => {
       active.current?.abort();
       setModels([]);
@@ -155,6 +162,9 @@ export function makeMemoryModelFields(rt: SettingsRuntime) {
         ),
         input(embedding ? 'embeddingBaseUrl' : 'baseUrl', 'url'),
         input(embedding ? 'embeddingApiKey' : 'apiKey', 'password'),
+        !embedding && preset === 'minimax-cn'
+          ? h('p', { className: 'dsh-pet-cfg__note', children: t('memorySetupMiniMaxKey') })
+          : null,
         h('p', {
           className: 'dsh-pet-cfg__note',
           children: t(apiKey ? 'memorySetupDraftKey' : savedKey ? 'memorySetupSavedKey' : 'memorySetupNewKey'),

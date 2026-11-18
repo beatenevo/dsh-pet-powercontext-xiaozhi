@@ -138,13 +138,20 @@ export async function* sdkTextStream(
         model: settings.model,
         messages,
         stream: true,
+        // MiniMax 只有显式请求才返回流式用量；未验证的兼容端点保持原请求格式。
+        ...(sameEndpoint(settings.baseUrl, 'https://api.minimax.cn/v1')
+          ? { stream_options: { include_usage: true } }
+          : {}),
         max_tokens: settings.maxTokens,
         n: 1,
       },
       { signal },
     );
     for await (const event of stream) {
-      const delta = event.choices.find((choice) => choice.index === 0)?.delta;
+      const choice = event.choices.find((choice) => choice.index === 0);
+      const delta = choice?.delta;
+      // A truncated or filtered answer must not become a successful comparison measurement.
+      if (choice?.finish_reason && choice.finish_reason !== 'stop') yield { refusal: true };
       if (delta?.refusal) yield { refusal: true };
       if (delta?.content) yield { text: delta.content };
       if (event.usage) {
@@ -194,7 +201,12 @@ export async function* sdkTextStream(
       usage.cacheWriteTokens = tokenCount(event.message?.usage?.cache_creation_input_tokens);
     }
     if (event.type === 'message_delta') usage.outputTokens = tokenCount(event.usage?.output_tokens);
-    if (event.type === 'message_delta' && event.delta.stop_reason === 'refusal') yield { refusal: true };
+    if (
+      event.type === 'message_delta' &&
+      event.delta.stop_reason &&
+      !['end_turn', 'stop_sequence'].includes(event.delta.stop_reason)
+    )
+      yield { refusal: true };
     // Only forward incremental text: Repeated forwarding of accumulated content and thinking blocks will cause the caller to get duplicate text.
     if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') yield { text: event.delta.text };
   }

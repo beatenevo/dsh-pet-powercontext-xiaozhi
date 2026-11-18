@@ -33,6 +33,7 @@ export function makeMemorySetup(rt: SettingsRuntime) {
         });
     }, [status, submitted]);
     if (status?.available === false) return null;
+    const storeLocked = !!status?.configured;
     const blocked = props.disabled || pending || !!status?.busy || !status || !!error;
     const run = async (body: { action: string; [key: string]: unknown }) => {
       if ((await send(body)) && (body.action === 'start' || body.action === 'retry')) setSubmitted(true);
@@ -70,6 +71,10 @@ export function makeMemorySetup(rt: SettingsRuntime) {
               disabled: blocked,
               style: { border: 0, padding: 0, minWidth: 0 },
               children: [
+                h('p', {
+                  className: 'dsh-pet-cfg__note',
+                  children: t('memorySetupDatabase') + ': ' + (draft.database === 'sqlite' ? 'SQLite' : 'seekdb'),
+                }),
                 h(ModelFields, {
                   draft,
                   models: status?.models,
@@ -81,7 +86,7 @@ export function makeMemorySetup(rt: SettingsRuntime) {
                   draft,
                   models: status?.models,
                   embedding: true,
-                  locked: !!status?.configured,
+                  locked: storeLocked,
                   update: (change: Partial<MemoryModelDraft>) => setDraft((old) => ({ ...old, ...change })),
                 }),
                 h('p', { className: 'dsh-pet-cfg__note', children: t('memorySetupConsent') }),

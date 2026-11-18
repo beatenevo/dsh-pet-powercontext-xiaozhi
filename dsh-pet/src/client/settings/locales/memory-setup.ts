@@ -1,5 +1,13 @@
 /** Chinese and English text of the local memory wizard; other languages will fall back to English. */
 export const memorySetupEn = {
+  memorySetupDatabase: 'Memory database',
+  memorySetupMiniMaxKey:
+    'Use the sk-cp- subscription key. A pay-as-you-go API key does not share the subscription quota.',
+  memorySetup_error_database_change_requires_new_store:
+    'The existing store cannot change database engines in place. Use a separate data directory or server.',
+  memorySetup_error_seekdb_unsupported_architecture:
+    'Native seekdb on Windows requires an x64 Node.js/Python runtime. The pinned package does not provide a Windows ARM64 wheel.',
+  'memorySetupPreset_minimax-cn': 'MiniMax China (subscription key)',
   memorySetupTitle: 'Local long-term memory',
   memorySetupHint:
     'Configure PowerContext inside DSH. Existing external memory servers remain available in the model settings.',
@@ -17,7 +25,7 @@ export const memorySetupEn = {
   memorySetupModelsFailed: 'Could not fetch models. Check the endpoint and key, or enter a model ID manually.',
   memorySetupSendDimensions: 'Send dimensions to the embedding API (disable for fixed-dimension models)',
   memorySetupMigration:
-    'This store keeps its embedding model, endpoint and dimensions. To change them, create a separate PowerContext store, re-import source conversations and switch the memory server only after verification. Equal dimensions do not make vectors compatible.',
+    'This store keeps its embedding model, endpoint and dimensions. Changing them requires an explicit data migration; in-place switching is not supported. Equal dimensions do not make vectors compatible.',
   memorySetupPreset_siliconflow: 'SiliconFlow',
   memorySetupPreset_volcengine: 'Volcengine Ark (model or endpoint ID)',
   memorySetupPreset_zhipu: 'Zhipu GLM',
@@ -42,7 +50,7 @@ export const memorySetupEn = {
   memorySetupEmbeddingHint:
     'Leave the endpoint blank to use the generation endpoint. A key can be reused only at the same endpoint. Existing embedding models, endpoints and dimensions are locked to preserve the stored vectors.',
   memorySetupConsent:
-    'This installs PowerContext 1.5.0 on the DSH host and enables memory. It requires network access, curl and tar; model checks, extraction and recall may incur charges. Windows support is experimental.',
+    'This installs PowerContext and seekdb on the DSH host and enables memory. Git is not required. Existing SQLite configurations are preserved. It requires network access, curl and tar; model checks, extraction and recall may incur charges. Windows support is experimental.',
   memorySetupStart: 'Check and enable memory',
   memorySetupReady:
     'Memory service is ready. Synced dialogue still needs background extraction before it can be recalled.',
@@ -116,7 +124,7 @@ export const memorySetupEn = {
   memorySetupStage_checking_runtime: 'Checking the local runtime…',
   memorySetupStage_downloading: 'Downloading and verifying installation tools…',
   memorySetupStage_installing_python: 'Preparing Python…',
-  memorySetupStage_installing_memory: 'Installing PowerContext 1.5.0…',
+  memorySetupStage_installing_memory: 'Installing memory service and database dependencies…',
   memorySetupStage_starting: 'Starting memory and checking readiness…',
   memorySetupStage_restoring: 'Restoring the previous memory service…',
   memorySetupStage_saving: 'Saving the memory connection…',
@@ -129,6 +137,12 @@ export const memorySetupEn = {
 
 /** Chinese and English keep the same key set, and the stages are from the real service state. */
 export const memorySetupZh: Record<keyof typeof memorySetupEn, string> = {
+  memorySetupDatabase: '记忆数据库',
+  memorySetupMiniMaxKey: '请填写 sk-cp- 开头的套餐订阅 Key；按量 API Key 不共用订阅额度。',
+  memorySetup_error_database_change_requires_new_store: '已有库不能原地更换数据库类型，请使用独立数据目录或服务。',
+  memorySetup_error_seekdb_unsupported_architecture:
+    'Windows 原生 seekdb 需要 x64 Node.js/Python 运行环境，当前固定版本不提供 Windows ARM64 安装包。',
+  'memorySetupPreset_minimax-cn': 'MiniMax 中国（订阅 Key）',
   memorySetupTitle: '本机长期记忆',
   memorySetupHint: '在 DSH 中配置 PowerContext。已有远程服务仍可在模型设置中连接。',
   memorySetupScope: '应用于默认宠物条目，自定义宠物包保留自己的设置。聊天继续使用 DSH 中选择的模型。',
@@ -166,7 +180,7 @@ export const memorySetupZh: Record<keyof typeof memorySetupEn, string> = {
   memorySetupEmbeddingHint:
     '地址留空使用生成服务地址；仅同一地址可复用密钥。已有库的 Embedding 模型、地址和维度固定，以保持向量空间一致。',
   memorySetupConsent:
-    '将在 DSH 所在机器安装 PowerContext 1.5.0 并启用记忆。需要联网和 curl、tar；连接检查、记忆整理和检索可能产生模型费用。Windows 支持仍属实验性。',
+    '将在 DSH 所在机器安装 PowerContext 和 seekdb 并启用记忆，无需 Git；已有 SQLite 配置继续沿用。需要联网和 curl、tar；连接检查、记忆整理和检索可能产生模型费用。Windows 支持仍属实验性。',
   memorySetupStart: '检查并启用记忆',
   memorySetupReady: '记忆服务已就绪。已同步的对话还需后台整理，才能进入召回。',
   memorySetupWorking: '正在准备记忆，可以继续聊天。',
@@ -217,7 +231,7 @@ export const memorySetupZh: Record<keyof typeof memorySetupEn, string> = {
   memorySetupStage_checking_runtime: '正在检查本机运行环境…',
   memorySetupStage_downloading: '正在下载并校验安装工具…',
   memorySetupStage_installing_python: '正在准备 Python…',
-  memorySetupStage_installing_memory: '正在安装 PowerContext 1.5.0…',
+  memorySetupStage_installing_memory: '正在安装记忆服务及数据库依赖…',
   memorySetupStage_starting: '正在启动记忆并检查就绪状态…',
   memorySetupStage_restoring: '正在恢复原来的记忆服务…',
   memorySetupStage_saving: '正在保存记忆连接…',

@@ -2,7 +2,7 @@
 export const observabilityEn = {
   observationTitle: 'AI Vision observability',
   observationHint:
-    'Optional operation timings, outcomes and reported token counts. Prompts, replies, memory text and audio are not exported. Pet features remain available when export fails.',
+    'Optional operation timings, outcomes and reported token counts. Prompts, replies, memory text and audio are not exported. Pet features remain available when export fails. For managed seekdb, pause and resume memory after saving to apply Server tracing.',
   observationEnabled: 'Enable observability',
   observationBaseUrl: 'AI Vision URL',
   observationAgentId: 'Agent UUID',
@@ -36,7 +36,7 @@ export const observabilityEn = {
 export const observabilityZh: Record<keyof typeof observabilityEn, string> = {
   observationTitle: 'AI Vision 可观测性',
   observationHint:
-    '可选采集操作耗时、结果和模型返回的 Token 用量。不导出提示词、回复、记忆正文或音频。导出失败不影响桌宠功能。',
+    '可选采集操作耗时、结果和模型返回的 Token 用量。不导出提示词、回复、记忆正文或音频。导出失败不影响桌宠功能。使用本机托管 seekdb 时，保存后暂停再恢复记忆，使服务端观测配置生效。',
   observationEnabled: '启用可观测性',
   observationBaseUrl: 'AI Vision 地址',
   observationAgentId: 'Agent UUID',

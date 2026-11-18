@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { isIP } from 'node:net';
+import { memoryRuntimePath, seekdbRuntimeCheck, type MemoryDatabase } from './memory-runtime.ts';
 
 const UV_VERSION = '0.9.26';
 export type MemoryStage = 'checking_runtime' | 'downloading' | 'installing_python' | 'installing_memory' | 'starting';
@@ -146,18 +147,21 @@ export async function installMemoryRuntime(
   directory: string,
   signal: AbortSignal,
   progress: (stage: MemoryStage) => void = () => {},
+  database: MemoryDatabase = 'sqlite',
 ): Promise<string> {
   progress('checking_runtime');
+  if (database === 'seekdb' && process.platform === 'win32' && process.arch !== 'x64')
+    throw new Error('seekdb_unsupported_architecture');
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const check =
+    database === 'seekdb'
+      ? seekdbRuntimeCheck()
+      : 'from importlib.metadata import version; assert version("powercontext") == "1.5.0"; import uvicorn';
   const python = join(directory, 'venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
   const env = memoryProcessEnv(directory);
   if (existsSync(python)) {
     try {
-      await runMemoryCommand(
-        python,
-        ['-c', 'from importlib.metadata import version; assert version("powercontext") == "1.5.0"; import uvicorn'],
-        env,
-        signal,
-      );
+      await runMemoryCommand(python, ['-c', check], env, signal);
       return python;
     } catch {
       signal.throwIfAborted();
@@ -222,13 +226,19 @@ export async function installMemoryRuntime(
     await runMemoryCommand(uv, ['venv', '--clear', '--python', '3.12', join(directory, 'venv')], env, signal);
   }
   progress('installing_memory');
-  await runMemoryCommand(uv, ['pip', 'install', '--python', python, 'powercontext[cli,server]==1.5.0'], env, signal);
-  // Do not treat a partial download/installation as a usable runtime.
   await runMemoryCommand(
-    python,
-    ['-c', 'from importlib.metadata import version; assert version("powercontext") == "1.5.0"; import uvicorn'],
+    uv,
+    [
+      'pip',
+      'install',
+      '--python',
+      python,
+      ...(database === 'seekdb' ? ['-r', memoryRuntimePath('requirements.txt')] : ['powercontext[cli,server]==1.5.0']),
+    ],
     env,
     signal,
   );
+  // Do not treat a partial download/installation as a usable runtime.
+  await runMemoryCommand(python, ['-c', check], env, signal);
   return python;
 }

@@ -20,6 +20,9 @@ import { memoryServerUrlValid } from '../shared/chat-memory-config.ts';
 import { readPrivateJson, writePrivateJson } from './ai-storage.ts';
 import { installMemoryRuntime, memoryProcessEnv, type MemoryStage } from './memory-install.ts';
 
+import { memoryObservabilityEnvironment } from './memory-observability.ts';
+import { memoryRuntimeDirectory, memoryRuntimePath } from './memory-runtime.ts';
+
 const printable = (s: string): boolean => [...s].every((c) => c.charCodeAt(0) >= 32 && c.charCodeAt(0) !== 127);
 const text = z.string().trim().min(1).max(200).refine(printable);
 const endpoint = z.string().max(2048).refine(memoryServerUrlValid);
@@ -30,6 +33,7 @@ const key = z
   .refine((s) => printable(s) && !/\s/.test(s));
 export const memoryModelsSchema = z
   .object({
+    database: z.enum(['sqlite', 'seekdb']).optional(),
     baseUrl: endpoint,
     model: text,
     apiKey: key,
@@ -48,7 +52,7 @@ type MemoryConfig = z.infer<typeof configSchema>;
 
 // EOF means the desktop process exited, including crashes. Only this guardian's own child tree is stopped.
 const GUARDIAN = `import os, signal, subprocess, sys, threading
-p = subprocess.Popen([sys.executable, '-c', 'from powercontext.cli.app import main; main()', 'server', 'run', '--no-env-file'], stdin=subprocess.DEVNULL, start_new_session=os.name != 'nt')
+p = subprocess.Popen([sys.executable] + sys.argv[1:], stdin=subprocess.DEVNULL, start_new_session=os.name != 'nt')
 def watch():
     sys.stdin.buffer.read()
     if p.poll() is not None: return
@@ -69,8 +73,17 @@ sys.exit(p.wait())
 export function managedMemoryEnvironment(directory: string, config: MemoryConfig): NodeJS.ProcessEnv {
   return {
     ...memoryProcessEnv(directory),
+    ...(config.database === 'seekdb' ? memoryObservabilityEnvironment(directory) : {}),
     POWERCONTEXT_HOME: join(directory, 'data'),
-    POWERCONTEXT_SERVER_DATABASE_KIND: 'sqlite',
+    ...(config.database === 'seekdb'
+      ? {
+          POWERCONTEXT_SERVER_DATABASE: JSON.stringify({
+            kind: 'seekdb',
+            path: join(directory, 'seekdb'),
+            database: 'powercontext',
+          }),
+        }
+      : { POWERCONTEXT_SERVER_DATABASE_KIND: 'sqlite' }),
     POWERCONTEXT_SERVER_HTTP_HOST: '127.0.0.1',
     POWERCONTEXT_SERVER_HTTP_PORT: String(config.port),
     POWERCONTEXT_SERVER_AUTH_ENABLED: 'true',
@@ -173,9 +186,17 @@ export class ManagedMemory {
   }
   settings(): Omit<MemoryModels, 'apiKey' | 'embeddingApiKey'> | undefined {
     if (!this.config) return undefined;
-    const { baseUrl, model, embeddingBaseUrl, embeddingModel, embeddingDimension, embeddingSendDimensions } =
+    const { database, baseUrl, model, embeddingBaseUrl, embeddingModel, embeddingDimension, embeddingSendDimensions } =
       this.config;
-    return { baseUrl, model, embeddingBaseUrl, embeddingModel, embeddingDimension, embeddingSendDimensions };
+    return {
+      database: database ?? 'sqlite',
+      baseUrl,
+      model,
+      embeddingBaseUrl,
+      embeddingModel,
+      embeddingDimension,
+      embeddingSendDimensions,
+    };
   }
 
   /** Private credential reuse is limited to the previously configured embedding endpoint. */
@@ -202,7 +223,12 @@ export class ManagedMemory {
     this.claim();
     const previous = this.config;
     const wasRunning = this.running;
-    await installMemoryRuntime(this.directory, signal, progress);
+    await installMemoryRuntime(
+      memoryRuntimeDirectory(this.directory, models.database ?? 'sqlite'),
+      signal,
+      progress,
+      models.database ?? 'sqlite',
+    );
     signal.throwIfAborted();
     try {
       await this.configure(models);
@@ -254,11 +280,14 @@ export class ManagedMemory {
 
   validateModels(models: MemoryModels): MemoryModels {
     const next = memoryModelsSchema.parse(models);
+    const target = this.config;
+    if (target && (target.database ?? 'sqlite') !== (next.database ?? 'sqlite'))
+      throw new Error('database_change_requires_new_store');
     // Reusing old vectors with a different embedding space would corrupt retrieval semantics.
     if (
-      this.config &&
+      target &&
       ['embeddingBaseUrl', 'embeddingModel', 'embeddingDimension'].some(
-        (name) => this.config![name as keyof MemoryModels] !== next[name as keyof MemoryModels],
+        (name) => target[name as keyof MemoryModels] !== next[name as keyof MemoryModels],
       )
     )
       throw new Error('embedding_change_requires_new_store');
@@ -268,12 +297,13 @@ export class ManagedMemory {
   async configure(models: MemoryModels): Promise<void> {
     const next = this.validateModels(models);
     this.claim();
+    const target = this.config;
     await this.stopProcess();
     this.config = {
       ...next,
       version: 1,
-      port: this.config?.port ?? (await freePort()),
-      token: this.config?.token ?? randomBytes(32).toString('base64url'),
+      port: target?.port ?? (await freePort()),
+      token: target?.token ?? randomBytes(32).toString('base64url'),
       enabled: false,
     };
     writePrivateJson(this.file, this.config);
@@ -293,7 +323,13 @@ export class ManagedMemory {
       if (await this.checkReady(signal)) return this.url!;
       throw new Error('memory_not_ready');
     }
-    const python = await installMemoryRuntime(this.directory, signal, progress);
+    const database = this.config.database ?? 'sqlite';
+    const python = await installMemoryRuntime(
+      memoryRuntimeDirectory(this.directory, database),
+      signal,
+      progress,
+      database,
+    );
     signal.throwIfAborted();
     progress('starting');
     // A persisted endpoint must never silently attach to a different service or acquire a new identity.
@@ -303,7 +339,11 @@ export class ManagedMemory {
       probe.listen(this.config!.port, '127.0.0.1', () => probe.close(() => resolve()));
     });
     signal.throwIfAborted();
-    const child = spawn(python, ['-c', GUARDIAN], {
+    const serverArgs =
+      database === 'seekdb'
+        ? [memoryRuntimePath('server.py')]
+        : ['-c', 'from powercontext.cli.app import main; main()', 'server', 'run', '--no-env-file'];
+    const child = spawn(python, ['-c', GUARDIAN, ...serverArgs], {
       cwd: this.directory,
       env: managedMemoryEnvironment(this.directory, this.config),
       stdio: ['pipe', 'ignore', 'ignore'],
@@ -319,7 +359,7 @@ export class ManagedMemory {
       failed = true;
     });
     this.releaseToken = registerMemoryToken(this.url!, this.config.token);
-    const deadline = Date.now() + 120_000;
+    const deadline = Date.now() + (database === 'seekdb' ? 600_000 : 120_000);
     try {
       while (Date.now() < deadline) {
         signal.throwIfAborted();

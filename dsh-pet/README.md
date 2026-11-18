@@ -43,16 +43,18 @@ Long-term memory is optional. In DSH, use **Settings → Pet Config → Local lo
 
 ## Understand the implementation
 
-| Source                                | Responsibility                                                                      |
-| ------------------------------------- | ----------------------------------------------------------------------------------- |
-| `src/host/index.ts`                   | Cordis host plugin assembly: `name`, `inject`, `apply`.                             |
-| `src/client/index.ts`                 | Browser plugin and UI registration, exported through `dsh-pet-powercontext/client`. |
-| `src/host/plugin/chat-memory.ts`      | Local chat journal, delivery queue and prompt assembly.                             |
-| `src/host/powercontext.ts`            | Bounded PowerContext capture and recall client.                                     |
-| `src/host/powercontext-library.ts`    | Memory list, provenance, correction and forgetting.                                 |
-| `src/standalone/managed-memory.ts`    | Local runtime, health checks and persistent service identity.                       |
-| `src/host/plugin/managed-memory.ts`   | Managed memory lifecycle within DSH.                                                |
-| `src/client/settings/memory-setup.ts` | DSH memory setup and service controls.                                              |
+| Source                                   | Responsibility                                                                      |
+| ---------------------------------------- | ----------------------------------------------------------------------------------- |
+| `src/host/index.ts`                      | Cordis host plugin assembly: `name`, `inject`, `apply`.                             |
+| `src/client/index.ts`                    | Browser plugin and UI registration, exported through `dsh-pet-powercontext/client`. |
+| `src/host/plugin/chat-memory.ts`         | Local chat journal, delivery queue and prompt assembly.                             |
+| `src/host/powercontext.ts`               | Bounded PowerContext capture and recall client.                                     |
+| `src/host/powercontext-library.ts`       | Memory list, provenance, correction and forgetting.                                 |
+| `src/standalone/memory-observability.ts` | Private managed seekdb OTLP configuration at process startup.                       |
+| `src/standalone/memory-runtime.ts`       | Isolated SQLite/seekdb runtime locations and packaged server entry.                 |
+| `src/standalone/managed-memory.ts`       | Local runtime, health checks and persistent service identity.                       |
+| `src/host/plugin/managed-memory.ts`      | Managed memory lifecycle within DSH.                                                |
+| `src/client/settings/memory-setup.ts`    | DSH memory setup and service controls.                                              |
 
 Package exports include the host entry, `./client`, `./src/*`, `./cordis.patch.yml` and `./package.json`. The executable `dsh-pet-powercontext` starts standalone mode.
 

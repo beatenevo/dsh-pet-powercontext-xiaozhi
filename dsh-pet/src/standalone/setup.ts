@@ -92,11 +92,11 @@ export interface SetupService {
 }
 
 /** Use the host configuration boundary for persistence, desktop refresh, and rollback. */
-export function setupMemoryBinding(origin: () => string, token: string) {
+export function setupMemoryBinding(origin: () => string, token: string | (() => string)) {
   async function request(method: string, body?: unknown): Promise<Record<string, unknown>> {
     const response = await fetch(origin() + ROUTE_SEGMENT + '/config', {
       method,
-      headers: { 'X-DSH-Pet-Token': token, 'Content-Type': 'application/json' },
+      headers: { 'X-DSH-Pet-Token': typeof token === 'function' ? token() : token, 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(10_000),
       redirect: 'error',

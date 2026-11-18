@@ -48,11 +48,24 @@ async function run(logger: StandaloneLogger, options: { port: number; setup: boo
   let forwardShutdown: (reason: string) => void = () => {};
   const portRef = { value: options.port };
   const ai = createStandaloneAi(home, logger);
-  const security = createRequestSecurity();
+  const security = createRequestSecurity({
+    file: join(home, 'dsh-pet', 'access-token.json'),
+    onRotate(token) {
+      releaseRuntime = writeStandaloneRuntime(home, {
+        port: portRef.value,
+        token,
+        settingsUrl: `http://127.0.0.1:${portRef.value}/standalone-ai/#token=${token}`,
+        pluginRoot: packageRoot,
+      });
+    },
+  });
   const setup = createSetup(
     home,
     ai,
-    setupMemoryBinding(() => `http://127.0.0.1:${portRef.value}`, security.token),
+    setupMemoryBinding(
+      () => `http://127.0.0.1:${portRef.value}`,
+      () => security.token,
+    ),
   );
   const context = createStandaloneContext({
     port: () => portRef.value,

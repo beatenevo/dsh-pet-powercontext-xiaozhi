@@ -43,7 +43,12 @@ export interface DesktopSession {
  * @param rendererPath - Desktop Helper Absolute path to the rendering page.
  * @param token - Access token.
  */
-export function installDesktopAuth(session: DesktopSession, origin: string, rendererPath: string, token: string): void {
+export function installDesktopAuth(
+  session: DesktopSession,
+  origin: string,
+  rendererPath: string,
+  token: string | (() => string),
+): void {
   const renderer = pathToFileURL(rendererPath).href;
   session.webRequest.onBeforeSendHeaders((details, callback) => {
     const headers = { ...details.requestHeaders };
@@ -63,7 +68,7 @@ export function installDesktopAuth(session: DesktopSession, origin: string, rend
         page.origin === 'null' &&
         page.href.split(/[?#]/, 1)[0] === renderer
       ) {
-        headers['X-DSH-Pet-Token'] = token;
+        headers['X-DSH-Pet-Token'] = typeof token === 'function' ? token() : token;
       }
     } catch {
       // When frame is missing/destroyed or the address is invalid, the voucher will not be granted.

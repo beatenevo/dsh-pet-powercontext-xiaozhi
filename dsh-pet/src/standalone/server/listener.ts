@@ -5,6 +5,7 @@
  * will always be normalized to 500 and stack information will never be returned to the client.
  * @module dsh-pet/src/standalone/server/listener
  */
+import { accessTokenHandler } from '../access-token.ts';
 import { createRequestSecurity, rejectRequest, secureResponse, type RequestSecurity } from '../request-security.ts';
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
@@ -29,6 +30,10 @@ function dispatch(
   const balance = balanceHandler(options.ai);
   const setup = setupHandler(options.setup);
   return (req, res, pathname) => {
+    if (pathname === '/standalone-ai/access-token' && shutdownSecurity) {
+      void accessTokenHandler(req, res, shutdownSecurity).catch(() => rejectRequest(res, 500, 'Token update failed'));
+      return;
+    }
     const method = req.method ?? 'GET';
     if (method === 'OPTIONS') {
       res.writeHead(204);

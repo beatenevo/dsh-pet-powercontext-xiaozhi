@@ -9,12 +9,15 @@
  * @module dsh-pet/src/standalone/request-security
  */
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { readPrivateJson, writePrivateJson } from './ai-storage.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 /** Requesting a secure facade. */
 export interface RequestSecurity {
-  /** Process capability token, write-only enters the local startup list, never enters HTTP response or log. */
+  /** Current credential; never serialize it into response bodies or logs. */
   readonly token: string;
+  /** Persist and synchronize a validated token, then activate it synchronously. */
+  rotate(token: string): void;
   /** Generate settings page address with token. */
   authenticatedUrl(baseUrl: string): string;
   /** Determine whether the request is allowed; when rejected, the response has been written. */
@@ -68,10 +71,29 @@ function readTokenCookie(req: IncomingMessage): string {
 }
 
 /** Create a request security facade. */
-export function createRequestSecurity(): RequestSecurity {
-  const token = randomBytes(32).toString('base64url');
+export function createRequestSecurity(
+  options: { file?: string; onRotate?: (token: string) => void } = {},
+): RequestSecurity {
+  const saved = options.file ? readPrivateJson(options.file) : undefined;
+  if (saved !== undefined && (typeof saved !== 'string' || !TOKEN_SHAPE.test(saved))) {
+    throw new Error('Invalid saved interface access token');
+  }
+  let token = typeof saved === 'string' ? saved : randomBytes(32).toString('base64url');
   return {
-    token,
+    get token() {
+      return token;
+    },
+    rotate(next) {
+      if (!TOKEN_SHAPE.test(next)) throw new Error('Invalid interface access token');
+      if (options.file) writePrivateJson(options.file, next);
+      try {
+        options.onRotate?.(next);
+      } catch {
+        if (options.file) writePrivateJson(options.file, token);
+        throw new Error('Could not update local access credentials');
+      }
+      token = next;
+    },
     authenticatedUrl(baseUrl) {
       const base = new URL(baseUrl);
       if (

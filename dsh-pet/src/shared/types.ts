@@ -97,6 +97,8 @@ export interface Animations {
  * prefix), and multiple instances share the same asset directory, so use it instead of id for asset URL.
  */
 export interface Pet {
+  /** Optional external API address; internal identity remains stable for stored memory. */
+  apiId?: string;
   /** Unique identifier (used for program positioning: asset, memory, and endpoint parameters are all according to it; never overlap, conflict means configuration error) */
   id: string;
   /**

@@ -1,3 +1,4 @@
+import { interfaceAccessEn } from './interface-access.ts';
 /**
  * Settings page German copy; key set is exactly the same as zh.
  */
@@ -10,6 +11,7 @@ import { dshMemoryEn } from '../../dsh-memory-status.ts';
 import { observabilityEn } from './observability.ts';
 
 export const de: Record<Key, string> = {
+  ...interfaceAccessEn,
   ...observabilityEn,
   ...dshMemoryEn,
   ...memorySetupEn,

@@ -39,6 +39,13 @@ export function saveUserConfig(
     // Intentional filtering of invalid file names (Windows reserved character + control character) to prevent configuration values from escaping the main-config.jsonc path
     if (!isValidPetId(id) || seenIds.has(id)) return null;
     seenIds.add(id);
+    const previous = (Array.isArray(existing?.pets) ? existing.pets : []).find(
+      (pet: Record<string, unknown>) => pet.id === id,
+    ) as Record<string, unknown> | undefined;
+    const rawApiId = pp.apiId === undefined ? previous?.apiId : pp.apiId;
+    if (rawApiId !== undefined && typeof rawApiId !== 'string') return null;
+    const apiId = typeof rawApiId === 'string' ? rawApiId.trim() : '';
+    if (apiId && !isValidPetId(apiId)) return null;
     const size = Number(pp.size);
     if (!Number.isFinite(size) || size <= 0) return null;
     // Percentage size (optional): The same judgment as the reading side. The number passed must be no less than 1 (no
@@ -82,6 +89,7 @@ export function saveUserConfig(
     const persona = typeof rawPersona === 'string' ? rawPersona.trim() : '';
     const pet: Record<string, unknown> = {
       id,
+      ...(apiId ? { apiId } : {}),
       name,
       size,
       balanceEnabled,
@@ -94,6 +102,13 @@ export function saveUserConfig(
     if (persona) pet.whisperPrompt = persona;
     if (sizePercent !== undefined && sizePercent !== null) pet.sizePercent = sizePercent;
     out.push(pet);
+  }
+  const addresses = new Set<string>();
+  for (const pet of out as Record<string, unknown>[]) {
+    for (const address of new Set([String(pet.id), ...(pet.apiId ? [String(pet.apiId)] : [])])) {
+      if (addresses.has(address)) return null;
+      addresses.add(address);
+    }
   }
   const ne = o.notificationsEnabled;
   if (ne !== undefined && typeof ne !== 'boolean') return null;

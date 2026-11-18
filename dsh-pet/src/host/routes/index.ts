@@ -8,6 +8,9 @@
  * define matching conditions respectively.
  * @module dsh-pet/src/host/routes/index
  */
+import { readAllConfig } from '../config.ts';
+import { resolveApiPetId } from '../config/api-id.ts';
+import { failResult } from './result.ts';
 import type { RouteResult } from '../http.ts';
 import { handleAssetsRoutes } from './assets.ts';
 import { handleAttachmentRoutes } from './attachment.ts';
@@ -95,6 +98,18 @@ export function createPetRouter(
   deps: PetRouteDeps,
 ): (url: URL, rest: string, method: string, body?: string, signal?: AbortSignal) => Promise<RouteResult> {
   return async (url, rest, method, body, signal) => {
+    const address = url.searchParams.get('pet')?.trim();
+    if (address) {
+      let id: string | null = address;
+      try {
+        id = resolveApiPetId(readAllConfig(deps.configPaths), address);
+      } catch {
+        // Let the endpoint validate its method and payload before reporting unavailable configuration.
+      }
+      if (id === null) return failResult('bad-request', '接口 Pet ID 存在冲突，请在设置中修改。');
+      url = new URL(url.href);
+      url.searchParams.set('pet', id);
+    }
     // The sleep gate is placed before distribution: processors in various fields do not need to know about "sleeping"
     // at all, and they will not miss any place. Only requests with ? pet = are blocked (the list of / todos is global
     // and will not be blocked if there is no belonging pet).

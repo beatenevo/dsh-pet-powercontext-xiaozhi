@@ -204,3 +204,11 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 `GET /observability` 读取公开配置和进程内近期交互；`PUT /observability` 保存配置，可写入仅写入的 SpaceKey；`POST /observability/check` 测试带认证的 OTLP 导出。这些路由沿用桌宠其他路由的宿主认证。接入端接受与存储／回读是不同的验证。参阅[连接指南](../guides/observability.md)。
 
 `say` 状态叶可携带可选 `observationId`，自动语音将其传回 `POST /voice/speak`。宿主只关联自己发出的近期身份；缺失或未知身份不改变语音行为。
+
+## DSH 接口访问 Token
+
+在「设置 → 桌宠配置 → 接口访问 Token」保存固定凭据后，外部调用可通过 `X-DSH-Pet-Token` 请求头访问桌宠 API。旧值即时失效，认证范围仅为桌宠路由。携带错误 Token 时不会退回到 DSH Cookie 认证。
+
+`GET /dsh-pet-7340/access-token` 只返回 `{ configured: boolean }`；`PUT` 接受 `{ token: string }`，要求 43 位字母、数字、下划线或短横线。两个操作均要求有效 DSH 会话，外部 Token 本身不能管理凭据。写入只接受同源 JSON，凭据不会在响应中回显。桌宠内部 IPC 与 DSH 登录态不受轮换影响。
+
+接口 Pet ID 在同一设置页的宠物卡片中编辑，是 `pets[].apiId` 对外别名；稳定内部 ID 继续关联历史记录和 PowerContext 记忆。

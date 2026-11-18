@@ -9,6 +9,7 @@
  *
  * @module dsh-pet/src/app/router
  */
+import { accessTokenHandler } from '../standalone/access-token.ts';
 
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -89,6 +90,10 @@ export function startRouter(
     }
 
     const dispatch = async (request: IncomingMessage): Promise<void> => {
+      if (url.pathname === '/standalone-ai/access-token') {
+        await accessTokenHandler(request, res, deps.security);
+        return;
+      }
       const assets: Record<string, readonly [string, string]> = {
         '/standalone-ai/': [settingsPage, 'text/html'],
         '/standalone-ai/settings.js': [settingsScript, 'text/javascript'],

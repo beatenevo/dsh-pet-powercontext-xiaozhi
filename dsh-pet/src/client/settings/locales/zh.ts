@@ -1,3 +1,4 @@
+import { interfaceAccessZh } from './interface-access.ts';
 /**
  * Chinese text on the settings page; the key set is the true source of the complete collection.
  */
@@ -9,6 +10,7 @@ import { dshMemoryZh } from '../../dsh-memory-status.ts';
 import { observabilityZh } from './observability.ts';
 
 export const zh = {
+  ...interfaceAccessZh,
   ...observabilityZh,
   ...dshMemoryZh,
   ...memorySetupZh,

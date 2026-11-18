@@ -126,6 +126,7 @@ async function loadAi() {
 
 function boot() {
   wireTabs();
+  wireAccessToken();
   selectTab('chat');
   // The token in the address bar has been cleared after refreshing. At this time, the HttpOnly cookie
   // exchanged for the first visit continues;

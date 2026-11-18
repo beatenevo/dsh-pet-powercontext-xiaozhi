@@ -8,6 +8,7 @@
  * persona.
  * @module dsh-pet/src/host/routes/config/entry
  */
+import { petAddressConflicts } from '../../config/api-id.ts';
 import { isValidPetId, readAllConfig, saveUserConfig } from '../../config.ts';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { type RouteResult } from '../../http.ts';
@@ -34,20 +35,7 @@ const INVALID_PETS =
  * @returns conflict description list; an empty array indicates no conflict.
  */
 function conflictingIds(deps: PetRouteDeps, entry: string, pets: readonly Record<string, unknown>[]): string[] {
-  const merged = readAllConfig(deps.configPaths);
-  const taken = new Map<string, string>();
-  for (const [key, conf] of Object.entries(merged)) {
-    if (key === entry) continue;
-    const list = Array.isArray(conf?.pets) ? (conf.pets as Record<string, unknown>[]) : [];
-    for (const pet of list) taken.set(String(pet.id), key);
-  }
-  const out: string[] = [];
-  for (const pet of pets) {
-    const id = String(pet.id);
-    const owner = taken.get(id);
-    if (owner !== undefined) out.push(`${id}（已被「${owner}」占用）`);
-  }
-  return out;
+  return petAddressConflicts(readAllConfig(deps.configPaths), entry, pets);
 }
 
 /**

@@ -12,8 +12,9 @@ info:
     ## Runtime and authentication
 
     In DSH, `{port}` is `ctx.webServer.port`; use the address printed by `dsh web`.
-    The plugin does not choose DSH's bind address or bypass DSH authentication. Use the host's
-    authenticated session. DSH pet HTTP routes enforce the host connection authentication for reads and writes;
+    The plugin does not choose DSH's bind address. Use the host's authenticated session or a configured
+    `X-DSH-Pet-Token` for pet API calls. Credential management requires the DSH session itself.
+    DSH pet HTTP routes enforce authentication for reads and writes;
     unauthenticated requests return 401 and rejected origins return 403 before reaching pet handlers.
     The desktop helper uses its existing host IPC bridge. Do not assume a loopback address makes a request unauthenticated.
 
@@ -81,6 +82,59 @@ tags:
     description: Optional Astra Pro 2.0 operator controls and status
 
 paths:
+  /dsh-pet-7340/access-token:
+    get:
+      operationId: getInterfaceAccessStatus
+      tags: [Config]
+      summary: Read external API credential status
+      description: Requires an authenticated DSH session. Returns no credential value. Not available in standalone mode.
+      responses:
+        "200":
+          description: Credential status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured]
+                properties:
+                  configured:
+                    type: boolean
+        "401":
+          description: DSH session required
+        "403":
+          description: Origin or host mode rejected
+    put:
+      operationId: setInterfaceAccessToken
+      tags: [Config]
+      summary: Replace the external pet API credential
+      description: Requires an authenticated DSH session and same-origin JSON. Persists privately and revokes the previous token immediately. DSH sessions and desktop IPC remain valid.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  pattern: "^[A-Za-z0-9_-]{43}$"
+                  writeOnly: true
+      responses:
+        "200":
+          description: Saved without returning the credential
+        "400":
+          description: Invalid credential or JSON
+        "401":
+          description: DSH session required
+        "403":
+          description: Origin or session rejected
+        "413":
+          description: Request body too large
+        "415":
+          description: JSON required
+        "500":
+          description: Credential persistence failed
   /dsh-pet-7340/comparison:
     get:
       tags: [Config]
@@ -3752,7 +3806,8 @@ components:
       in: query
       required: true
       description: |
-        Target pet id (`pets[].id` in configuration) - **required**.
+        Target pet ID (`pets[].apiId` when configured, otherwise `pets[].id`) - **required**.
+        API aliases resolve to the stable internal instance before access checks and execution; history, state keys and memory ownership retain the internal ID.
 
         Not given / empty string / completely blank → `ok: false` + `reason: pet-required`;
         Given but this pet is not included in the configuration → `ok: false` + `reason: unknown-pet`.
@@ -5714,6 +5769,10 @@ components:
           description:
             Pet id. **The file name cannot contain invalid characters** (Windows reserved character + control
             character)
+        apiId:
+          type: string
+          maxLength: 64
+          description: Optional external pet query alias. Must not collide with any other alias or internal ID. Empty clears it; omission preserves the saved value. Changing it retains the internal instance and all memory.
         name:
           type: string
           description: Display name; when left blank, the host will process it as `id` and issue an alarm.

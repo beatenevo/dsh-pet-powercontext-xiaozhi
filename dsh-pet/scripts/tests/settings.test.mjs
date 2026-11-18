@@ -376,9 +376,9 @@ test('local memory setup preserves unsaved settings and reflects readiness, paus
           models: {
             baseUrl: 'https://api.openai.com/v1',
             model: 'gpt-4.1-mini',
-            embeddingBaseUrl: 'https://api.openai.com/v1',
-            embeddingModel: 'text-embedding-3-small',
-            embeddingDimension: 1536,
+            embeddingBaseUrl: body.embeddingBaseUrl ?? snapshot.models?.embeddingBaseUrl,
+            embeddingModel: body.embeddingModel ?? snapshot.models?.embeddingModel,
+            embeddingDimension: body.embeddingDimension ?? snapshot.models?.embeddingDimension,
           },
           binding: {
             chatMemory: {
@@ -405,7 +405,9 @@ test('local memory setup preserves unsaved settings and reflects readiness, paus
   await card.getByText('Setup completed.', { exact: true }).waitFor();
   assert.equal(await card.getByLabel('Generation API key', { exact: true }).inputValue(), '');
   assert.equal(calls[0].memory, true);
-  assert.equal(calls[0].embeddingDimension, 1536);
+  assert.equal(calls[0].embeddingDimension, 1024);
+  assert.equal(calls[0].embeddingModel, 'text-embedding-v4');
+  assert.equal(calls[0].embeddingBaseUrl, 'https://dashscope.aliyuncs.com/compatible-mode/v1');
   assert.equal(await card.getByLabel('Embedding model', { exact: true }).getAttribute('readonly'), '');
   await save(page);
   assert.equal(writes[0].pets[0].size, 320);
@@ -519,7 +521,7 @@ test('local memory setup cancels background preparation and distinguishes failed
     },
   });
   const card = page.locator('[data-memory-setup]');
-  await card.getByText('正在安装 PowerContext 1.5.0…', { exact: true }).waitFor();
+  await card.getByText('正在安装记忆服务及数据库依赖…', { exact: true }).waitFor();
   assert.equal(await card.getByRole('button', { name: '检查并启用记忆' }).isEnabled(), false);
   await card.getByRole('button', { name: '取消准备', exact: true }).click();
   await card.getByText('已取消准备，已有数据保留。', { exact: true }).waitFor();

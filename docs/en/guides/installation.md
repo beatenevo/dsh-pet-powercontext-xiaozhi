@@ -2,7 +2,7 @@
 
 English · [简体中文](../../zh/guides/installation.md) · [Documentation](../README.md)
 
-These instructions install the **v0.2.0 GitHub Release archive**. As of 2026-11-19, npm `latest` still points to `0.1.0`. See the [README](../../../README.md) for MiniMax subscription and Bailian model settings.
+These commands install **v0.2.0** explicitly. Release archives are also available from [GitHub Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.2.0). See the [README](../../../README.md) for MiniMax subscription and Bailian model settings.
 
 ## Add the plugin to DSH
 
@@ -14,13 +14,13 @@ Run the command for **your DSH profile**:
 
 ```sh
 # DSH browser profile
-dsh plugin --profile web add https://github.com/ob-labs/dsh-pet-powercontext/releases/download/v0.2.0/dsh-pet-powercontext-0.2.0.tgz
+dsh plugin --profile web add dsh-pet-powercontext@0.2.0
 ```
 
 For the DSH desktop app, use this command instead:
 
 ```sh
-dsh plugin --profile desktop add https://github.com/ob-labs/dsh-pet-powercontext/releases/download/v0.2.0/dsh-pet-powercontext-0.2.0.tgz
+dsh plugin --profile desktop add dsh-pet-powercontext@0.2.0
 ```
 
 Restart DSH, open **Settings → Pet Config**, then select **Pet chat** in the right sidebar. Chat uses your configured DSH model.
@@ -34,7 +34,7 @@ Use the standalone command below in PowerShell, or check the [v0.2.0 Release ass
 Install Node.js **22.12+** if needed, then run the following command from any folder:
 
 ```sh
-npx --yes --package=https://github.com/ob-labs/dsh-pet-powercontext/releases/download/v0.2.0/dsh-pet-powercontext-0.2.0.tgz dsh-pet-powercontext --setup
+npx --yes dsh-pet-powercontext@0.2.0 --setup
 ```
 
 The first launch downloads the package and, for graphical pets, may download Electron. In the setup page that opens, choose a provider, enter your API key, select a model and check the connection. Keep the terminal running while using the pet; press **Ctrl+C** to stop it. Run the same command next time.
@@ -52,7 +52,7 @@ Windows x64 uses native installation. Linux has real-service validation; Windows
 ## Update and remove
 
 - **DSH:** run the same `add` command for your profile, then restart DSH.
-- **Standalone command:** stop the process and replace the archive URL with the desired release version and run the `npx` command again.
+- **Standalone command:** stop the process and replace `@0.2.0` with the desired release version and run the `npx` command again.
 - **Windows ZIP:** exit the app, download the desired version from [Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases), and extract it to a new folder. Keep the complete folder together.
 
 Stop a standalone process before having DSH manage the same memory directory. To remove the DSH plugin, run:

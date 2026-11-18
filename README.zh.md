@@ -53,14 +53,14 @@ _后台抽取后，桌宠再次答出项目名 Moonleaf 和“无糖茉莉花茶
 
 ## 先养好一只
 
-以下流程使用 **v0.2.0**。截至 2026-11-19，GitHub Release 已提供安装包，npm 的 `latest` 仍为 `0.1.0`；下面直接安装发布包，避免安装到旧版本。
+以下命令明确安装 **v0.2.0**，也可以从 [GitHub Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.2.0) 下载发布包。
 
 ### 已经在用 DSH
 
 安装 DSH 与 **Node.js 24.9+** 后，在终端执行：
 
 ```sh
-dsh plugin --profile web add https://github.com/ob-labs/dsh-pet-powercontext/releases/download/v0.2.0/dsh-pet-powercontext-0.2.0.tgz
+dsh plugin --profile web add dsh-pet-powercontext@0.2.0
 ```
 
 DSH 桌面版将 `--profile web` 换为 `--profile desktop`。重启 DSH，在「设置 → 桌宠配置」调整桌宠，在右侧栏「桌宠对话」中聊天。若已启用上游 `dsh-pet`，先停用它并保留数据目录。
@@ -70,7 +70,7 @@ DSH 桌面版将 `--profile web` 换为 `--profile desktop`。重启 DSH，在�
 安装 **Node.js 22.12+** 后，在 PowerShell 或终端执行：
 
 ```sh
-npx --yes --package=https://github.com/ob-labs/dsh-pet-powercontext/releases/download/v0.2.0/dsh-pet-powercontext-0.2.0.tgz dsh-pet-powercontext --setup
+npx --yes dsh-pet-powercontext@0.2.0 --setup
 ```
 
 在打开的设置页选择聊天模型、填写密钥并检查连接。使用期间保持终端运行；图形桌宠需要桌面环境，首次启动可能下载 Electron。独立运行不需要先安装 DSH。

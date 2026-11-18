@@ -17,14 +17,14 @@ An animated desktop companion for DeepSeek Harness and standalone use: chat, con
 
 ## Use this package
 
-These instructions use **v0.2.0**. As of 2026-11-19, GitHub Release provides the package while npm `latest` is still `0.1.0`. The commands install the release archive directly to avoid the older version.
+These instructions install **v0.2.0** explicitly. Release archives are also available from [GitHub Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.2.0).
 
 ### Already using DSH
 
 With DSH and **Node.js 24.9+** installed, run:
 
 ```sh
-dsh plugin --profile web add https://github.com/ob-labs/dsh-pet-powercontext/releases/download/v0.2.0/dsh-pet-powercontext-0.2.0.tgz
+dsh plugin --profile web add dsh-pet-powercontext@0.2.0
 ```
 
 For DSH desktop, replace `--profile web` with `--profile desktop`. Restart DSH, open **Settings → Pet Config**, and use **Pet chat** in the sidebar. Disable the upstream `dsh-pet` plugin first if enabled; retain its data directory.
@@ -34,7 +34,7 @@ For DSH desktop, replace `--profile web` with `--profile desktop`. Restart DSH, 
 With **Node.js 22.12+**, run in PowerShell or a terminal:
 
 ```sh
-npx --yes --package=https://github.com/ob-labs/dsh-pet-powercontext/releases/download/v0.2.0/dsh-pet-powercontext-0.2.0.tgz dsh-pet-powercontext --setup
+npx --yes dsh-pet-powercontext@0.2.0 --setup
 ```
 
 Select a chat model, enter its key and check the connection in the setup page. Keep the terminal running. The animated pet needs a desktop environment and may download Electron on first launch. Standalone mode does not require DSH.

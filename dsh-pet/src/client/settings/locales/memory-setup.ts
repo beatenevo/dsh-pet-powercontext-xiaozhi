@@ -50,7 +50,7 @@ export const memorySetupEn = {
   memorySetupEmbeddingHint:
     'Leave the endpoint blank to use the generation endpoint. A key can be reused only at the same endpoint. Existing embedding models, endpoints and dimensions are locked to preserve the stored vectors.',
   memorySetupConsent:
-    'This installs PowerContext and seekdb on the DSH host and enables memory. Git is not required. Existing SQLite configurations are preserved. It requires network access, curl and tar; model checks, extraction and recall may incur charges. Windows support is experimental.',
+    'Automatically installs and enables memory on the DSH host. Internet access is required for installation; model checks, extraction and recall may incur charges.',
   memorySetupStart: 'Check and enable memory',
   memorySetupReady:
     'Memory service is ready. Synced dialogue still needs background extraction before it can be recalled.',
@@ -179,8 +179,7 @@ export const memorySetupZh: Record<keyof typeof memorySetupEn, string> = {
   memorySetupAdvanced: 'Embedding 地址与密钥',
   memorySetupEmbeddingHint:
     '地址留空使用生成服务地址；仅同一地址可复用密钥。已有库的 Embedding 模型、地址和维度固定，以保持向量空间一致。',
-  memorySetupConsent:
-    '将在 DSH 所在机器安装 PowerContext 和 seekdb 并启用记忆，无需 Git；已有 SQLite 配置继续沿用。需要联网和 curl、tar；连接检查、记忆整理和检索可能产生模型费用。Windows 支持仍属实验性。',
+  memorySetupConsent: '将在 DSH 所在机器自动安装并启用记忆。安装需要联网；连接检查、记忆整理和检索可能产生模型费用。',
   memorySetupStart: '检查并启用记忆',
   memorySetupReady: '记忆服务已就绪。已同步的对话还需后台整理，才能进入召回。',
   memorySetupWorking: '正在准备记忆，可以继续聊天。',

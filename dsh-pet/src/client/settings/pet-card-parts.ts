@@ -129,6 +129,20 @@ export function makePetIdentityFields(rt: SettingsRuntime) {
         t('nameHint'),
       ),
       field(
+        t('apiIdLabel'),
+        h('input', {
+          type: 'text',
+          className: INPUT_CLASS,
+          value: pet.apiId ?? '',
+          placeholder: pet.id,
+          'aria-label': t('apiIdLabel'),
+          disabled: busy,
+          maxLength: 64,
+          onChange: (e: ChangeEvent<HTMLInputElement>) => onChange({ apiId: e.target.value.trim() }),
+        }),
+        t('apiIdHint'),
+      ),
+      field(
         t('sizeLabel'),
         sizeInput(pet.size, busy, (v) => onChange({ size: v })),
         t('sizeHint'),

@@ -7,6 +7,7 @@
  * handlePetRoute as the desktop Helper pipe (the behavior of both ends is strictly consistent).
  * @module dsh-pet/src/host/plugin/http-route
  */
+import { type PluginAccess, handleAccessSettings, acceptsAccessToken } from './interface-access.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { ROUTE_SEGMENT } from '../../shared/constants.ts';
 import { readBody, sendFile, sendJson, sendText, type RouteResult } from '../http.ts';
@@ -101,8 +102,9 @@ export function createHttpRoute(deps: PetRouteDeps): {
  * Hang the prefix route to host webServer and automatically remove it with the plugin unmount.
  * @param ctx - host context.
  * @param handlePetRoute - business processing function (the same one as desktop Helper pipeline reuse).
+ * @param access - optional DSH-managed external API credential; standalone retains its own boundary.
  */
-export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHandler): void {
+export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHandler, access?: PluginAccess): void {
   ctx.effect(
     () =>
       ctx.webServer.register({
@@ -117,18 +119,27 @@ export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHan
           } catch {
             // Older host contexts may throw when an optional service is absent.
           }
-          if (typeof connection?.requestRejection === 'function') {
-            const rejection = connection.requestRejection(req);
-            if (rejection !== undefined) {
-              sendJson(res, rejection, { error: 'dsh_access_denied' });
-              return;
-            }
-          }
           let pathname: string;
           try {
             pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://localhost').pathname);
           } catch {
             sendJson(res, 400, failureBody('bad-request', 'invalid request path'));
+            return;
+          }
+          const dsh = typeof connection?.requestRejection === 'function';
+          const hasToken = dsh && req.headers['x-dsh-pet-token'] !== undefined;
+          const management = pathname === ROUTE_SEGMENT + '/access-token';
+          const rejection = dsh ? connection!.requestRejection(req) : undefined;
+          if (management) {
+            if (!dsh || rejection !== undefined || !access) {
+              sendJson(res, rejection ?? 403, { error: 'dsh_access_denied' });
+              return;
+            }
+            await handleAccessSettings(req, res, access, () => connection!.requestRejection(req) === undefined);
+            return;
+          }
+          if (hasToken ? !access || !acceptsAccessToken(req, access) : rejection !== undefined) {
+            sendJson(res, hasToken ? 403 : rejection!, { error: 'dsh_access_denied' });
             return;
           }
           // The management entry point only accepts JSON; cross-site forms cannot trigger downloads, model calls, or process start and stop.
@@ -154,6 +165,10 @@ export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHan
             // PATCH also carries the body (pending partial update); GET / DELETE is not read to avoid waiting needlessly for an end event that will never come.
             const readsBody = req.method === 'PUT' || req.method === 'POST' || req.method === 'PATCH';
             const body = readsBody ? await readBody(req) : undefined;
+            if (hasToken && (!access || !acceptsAccessToken(req, access))) {
+              sendJson(res, 403, { error: 'dsh_access_denied' });
+              return;
+            }
             const result = await handlePetRoute(req.url ?? '/', req.method ?? 'GET', body, abort.signal);
             res.off('close', onClose);
             if (result.kind === 'json') sendJson(res, result.status, result.obj, result.headers);

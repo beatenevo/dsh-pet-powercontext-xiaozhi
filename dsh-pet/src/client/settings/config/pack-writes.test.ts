@@ -86,3 +86,15 @@ describe('diffPackWrites - Edit list → Category layer to be written back', () 
     assert.equal(diffPackWrites(before, current).length, 1);
   });
 });
+
+test('changing or clearing an API alias schedules the pack write without changing identity', () => {
+  const before = loaded();
+  const current = before
+    .flatMap((entry) => entry.pets)
+    .map((item) => (item.id === 'g1' ? { ...item, apiId: 'my-fish' } : item));
+  const changed = diffPackWrites(before, current);
+  assert.equal(changed[0].pets[0].id, 'g1');
+  assert.equal(changed[0].pets[0].apiId, 'my-fish');
+  const saved = [{ key: 'glm', kind: 'pack' as const, pets: [...changed[0].pets] }];
+  assert.equal(diffPackWrites(saved, [{ ...changed[0].pets[0], apiId: '' }]).length, 1);
+});

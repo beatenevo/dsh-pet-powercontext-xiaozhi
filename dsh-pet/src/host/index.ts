@@ -4,6 +4,7 @@
  * created later in this function), `startHelper` must be called last.
  * @module dsh-pet/src/host/index
  */
+import { createPluginAccess } from './plugin/interface-access.ts';
 import { createHostSetup } from './plugin/setup.ts';
 import { createComparisonService } from './comparison/service.ts';
 import { PetObservability } from './observability/service.ts';
@@ -187,7 +188,12 @@ export function apply(ctx: any): void {
     }),
   };
   const httpRoute = createHttpRoute(deps);
-  registerHttpRoute(ctx, httpRoute.handlePetRoute);
+  const connection = setup.optionalService('connection') as { requestRejection?: unknown } | undefined;
+  const access =
+    typeof connection?.requestRejection === 'function'
+      ? createPluginAccess(join(userRoot, 'interface-access-token.json'))
+      : undefined;
+  registerHttpRoute(ctx, httpRoute.handlePetRoute, access);
   deps.memorySetup?.resume();
 
   registerSessionWatch({

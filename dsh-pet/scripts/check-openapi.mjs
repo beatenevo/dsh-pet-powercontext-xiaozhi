@@ -108,6 +108,11 @@ for (const file of routeSources(ROUTES_DIR)) {
   // The asset field has both forward branches and reverse guards (`scope !== 'thumb'` is the thumb branch), both are considered.
   for (const m of src.matchAll(/scope (?:===|!==) '([^']+)'/g)) implemented.add(m[1]);
 }
+// Credential management is dispatched at the authenticated HTTP boundary, outside the IPC router.
+const boundary = readFileSync(join(ROUTES_DIR, '../plugin/http-route.ts'), 'utf8');
+for (const match of boundary.matchAll(/pathname === ROUTE_SEGMENT \+ '\/([^']+)'/g)) {
+  implemented.add(match[1].split('/')[0]);
+}
 const documented = new Set();
 for (const p of Object.keys(doc.paths)) {
   const seg = p.slice('/dsh-pet-7340/'.length).split('/')[0];

@@ -268,3 +268,12 @@ describe('PetCard —— Avatar upload', () => {
     assert.equal(pick.props.title, undefined);
   });
 });
+
+test('API ID edits emit an alias patch and preserve the internal ID', () => {
+  const patches: PetPatch[] = [];
+  const tree = render((patch) => patches.push(patch));
+  const input = control(tree, 'input', (props) => props['aria-label'] === 'apiIdLabel');
+  (input.props.onChange as (event: { target: { value: string } }) => void)({ target: { value: ' fish-api ' } });
+  assert.deepEqual(patches, [{ apiId: 'fish-api' }]);
+  assert.equal(input.props.placeholder, pet.id);
+});

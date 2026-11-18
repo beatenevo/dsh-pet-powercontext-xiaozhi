@@ -21,6 +21,7 @@ export interface PackWrite {
 function fingerprint(pet: Pet): string {
   return JSON.stringify([
     pet.id,
+    pet.apiId ?? '',
     pet.name,
     pet.size,
     pet.sizePercent ?? '',

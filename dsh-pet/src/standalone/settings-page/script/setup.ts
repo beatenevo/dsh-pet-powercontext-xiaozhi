@@ -93,7 +93,7 @@ function wireSetup() {
     const body = { action: 'start', memory: byId('setup-memory').checked, baseUrl: value('setup-url'), model: value('setup-model'), apiKey: value('setup-key') };
     if (body.memory) {
       if (!byId('setup-generation-reuse').checked) body.generation = { baseUrl: value('setup-generation-url'), model: value('setup-generation-model'), apiKey: value('setup-generation-key') };
-      Object.assign(body, { embeddingBaseUrl: value('setup-embedding-url') || (body.generation ? body.generation.baseUrl : body.baseUrl), embeddingModel: value('setup-embedding-model'), embeddingApiKey: value('setup-embedding-key'), embeddingDimension: Number(value('setup-dimension')), embeddingSendDimensions: byId('setup-send-dimensions').checked });
+      Object.assign(body, { database: value('setup-database'), embeddingBaseUrl: value('setup-embedding-url') || (body.generation ? body.generation.baseUrl : body.baseUrl), embeddingModel: value('setup-embedding-model'), embeddingApiKey: value('setup-embedding-key'), embeddingDimension: Number(value('setup-dimension')), embeddingSendDimensions: byId('setup-send-dimensions').checked });
     }
     byId('setup-start').disabled = true;
     try {

@@ -4,7 +4,7 @@ The existing dedicated PowerContext client forwards W3C `traceparent`. This repo
 
 ## Setup
 
-Use Python 3.12+, Git, and a Linux/macOS environment supported by embedded seekdb. From the repository root (for npm installations use the package's `runtime/powercontext` directory):
+For manual setup, use Python 3.12+ and a Linux/macOS environment supported by embedded seekdb. PowerContext is installed from a pinned Python release; Git is not required. From the repository root (for npm installations use the package's `runtime/powercontext` directory):
 
 ```bash
 python3.12 -m venv .venv-seekdb
@@ -20,7 +20,7 @@ export OTEL_EXPORTER_OTLP_TRACES_HEADERS='Authorization=Basic%20BASE64_OF_AGENT_
 .venv-seekdb/bin/python dsh-pet/runtime/powercontext/server.py --sql-text
 ```
 
-Use the same endpoint, Agent and credentials as [pet observability](observability.md). Replace placeholders privately. The entrypoint retains PowerContext authentication and network-binding validation. Python and database dependencies are installed separately, never automatically by the desktop plugin. The requirements pin the qualified PowerContext source revision and database drivers; rerun integration checks when upgrading them.
+Use the same endpoint, Agent and credentials as [pet observability](observability.md). Replace placeholders privately. The entrypoint retains PowerContext authentication and network-binding validation. For managed installation, enable local long-term memory on a fresh installation (seekdb is the default); the application prepares Python and database dependencies. The requirements pin the PowerContext release and database drivers; rerun integration checks when upgrading them.
 
 Use a fresh seekdb directory or an existing directory migrated through PowerContext's supported workflow. Run only one server per directory. SQLite data is not converted automatically; use PowerContext export/import before switching. This entrypoint rejects SQLite fallback. Initial schema migration can take several minutes; wait for readiness before sending chat requests.
 

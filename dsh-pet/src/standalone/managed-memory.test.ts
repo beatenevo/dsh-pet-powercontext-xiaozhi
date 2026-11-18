@@ -120,3 +120,56 @@ test('runtime configuration enables only conversational extraction and scopes bo
     'Bearer embedding-test-key',
   );
 });
+
+test('seekdb storage survives reopening and cannot reinterpret an existing SQLite store', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'pet-seekdb-config-'));
+  const first = new ManagedMemory(home);
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  await first.configure({ ...models, database: 'seekdb' });
+  const file = join(first.directory, 'settings.json');
+  const saved = JSON.parse(readFileSync(file, 'utf8'));
+  const env = managedMemoryEnvironment(first.directory, saved);
+  assert.deepEqual(JSON.parse(env.POWERCONTEXT_SERVER_DATABASE!), {
+    kind: 'seekdb',
+    path: join(first.directory, 'seekdb'),
+    database: 'powercontext',
+  });
+  assert.equal(env.POWERCONTEXT_SERVER_DATABASE_KIND, undefined);
+  await first.dispose();
+  const reopened = new ManagedMemory(home);
+  t.after(() => reopened.dispose());
+  assert.equal(reopened.settings()?.database, 'seekdb');
+  const before = readFileSync(file, 'utf8');
+  await assert.rejects(reopened.configure({ ...models, database: 'sqlite' }), /database_change_requires_new_store/);
+  assert.equal(readFileSync(file, 'utf8'), before);
+});
+
+test('legacy settings without a database field remain SQLite and refuse in-place seekdb conversion', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'pet-legacy-db-'));
+  const memory = new ManagedMemory(home);
+  t.after(async () => {
+    await memory.dispose();
+    rmSync(home, { recursive: true, force: true });
+  });
+  await memory.configure(models);
+  assert.equal(memory.settings()?.database, 'sqlite');
+  await assert.rejects(memory.configure({ ...models, database: 'seekdb' }), /database_change_requires_new_store/);
+});
+
+test('named stores are rejected without changing the saved single-store identity', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'pet-single-store-'));
+  const memory = new ManagedMemory(home);
+  t.after(async () => {
+    await memory.dispose();
+    rmSync(home, { recursive: true, force: true });
+  });
+  await memory.configure({ ...models, database: 'seekdb' });
+  const file = join(memory.directory, 'settings.json');
+  const before = readFileSync(file, 'utf8');
+  assert.equal(memoryModelsSchema.safeParse({ ...models, storeId: 'another' }).success, false);
+  await assert.rejects(
+    memory.configure({ ...models, database: 'seekdb', embeddingModel: 'different' }),
+    /embedding_change_requires_new_store/,
+  );
+  assert.equal(readFileSync(file, 'utf8'), before);
+});

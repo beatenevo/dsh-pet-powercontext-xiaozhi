@@ -31,10 +31,15 @@ export interface StandaloneTextBlock {
   text: string;
 }
 
-/** Streaming text assemble: only collects text blocks, standalone mode will only have empty streams. */
+/** Assemble standalone text events; transport failures propagate as exceptions. */
 export class BlockAssembler {
   /** Collected text fragments. */
   private readonly chunks: string[] = [];
+
+  /** Match DSH's default finish when the stream completes without a terminal chunk. */
+  get finish(): { kind: 'stop' } {
+    return { kind: 'stop' };
+  }
 
   /** Collect a block of text; other types are ignored. */
   push(chunk: unknown): void {

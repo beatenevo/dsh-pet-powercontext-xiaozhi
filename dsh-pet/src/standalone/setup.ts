@@ -71,7 +71,7 @@ const messages: Record<Stage, string> = {
   checking_runtime: '正在检查本机运行环境…',
   downloading: '正在下载并校验安装工具；首次下载可能需要几分钟…',
   installing_python: '正在准备本机 Python 环境…',
-  installing_memory: '正在安装 PowerContext 1.5.0…',
+  installing_memory: '正在安装记忆服务及数据库依赖…',
   starting: '正在启动记忆服务并检查就绪状态…',
   restoring: '正在恢复原来的记忆服务，请稍候…',
   saving: '正在保存连接…',
@@ -199,6 +199,7 @@ export function createSetup(
     if (!embeddingApiKey) throw new Error('embedding_key_required');
     const models = memory.validateModels({
       ...generation,
+      database: input.database,
       apiKey: generationKey,
       embeddingBaseUrl: input.embeddingBaseUrl,
       embeddingModel: input.embeddingModel,

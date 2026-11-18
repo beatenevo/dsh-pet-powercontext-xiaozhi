@@ -19,6 +19,10 @@ export const setupErrors: Record<string, string> = {
   embedding_timeout: 'Embedding 服务响应超时。请检查网络后重试。',
   embedding_connection: '无法连接 Embedding 服务。请检查地址和网络。',
   embedding_change_requires_new_store: '已有记忆库的 Embedding 地址、模型和维度不能更换；请保留原值。密钥可以更新。',
+  database_change_requires_new_store:
+    '已有记忆库不能直接更换数据库类型，请连接独立服务或使用新的数据目录。原有记忆保留。',
+  seekdb_unsupported_architecture:
+    'Windows 原生 seekdb 需要 x64 Node.js/Python 运行环境，当前固定版本不提供 Windows ARM64 安装包。',
   memory_already_owned: '另一个桌宠进程正在管理此记忆库，请从原来的桌宠窗口继续使用。',
   unsupported_platform: '此系统暂不支持自动安装，请在配置页连接已有 PowerContext 服务。',
   memory_not_ready: '记忆服务启动检查超时。请重试；如仍失败，请检查模型连接和本机环境。',

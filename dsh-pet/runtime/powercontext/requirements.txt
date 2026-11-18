@@ -1,4 +1,4 @@
-# Qualified PowerContext API revision; upgrade together with the integration checks.
-powercontext[server,seekdb,tracing-otlp] @ git+https://github.com/oceanbase/powercontext.git@fa80ab6b20f8c43363f927bd8c09a4f9491c26e3
+# Pinned Python release; upgrade together with the integration checks.
+powercontext[server,seekdb,tracing-otlp]==1.5.2
 pymysql==1.2.0
 pylibseekdb==1.4.0.post2

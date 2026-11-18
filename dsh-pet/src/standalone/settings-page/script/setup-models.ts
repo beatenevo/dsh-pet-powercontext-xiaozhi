@@ -30,6 +30,8 @@ function setupControls() {
   for (const suffix of ['url', 'model']) byId('setup-generation-' + suffix).required = generation;
   for (const id of ['setup-embedding-model', 'setup-dimension']) byId(id).required = memory;
   const locked = !!(setupData && setupData.models);
+  for (const id of ['setup-embedding-url', 'setup-embedding-model', 'setup-dimension']) byId(id).readOnly = locked;
+  byId('setup-database').disabled = true;
   for (const suffix of ['provider', 'url', 'model', 'key', 'fetch']) byId('setup-embedding-' + suffix).disabled = !memory || (locked && ['provider', 'fetch'].includes(suffix));
   byId('setup-dimension').disabled = !memory;
   byId('setup-send-dimensions').disabled = !memory || locked;
@@ -62,6 +64,7 @@ function fillSetup(data) {
     byId('setup-provider').value = (setupPresets.find((entry) => sameSetupEndpoint(entry.baseUrl, chat.baseUrl)) || { id: 'custom' }).id;
   }
   const models = data.models;
+  byId('setup-database').value = models && models.database || 'seekdb';
   byId('setup-generation-reuse').checked = !models || !models.baseUrl ||
     (sameSetupEndpoint(models.baseUrl, byId('setup-url').value) && models.model === byId('setup-model').value);
   for (const prefix of ['setup-generation', 'setup-embedding']) {

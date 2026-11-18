@@ -12,6 +12,12 @@ export interface ModelPreset {
 export const MODEL_PRESETS: readonly ModelPreset[] = [
   { id: 'deepseek', name: 'DeepSeek', baseUrl: 'https://api.deepseek.com', model: 'deepseek-flash' },
   {
+    id: 'minimax-cn',
+    name: 'MiniMax · 中国（订阅 Key）',
+    baseUrl: 'https://api.minimax.cn/v1',
+    model: 'MiniMax-M3.1-Flash',
+  },
+  {
     id: 'openai',
     name: 'OpenAI',
     baseUrl: 'https://api.openai.com/v1',
@@ -23,7 +29,7 @@ export const MODEL_PRESETS: readonly ModelPreset[] = [
     name: 'Qwen · Beijing',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     model: 'qwen3.7-plus',
-    embedding: { model: 'qwen3.7-text-embedding', dimension: 1024, sendDimensions: true },
+    embedding: { model: 'text-embedding-v4', dimension: 1024, sendDimensions: true },
   },
   {
     id: 'qwen-sg',

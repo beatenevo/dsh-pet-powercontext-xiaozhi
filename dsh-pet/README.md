@@ -39,20 +39,24 @@ Choose a provider, enter your API key and check the connection in the setup page
 
 Long-term memory is optional. In DSH, use **Settings → Pet Config → Local long-term memory**; standalone users can enable it in the setup page. Chat, extraction and embeddings can use separate providers, including DeepSeek, OpenAI, Qwen, SiliconFlow, Ark, Zhipu, Kimi, Ollama and optional LiteLLM gateways. See [model configuration](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/en/guides/models.md).
 
+New DSH memory setups default to MiniMax China subscription generation and Bailian `text-embedding-v4` (1024 dimensions). Enabling memory prepares isolated Python, the pinned PowerContext release and a single seekdb database automatically; Git is not required. Existing SQLite settings remain unchanged. AI Vision is optional and takes effect for the managed server after a memory restart. Native Windows x64 and macOS installation still require real-host qualification.
+
 <a id="implementation"></a>
 
 ## Understand the implementation
 
-| Source                                | Responsibility                                                                      |
-| ------------------------------------- | ----------------------------------------------------------------------------------- |
-| `src/host/index.ts`                   | Cordis host plugin assembly: `name`, `inject`, `apply`.                             |
-| `src/client/index.ts`                 | Browser plugin and UI registration, exported through `dsh-pet-powercontext/client`. |
-| `src/host/plugin/chat-memory.ts`      | Local chat journal, delivery queue and prompt assembly.                             |
-| `src/host/powercontext.ts`            | Bounded PowerContext capture and recall client.                                     |
-| `src/host/powercontext-library.ts`    | Memory list, provenance, correction and forgetting.                                 |
-| `src/standalone/managed-memory.ts`    | Local runtime, health checks and persistent service identity.                       |
-| `src/host/plugin/managed-memory.ts`   | Managed memory lifecycle within DSH.                                                |
-| `src/client/settings/memory-setup.ts` | DSH memory setup and service controls.                                              |
+| Source                                   | Responsibility                                                                      |
+| ---------------------------------------- | ----------------------------------------------------------------------------------- |
+| `src/host/index.ts`                      | Cordis host plugin assembly: `name`, `inject`, `apply`.                             |
+| `src/client/index.ts`                    | Browser plugin and UI registration, exported through `dsh-pet-powercontext/client`. |
+| `src/host/plugin/chat-memory.ts`         | Local chat journal, delivery queue and prompt assembly.                             |
+| `src/host/powercontext.ts`               | Bounded PowerContext capture and recall client.                                     |
+| `src/host/powercontext-library.ts`       | Memory list, provenance, correction and forgetting.                                 |
+| `src/standalone/memory-observability.ts` | Private managed seekdb OTLP configuration at process startup.                       |
+| `src/standalone/memory-runtime.ts`       | Isolated SQLite/seekdb runtime locations and packaged server entry.                 |
+| `src/standalone/managed-memory.ts`       | Local runtime, health checks and persistent service identity.                       |
+| `src/host/plugin/managed-memory.ts`      | Managed memory lifecycle within DSH.                                                |
+| `src/client/settings/memory-setup.ts`    | DSH memory setup and service controls.                                              |
 
 Package exports include the host entry, `./client`, `./src/*`, `./cordis.patch.yml` and `./package.json`. The executable `dsh-pet-powercontext` starts standalone mode.
 

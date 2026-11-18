@@ -440,6 +440,21 @@ test('testConnection checks parameters and reports success or friendly error', a
   );
 });
 
+test('standalone rejects truncated text instead of marking a comparison answer complete', async () => {
+  await fixture(
+    async (ai) => {
+      await assert.rejects(collect(ai.stream(options)), /could not answer/);
+    },
+    async () =>
+      new Response(
+        'data: ' +
+          JSON.stringify({ choices: [{ index: 0, delta: { content: 'partial answer' }, finish_reason: 'length' }] }) +
+          '\n\ndata: [DONE]\n\n',
+        { headers: { 'content-type': 'text/event-stream' } },
+      ),
+  );
+});
+
 test('standalone streams preserve reported OpenAI cache usage without duplicating text', async () => {
   await fixture(
     async (ai) => {
@@ -559,6 +574,33 @@ test('Anthropic-compatible streams without optional usage keep chat available an
         },
       ),
     'anthropic',
+  );
+});
+
+test('MiniMax China requests final stream usage without changing other compatible endpoints', async () => {
+  let expectUsage = true;
+  await fixture(
+    async (ai) => {
+      await ai.saveSettings(profilePatch({ baseUrl: 'https://api.minimax.cn/v1' }));
+      const parts = [];
+      for await (const part of ai.stream(options)) parts.push(part);
+      assert.deepEqual(parts.find((part) => part.type === 'usage')?.usage, {
+        inputTokens: 209,
+        outputTokens: 25,
+        cacheReadTokens: 0,
+      });
+      expectUsage = false;
+      await ai.saveSettings(config);
+      assert.equal(await collect(ai.stream(options)), 'hello');
+    },
+    async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      assert.deepEqual(body.stream_options, expectUsage ? { include_usage: true } : undefined);
+      return new Response(
+        'data: {"choices":[{"index":0,"delta":{"content":"hello"}}]}\n\ndata: {"choices":[],"usage":{"prompt_tokens":209,"completion_tokens":25,"prompt_tokens_details":{"cached_tokens":0}}}\n\ndata: [DONE]\n\n',
+        { headers: { 'content-type': 'text/event-stream' } },
+      );
+    },
   );
 });
 

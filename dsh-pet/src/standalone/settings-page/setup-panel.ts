@@ -27,10 +27,11 @@ export const setupPanel = `
 <div class="field" id="setup-reuse-row" hidden><label><input id="setup-reuse" type="checkbox"> 沿用当前聊天配置</label><p id="setup-saved-chat" class="fieldHint"></p></div>
 <div class="field"><label for="setup-provider">聊天服务商</label><select id="setup-provider">${providerOptions()}</select></div>
 <div class="field"><label for="setup-url">聊天接口地址</label><input id="setup-url" type="url" required maxlength="2048" value="https://api.deepseek.com" spellcheck="false"></div>
-<div class="field"><label for="setup-key">聊天 API 密钥</label><input id="setup-key" type="password" maxlength="4096" autocomplete="new-password"><p id="setup-key-hint" class="fieldHint">密钥只保存在本机。</p></div>
+<div class="field"><label for="setup-key">聊天 API 密钥</label><input id="setup-key" type="password" maxlength="4096" autocomplete="new-password"><p id="setup-key-hint" class="fieldHint">密钥只保存在本机。MiniMax 套餐请填写 sk-cp- 开头的订阅 Key，按量 API Key 不共用订阅额度。</p></div>
 ${modelField('setup', '聊天模型', 'deepseek-flash')}
-<p class="fieldHint">获取列表后，在模型输入框中选择，也可直接填写模型 ID。列表不代表账户已开通或模型已验证。Ollama 请先在本机安装并下载模型；LiteLLM 需自行部署网关。</p>
-<div class="field"><label><input id="setup-memory" type="checkbox"> 开启本机长期记忆</label><p class="fieldHint">自动准备 PowerContext 1.5.0，以后随桌宠启停。连接检查、聊天、记忆整理和检索可能产生模型费用。</p></div>
+<p class="fieldHint">可从列表选择或填写模型 ID，请确认账户已开通对应模型。</p>
+<div class="field"><label><input id="setup-memory" type="checkbox"> 开启本机长期记忆</label><p class="fieldHint">自动准备 PowerContext 与记忆数据库，以后随桌宠启停。连接检查、聊天、记忆整理和检索可能产生模型费用。</p></div>
+<div class="field"><label for="setup-database">记忆数据库</label><input id="setup-database" type="text" value="seekdb" readonly><p class="fieldHint">自动安装，用于保存长期记忆。已有库不能直接切换存储类型。</p></div>
 <details id="setup-model-details"><summary>记忆模型：独立选择整理和向量服务</summary>
 <div id="setup-embedding-fields" hidden>
 <div class="field"><label><input id="setup-generation-reuse" type="checkbox" checked> 记忆整理沿用聊天模型</label></div>
@@ -49,7 +50,7 @@ ${modelField('setup-embedding', 'Embedding 模型')}
 <p class="fieldHint" id="setup-embedding-hint">DeepSeek、Kimi 等生成服务需另配向量模型；可以混用服务商。本机无认证服务的密钥可留空。</p>
 </div></details>
 </fieldset>
-<p class="fieldHint">首次安装需要联网和系统 curl、tar。Windows 自动记忆服务仍属实验性支持；Anthropic 或已有远程服务请到「配置」。</p>
+<p class="fieldHint">首次安装需要联网。使用 Anthropic 或已有远程服务，请到「配置」。</p>
 <div class="footer"><button class="btn primary" id="setup-start" type="submit">开始养鱼</button><button class="btn" id="setup-chat" type="button" hidden>去聊天</button></div>
 </div></form>
 <div class="card"><div class="cardHead"><h2 class="cardTitle">准备进度</h2></div>

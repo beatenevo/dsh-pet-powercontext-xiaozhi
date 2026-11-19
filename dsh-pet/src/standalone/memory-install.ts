@@ -188,7 +188,7 @@ async function findSystemPython(uv: string, env: NodeJS.ProcessEnv, signal: Abor
       [
         '-I',
         '-c',
-        'import sys, platform, struct, sysconfig, venv, json; print(json.dumps({"implementation": sys.implementation.name, "major": sys.version_info.major, "minor": sys.version_info.minor, "bits": struct.calcsize("P") * 8, "machine": (sysconfig.get_platform().removeprefix("win-") if sys.platform == "win32" else platform.machine()).lower(), "freeThreaded": bool(sysconfig.get_config_var("Py_GIL_DISABLED"))}))',
+        'import sys, platform, struct, sysconfig, venv, sqlite3, json; print(json.dumps({"implementation": sys.implementation.name, "major": sys.version_info.major, "minor": sys.version_info.minor, "bits": struct.calcsize("P") * 8, "machine": (sysconfig.get_platform().removeprefix("win-") if sys.platform == "win32" else platform.machine()).lower(), "sqliteExtensions": hasattr(sqlite3.Connection, "enable_load_extension"), "freeThreaded": bool(sysconfig.get_config_var("Py_GIL_DISABLED"))}))',
       ],
       options,
     );
@@ -207,6 +207,7 @@ async function findSystemPython(uv: string, env: NodeJS.ProcessEnv, signal: Abor
     if (!('bits' in runtime) || runtime.bits !== 64) return undefined;
     if (!('machine' in runtime) || typeof runtime.machine !== 'string' || !machines.includes(runtime.machine))
       return undefined;
+    if (!('sqliteExtensions' in runtime) || runtime.sqliteExtensions !== true) return undefined;
     if (!('freeThreaded' in runtime) || runtime.freeThreaded !== false) return undefined;
     return python;
   } catch {
@@ -232,6 +233,23 @@ export async function installMemoryRuntime(
       : 'from importlib.metadata import version; assert version("powercontext") == "1.5.0"; import uvicorn';
   const python = join(directory, 'venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
   const env = memoryProcessEnv(directory);
+  if (existsSync(python)) {
+    try {
+      // PowerContext migration snapshots need SQLite extensions even with seekdb storage.
+      await runMemoryCommand(
+        python,
+        ['-I', '-c', 'import sqlite3; c = sqlite3.connect(":memory:"); c.enable_load_extension(True); c.close()'],
+        env,
+        signal,
+      );
+    } catch (error) {
+      signal.throwIfAborted();
+      if (!(error instanceof MemoryCommandError) || error.exitSignal || error.message !== 'runtime_command_failed')
+        throw error;
+      // Replace only the private interpreter environment; keep database files and the download cache.
+      rmSync(join(directory, 'venv'), { recursive: true, force: true });
+    }
+  }
   if (existsSync(python)) {
     try {
       await runMemoryCommand(python, ['-c', check], env, signal);

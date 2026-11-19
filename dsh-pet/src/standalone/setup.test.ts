@@ -241,7 +241,7 @@ function fakeInstalledRuntime(directory: string): void {
   writeFileSync(
     join(bin, 'python'),
     `#!${process.execPath}
-if (process.argv[3]?.includes('importlib.metadata')) process.exit(0);
+if (process.argv.some(arg => arg.includes('importlib.metadata') || arg.includes('import sqlite3;'))) process.exit(0);
 const http = require('node:http');
 const server = http.createServer((_req, res) => {res.setHeader('content-type','application/json');res.end('{"status":"ready"}');});
 server.listen(Number(process.env.POWERCONTEXT_SERVER_HTTP_PORT), '127.0.0.1');
@@ -639,7 +639,7 @@ test(
     const python = join(memory.directory, 'venv', 'bin', 'python');
     writeFileSync(
       python,
-      `#!${process.execPath}\nif (process.argv[3]?.includes('importlib.metadata')) process.exit(0);\nconsole.error('synthetic-private-child-output'); process.exit(23);\n`,
+      `#!${process.execPath}\nif (process.argv.some(arg => arg.includes('importlib.metadata') || arg.includes('import sqlite3;'))) process.exit(0);\nconsole.error('synthetic-private-child-output'); process.exit(23);\n`,
       { mode: 0o700 },
     );
     await memory.dispose();

@@ -146,18 +146,30 @@ for (const scenario of [
   'free-threaded',
   'pypy',
   'wrong-arch',
+  'no-sqlite-extensions',
+  'existing-no-sqlite-extensions',
 ] as const) {
   test(
     `runtime installation selects Python and preserves cache: ${scenario}`,
     { skip: process.platform === 'win32' },
     async (t) => {
-      const rejected = ['incompatible', '3.10', '3.15', 'free-threaded', 'pypy', 'wrong-arch'].includes(scenario);
+      const rejected = [
+        'incompatible',
+        '3.10',
+        '3.15',
+        'free-threaded',
+        'pypy',
+        'wrong-arch',
+        'no-sqlite-extensions',
+        'existing-no-sqlite-extensions',
+      ].includes(scenario);
       const runtime = {
         implementation: scenario === 'pypy' ? 'pypy' : 'cpython',
         major: 3,
         minor: scenario.startsWith('3.') ? Number(scenario.slice(2)) : 12,
         bits: 64,
         machine: scenario === 'wrong-arch' ? 'unsupported' : process.arch === 'arm64' ? 'aarch64' : 'x86_64',
+        sqliteExtensions: !scenario.includes('no-sqlite-extensions'),
         freeThreaded: scenario === 'free-threaded',
       };
       const directory = mkdtempSync(join(tmpdir(), 'pet-python-reuse-'));
@@ -195,6 +207,10 @@ if (args.includes('--offline') && args[0] === 'pip') {
 `,
         { mode: 0o700 },
       );
+      if (scenario === 'existing-no-sqlite-extensions') {
+        mkdirSync(join(directory, 'venv', 'bin'), { recursive: true });
+        writeFileSync(python, `#!${process.execPath}\nprocess.exit(1);\n`, { mode: 0o700 });
+      }
       const stages: string[] = [];
       const job = installMemoryRuntime(
         directory,

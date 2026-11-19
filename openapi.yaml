@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: dsh-pet HTTP API
-  version: 0.2.0
+  version: 0.2.1
   summary: Host HTTP API for the DSH desktop pet
   description: |
     The plugin registers `/dsh-pet-7340` with DSH's `webServer` service. Browser settings,

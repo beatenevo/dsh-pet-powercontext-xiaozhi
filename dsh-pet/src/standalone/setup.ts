@@ -8,7 +8,7 @@ import { discoverSetupModels } from './setup-discovery.ts';
 import type { ModelDiscoveryResult } from './ai-provider/types.ts';
 import type { StandaloneAiService } from './ai-provider.ts';
 import { ManagedMemory, memoryModelsSchema } from './managed-memory.ts';
-import type { MemoryStage } from './memory-install.ts';
+import { MemoryCommandError, type MemoryStage } from './memory-install.ts';
 import {
   checkEmbedding,
   checkGeneration,
@@ -69,9 +69,13 @@ const messages: Record<Stage, string> = {
   checking: '正在检查聊天模型…',
   checking_embedding: '正在检查 Embedding 模型与向量维度…',
   checking_runtime: '正在检查本机运行环境…',
-  downloading: '正在下载并校验安装工具；首次下载可能需要几分钟…',
-  installing_python: '正在准备本机 Python 环境…',
-  installing_memory: '正在安装记忆服务及数据库依赖…',
+  downloading: '正在下载并校验 uv 安装工具；首次下载可能需要几分钟…',
+  checking_python: '正在查找兼容的本机 Python 3.11–3.14…',
+  reusing_python: '正在使用本机 Python 3.11–3.14 创建独立环境…',
+  using_cached_dependencies: '正在从本机缓存安装依赖…',
+  installing_python: '正在下载 Python 并创建独立环境…',
+  installing_memory: '正在联网补齐并安装记忆服务及数据库依赖（保留缓存供重试）…',
+  validating_runtime: '正在验证 Python、PowerContext 与数据库运行环境…',
   starting: '正在启动记忆服务并检查就绪状态…',
   restoring: '正在恢复原来的记忆服务，请稍候…',
   saving: '正在保存连接…',
@@ -124,6 +128,9 @@ export function createSetup(
   let message = messages[stage];
   let memory: ManagedMemory | undefined;
   let errorCode: string | undefined;
+  let failedStage: Stage | undefined;
+  let runtimeExitCode: number | undefined;
+  let runtimeExitSignal: string | undefined;
   try {
     memory = new ManagedMemory(home);
     if (memory.settings() && !memory.enabled) {
@@ -142,9 +149,14 @@ export function createSetup(
   let canCancel = false;
   let lastDraft: Draft | undefined;
   let startedAt: number | undefined;
+  let stageStartedAt: number | undefined;
   const progress = (next: Stage): void => {
     stage = next;
+    stageStartedAt = Date.now();
     errorCode = undefined;
+    failedStage = undefined;
+    runtimeExitCode = undefined;
+    runtimeExitSignal = undefined;
     message = messages[next];
   };
   const launch = (work: () => Promise<void>, cancellable = true): void => {
@@ -159,6 +171,11 @@ export function createSetup(
         if (controller.signal.aborted && !(error instanceof Error && error.message === 'recovery_failed'))
           progress('cancelled');
         else {
+          failedStage = stage;
+          if (error instanceof MemoryCommandError) {
+            runtimeExitCode = error.exitCode ?? undefined;
+            runtimeExitSignal = error.exitSignal ?? undefined;
+          }
           stage = 'error';
           errorCode = setupErrorCode(error);
           message = setupErrorMessage(error);
@@ -282,10 +299,14 @@ export function createSetup(
       return {
         stage,
         errorCode,
+        failedStage,
+        runtimeExitCode,
+        runtimeExitSignal,
         message,
         busy: !!job,
         canCancel: !!job && canCancel,
         startedAt,
+        stageStartedAt,
         chatReady: ai?.isReady() ?? false,
         memoryReady: memory?.enabled === true && memory.ready,
         memoryEnabled: memory?.enabled === true,

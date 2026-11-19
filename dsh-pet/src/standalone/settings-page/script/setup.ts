@@ -26,7 +26,7 @@ function showSetup(data) {
     if (!setupDirty) fillSetup(data);
   }
   const completed = setupWasBusy && !data.busy;
-  setStatus(byId('setup-status'), data.message, data.stage === 'error' ? 'error' : data.stage === 'ready' ? 'ok' : '');
+  setStatus(byId('setup-status'), data.message + (data.failedStage ? ' · 失败阶段：' + data.failedStage : '') + (data.runtimeExitCode !== undefined ? ' · exit=' + data.runtimeExitCode : '') + (data.runtimeExitSignal ? ' · signal=' + data.runtimeExitSignal : ''), data.stage === 'error' ? 'error' : data.stage === 'ready' ? 'ok' : '');
   byId('setup-start').disabled = data.busy;
   byId('setup-fields').disabled = data.busy;
   byId('setup-retry').hidden = data.busy || !data.canRetry || (data.memoryReady && data.stage !== 'error');
@@ -42,10 +42,10 @@ function showSetup(data) {
   byId('setup-checks').textContent = '聊天：' + (data.chatReady ? '已配置' : '待配置') + ' · 长期记忆：' + memory;
   byId('setup-steps').hidden = !data.busy;
   const step = ['checking', 'checking_embedding'].includes(data.stage) ? 0
-    : ['checking_runtime', 'downloading', 'installing_python', 'installing_memory'].includes(data.stage) ? 1 : 2;
+    : ['checking_runtime', 'downloading', 'checking_python', 'reusing_python', 'installing_python', 'using_cached_dependencies', 'installing_memory', 'validating_runtime'].includes(data.stage) ? 1 : 2;
   Array.from(byId('setup-steps').children).forEach((li, i) => { if (i === step) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current'); });
   byId('setup-elapsed').hidden = !data.busy;
-  byId('setup-elapsed').textContent = data.startedAt ? '已等待 ' + Math.max(0, Math.floor((Date.now() - data.startedAt) / 1000)) + ' 秒；可取消，不会删除记忆。' : '';
+  byId('setup-elapsed').textContent = data.startedAt ? '已等待 ' + Math.max(0, Math.floor((Date.now() - data.startedAt) / 1000)) + ' 秒' + (data.stageStartedAt ? ' · 当前阶段 ' + Math.max(0, Math.floor((Date.now() - data.stageStartedAt) / 1000)) + ' 秒' : '') + '；可取消，不会删除记忆。' : '';
   if (completed) {
     loadAi(); loadPets();
     if (data.stage === 'ready' || data.stage === 'stopped') { setupDirty = false; fillSetup(data); }

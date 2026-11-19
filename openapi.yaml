@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: dsh-pet HTTP API
-  version: 0.2.0
+  version: 0.2.1
   summary: Host HTTP API for the DSH desktop pet
   description: |
     The plugin registers `/dsh-pet-7340` with DSH's `webServer` service. Browser settings,
@@ -3927,6 +3927,15 @@ components:
             description: Space UUID; may be empty while disabled.,
           }
         allowInsecureHttp: { type: boolean }
+        captureContent:
+          type: boolean
+          description: "Current input and final reply, bounded to 4000 characters each. Preselected for new configurations; omitted updates preserve the current choice. Legacy saved configurations without this field keep capture disabled."
+        includeBackground:
+          {
+            type: boolean,
+            default: false,
+            description: "Include background and maintenance traces; managed memory restart required.",
+          }
     ObservabilityStatus:
       type: object
       required: [config, hasKey, interactions]
@@ -5532,8 +5541,12 @@ components:
               checking_embedding,
               checking_runtime,
               downloading,
+              checking_python,
+              reusing_python,
+              using_cached_dependencies,
               installing_python,
               installing_memory,
+              validating_runtime,
               starting,
               restoring,
               saving,
@@ -5549,12 +5562,25 @@ components:
             type: string,
             description: "Known error code, unknown exception is uniformly setup_failed.",
           }
+        failedStage: { type: string, description: Last failed setup phase. }
+        runtimeExitCode:
+          {
+            type: integer,
+            description: Child exit code without process output.,
+          }
+        runtimeExitSignal:
+          { type: string, description: Signal terminating the child process. }
         busy: { type: boolean }
         canCancel: { type: boolean }
         startedAt:
           {
             type: integer,
             description: "The start time of this operation, Unix milliseconds.",
+          }
+        stageStartedAt:
+          {
+            type: integer,
+            description: Start of the current preparation phase in Unix milliseconds.,
           }
         chatReady:
           {

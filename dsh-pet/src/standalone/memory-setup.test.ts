@@ -30,7 +30,7 @@ test(
     writeFileSync(
       join(bin, 'python'),
       `#!${process.execPath}
-if (process.argv[3]?.includes('importlib.metadata')) process.exit(0);
+if (process.argv.some(arg => arg.includes('importlib.metadata') || arg.includes('import sqlite3;'))) process.exit(0);
 const server = require('node:http').createServer((_req, res) => {res.setHeader('content-type','application/json');res.end('{"status":"ready"}');});
 server.listen(Number(process.env.POWERCONTEXT_SERVER_HTTP_PORT), '127.0.0.1');
 process.stdin.resume(); process.stdin.on('end', () => server.close());

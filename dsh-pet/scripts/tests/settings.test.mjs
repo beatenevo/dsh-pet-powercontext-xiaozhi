@@ -145,6 +145,7 @@ async function assertSaveDisabled(page) {
 test('optional memory stays off by default and saves its backend and separate byte budgets', async (t) => {
   const { page, writes } = await open(t);
   const field = (text) => page.locator('.dsh-pet-cfg__field').filter({ hasText: text });
+  await page.getByText('Existing memory service (advanced)', { exact: true }).click();
   const backend = field('Long-term memory').locator('select');
   assert.equal(await backend.inputValue(), 'native');
   await backend.selectOption('powercontext');
@@ -395,7 +396,7 @@ test('local memory setup preserves unsaved settings and reflects readiness, paus
     },
   });
   const card = page.locator('[data-memory-setup]');
-  await card.getByText('Local long-term memory', { exact: true }).waitFor();
+  await card.getByText('Local long-term memory (automatic setup)', { exact: true }).waitFor();
   await card.getByLabel('Memory model preset', { exact: true }).selectOption('openai');
   await card.getByLabel('Generation API key', { exact: true }).fill('synthetic-key');
   const size = page.locator('input[type="number"]').first();
@@ -521,7 +522,15 @@ test('local memory setup cancels background preparation and distinguishes failed
     },
   });
   const card = page.locator('[data-memory-setup]');
-  await card.getByText('正在安装记忆服务及数据库依赖…', { exact: true }).waitFor();
+  await card.getByText('正在联网补齐并安装记忆服务及数据库依赖（保留缓存供重试）…', { exact: true }).waitFor();
+  for (const [stage, message] of [
+    ['checking_python', '正在查找兼容的本机 Python 3.11–3.14…'],
+    ['reusing_python', '正在使用本机 Python 3.11–3.14 创建独立环境…'],
+    ['using_cached_dependencies', '正在从本机缓存安装依赖…'],
+  ]) {
+    snapshot = { ...snapshot, stage };
+    await card.getByText(message, { exact: true }).waitFor();
+  }
   assert.equal(await card.getByRole('button', { name: '检查并启用记忆' }).isEnabled(), false);
   await card.getByRole('button', { name: '取消准备', exact: true }).click();
   await card.getByText('已取消准备，已有数据保留。', { exact: true }).waitFor();

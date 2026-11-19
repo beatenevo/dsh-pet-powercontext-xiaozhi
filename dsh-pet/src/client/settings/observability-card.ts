@@ -116,6 +116,12 @@ export function makeObservabilityCard(rt: SettingsRuntime): FunctionComponent {
         cardHead(t('observationTitle'), t('observationHint')),
         h('p', { children: t('observationHint') }),
         toggleCell('observationEnabled', draft.enabled, busy || !status, (enabled) => setDraft({ ...draft, enabled })),
+        toggleCell('observationContent', draft.captureContent === true, busy || !status, (captureContent) =>
+          setDraft({ ...draft, captureContent }),
+        ),
+        toggleCell('observationBackground', draft.includeBackground === true, busy || !status, (includeBackground) =>
+          setDraft({ ...draft, includeBackground }),
+        ),
         input('baseUrl', 'observationBaseUrl'),
         input('agentId', 'observationAgentId'),
         input('spaceId', 'observationSpaceId'),

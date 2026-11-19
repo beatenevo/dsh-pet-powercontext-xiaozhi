@@ -13,6 +13,7 @@ export function memoryObservabilityEnvironment(directory: string): NodeJS.Proces
     const authorization = Buffer.from(config.agentId + ':' + config.spaceKey).toString('base64');
     return {
       POWERCONTEXT_SERVER_TRACING_ENABLED: 'true',
+      OTEL_TRACES_SAMPLER: config.includeBackground ? 'parentbased_always_on' : 'parentbased_always_off',
       OTEL_SERVICE_NAME: 'dsh-pet-powercontext',
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: config.baseUrl.replace(/\/+$/, '') + '/api/public/otel/v1/traces',
       OTEL_EXPORTER_OTLP_TRACES_HEADERS: 'Authorization=Basic%20' + authorization,

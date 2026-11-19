@@ -25,6 +25,7 @@ function setup(overrides: Partial<ComparisonDependencies> = {}) {
       run: async (_operation: string, task: () => Promise<unknown>) => task(),
       fields() {},
       reference() {},
+      content() {},
     } as unknown as PetObservability,
     client: () => ({
       createComparisonScope: async (id) => {

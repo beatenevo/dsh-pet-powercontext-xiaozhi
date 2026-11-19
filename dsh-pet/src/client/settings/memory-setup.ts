@@ -100,6 +100,16 @@ export function makeMemorySetup(rt: SettingsRuntime) {
           'aria-live': 'polite',
           children: detail ? translatedError : t('memorySetupStage_' + stage),
         }),
+        status?.failedStage
+          ? h('p', {
+              children:
+                t('memorySetupFailedStage') +
+                ': ' +
+                t('memorySetupStage_' + status.failedStage) +
+                (status.runtimeExitCode !== undefined ? ' · exit=' + status.runtimeExitCode : '') +
+                (status.runtimeExitSignal ? ' · signal=' + status.runtimeExitSignal : ''),
+            })
+          : null,
         status
           ? h('p', {
               className: 'dsh-pet-cfg__note',
@@ -116,10 +126,18 @@ export function makeMemorySetup(rt: SettingsRuntime) {
           : null,
         status?.busy && status.startedAt
           ? h('p', {
-              children: t('memorySetupElapsed').replace(
-                '{seconds}',
-                String(Math.max(0, Math.floor((Date.now() - status.startedAt) / 1000))),
-              ),
+              children:
+                t('memorySetupElapsed').replace(
+                  '{seconds}',
+                  String(Math.max(0, Math.floor((Date.now() - status.startedAt) / 1000))),
+                ) +
+                (status.stageStartedAt
+                  ? ' · ' +
+                    t('memorySetupPhaseElapsed').replace(
+                      '{seconds}',
+                      String(Math.max(0, Math.floor((Date.now() - status.stageStartedAt) / 1000))),
+                    )
+                  : ''),
             })
           : null,
         h('div', {

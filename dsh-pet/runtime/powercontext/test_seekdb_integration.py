@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.sampling import ParentBased, ALWAYS_OFF
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from powercontext.builtin.artifacts.memory import EmbeddingProfile
@@ -34,7 +35,7 @@ class FixtureEmbedding:
 )
 class SeekDBIntegration(unittest.TestCase):
     def test_prepare_retains_http_parent_and_real_sql(self):
-        provider = TracerProvider(shutdown_on_exit=False)
+        provider = TracerProvider(sampler=ParentBased(ALWAYS_OFF), shutdown_on_exit=False)
         exporter = InMemorySpanExporter()
         provider.add_span_processor(SimpleSpanProcessor(exporter))
         self.addCleanup(provider.shutdown)
@@ -64,6 +65,12 @@ class SeekDBIntegration(unittest.TestCase):
                 SeekDBTracing(provider, "powercontext", include_sql=True),
                 TestClient(app) as client,
             ):
+
+                exporter.clear()
+                self.assertEqual(client.get("/health/ready").status_code, 200)
+                # Unparented maintenance still works, but does not create traces.
+                self.assertEqual(client.get("/v1/scopes").status_code, 200)
+                self.assertEqual(len(exporter.get_finished_spans()), 0)
 
                 def post(path, body):
                     response = client.post(path, json=body, headers=headers)

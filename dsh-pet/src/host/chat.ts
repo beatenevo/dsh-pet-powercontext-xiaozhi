@@ -187,7 +187,16 @@ export async function generateChat(input: ChatGenerateInput): Promise<ChatGenera
         recalledContext: input.recalledContext,
       });
     const result = input.observability
-      ? await input.observability.run('model', run, { model: sel, attempt: i + 1 })
+      ? await input.observability.run(
+          'model',
+          async () => {
+            input.observability?.content('user', userText);
+            const result = await run();
+            if (result.ok) input.observability?.content('assistant', result.text);
+            return result;
+          },
+          { model: sel, attempt: i + 1 },
+        )
       : await run();
     if (result.ok) return result;
     last = result;

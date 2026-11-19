@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, type TestContext } from 'node:test';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
@@ -15,6 +15,7 @@ const agentId = '11111111-1111-4111-8111-111111111111';
 const spaceId = '22222222-2222-4222-8222-222222222222';
 const settings = {
   enabled: true,
+  captureContent: false,
   baseUrl: 'https://vision.example',
   agentId,
   spaceId,
@@ -125,8 +126,9 @@ test('concurrent turns, delayed voice and background capture preserve actual cau
   assert.equal(model.parentSpanContext?.spanId, first.traceparent.split('-')[2]);
   assert.equal(voice.spanContext().traceId, firstTrace);
   assert.equal(voice.parentSpanContext?.spanId, first.traceparent.split('-')[2]);
-  assert.notEqual(capture.spanContext().traceId, firstTrace);
-  assert.equal(capture.links[0].context.traceId, firstTrace);
+  assert.equal(capture.spanContext().traceId, firstTrace);
+  assert.equal(capture.parentSpanContext?.spanId, first.traceparent.split('-')[2]);
+  assert.equal(capture.links.length, 0);
   assert.equal(model.attributes['gen_ai.usage.input_tokens'], 33);
   assert.equal(model.attributes['gen_ai.usage.output_tokens'], 4);
   const unknown = spans.find((span) => span.name === 'dsh_pet.model' && span.spanContext().traceId !== firstTrace)!;
@@ -242,4 +244,88 @@ test('robot observation waits for the worker result instead of treating queue ad
   await setImmediate();
   assert.equal(service.snapshot().interactions[0].outcome, 'error');
   assert.equal(robot.snapshot().commands[0].state, 'unknown');
+});
+
+test('content opt-out is respected and capture is bounded when enabled; background roots are optional', async (t) => {
+  const spans: ReadableSpan[] = [];
+  t.mock.method(
+    OTLPTraceExporter.prototype,
+    'export',
+    (batch: ReadableSpan[], done: (result: { code: number }) => void) => {
+      spans.push(...batch);
+      done({ code: 0 });
+    },
+  );
+  const { service } = await fixture(t);
+  service.configure(settings);
+  await service.run('chat', async () => service.content('user', 'private-before-consent'));
+  assert.equal(await service.run('memory.capture', async () => 7), 7);
+  let invocations = 0;
+  await assert.rejects(
+    service.run('memory.capture', () => {
+      invocations++;
+      throw new Error('business failure');
+    }),
+    /business failure/,
+  );
+  assert.equal(invocations, 1);
+  await service.check();
+  assert.equal(
+    spans.some((span) => span.name === 'dsh_pet.memory.capture'),
+    false,
+  );
+  assert.equal(
+    spans.some((span) => span.attributes['gen_ai.input.messages']),
+    false,
+  );
+  service.configure({ ...settings, captureContent: true, includeBackground: true });
+  await service.run('chat', async () => {
+    service.content('user', '\n'.repeat(5000));
+    service.content('assistant', 'visible reply');
+  });
+  await service.run('memory.capture', async () => undefined);
+  await service.check();
+  const recorded = spans.find((span) => span.attributes['gen_ai.input.messages'])!;
+  const messages = JSON.parse(String(recorded.attributes['gen_ai.input.messages']));
+  assert.equal(messages[0].content.length, 4000);
+  assert.equal(recorded.attributes['dsh_pet.content.truncated'], true);
+  assert.match(String(recorded.attributes['gen_ai.output.messages']), /visible reply/);
+  assert.equal(
+    spans.some((span) => span.name === 'dsh_pet.memory.capture'),
+    true,
+  );
+  assert.doesNotMatch(JSON.stringify(spans.map((span) => span.attributes)), /private-before-consent/);
+});
+
+test('new setup preselects content while observation stays disabled, and opt-out survives reload and toggles', async (t) => {
+  const { root, service } = await fixture(t);
+  assert.equal(service.snapshot().config.enabled, false);
+  assert.equal(service.snapshot().config.captureContent, true);
+  assert.equal(service.reference(), undefined);
+  service.configure({ ...settings, captureContent: undefined });
+  assert.equal(service.snapshot().config.captureContent, true);
+  service.configure({ ...settings, captureContent: false });
+  await service.shutdown();
+  const restored = new PetObservability(root);
+  t.after(() => restored.shutdown());
+  assert.equal(restored.snapshot().config.captureContent, false);
+  restored.configure({ ...settings, enabled: false, captureContent: undefined });
+  restored.configure({ ...settings, enabled: true, captureContent: undefined });
+  assert.equal(restored.snapshot().config.captureContent, false);
+  restored.configure({ ...settings, captureContent: true });
+  restored.configure({ ...settings, enabled: false, captureContent: undefined });
+  restored.configure({ ...settings, enabled: true, captureContent: undefined });
+  assert.equal(restored.snapshot().config.captureContent, true);
+});
+
+test('legacy saved configuration never starts exporting text on upgrade or omitted updates', async (t) => {
+  const { root, service } = await fixture(t);
+  await service.shutdown();
+  await writeFile(join(root, 'observability.json'), JSON.stringify({ ...settings, captureContent: undefined }));
+  const restored = new PetObservability(root);
+  t.after(() => restored.shutdown());
+  assert.equal(restored.snapshot().config.enabled, true);
+  assert.equal(restored.snapshot().config.captureContent, false);
+  restored.configure({ ...settings, captureContent: undefined });
+  assert.equal(restored.snapshot().config.captureContent, false);
 });

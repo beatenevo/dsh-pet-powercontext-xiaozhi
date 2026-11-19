@@ -20,6 +20,7 @@ function wireObservability() {
     ['enabled', 'observationEnabled', 'checkbox'], ['baseUrl', 'observationBaseUrl', 'text'],
     ['agentId', 'observationAgentId', 'text'], ['spaceId', 'observationSpaceId', 'text'],
     ['spaceKey', 'observationKey', 'password'], ['clearKey', 'observationClearKey', 'checkbox'],
+    ['captureContent', 'observationContent', 'checkbox'], ['includeBackground', 'observationBackground', 'checkbox'],
     ['allowInsecureHttp', 'observationHttp', 'checkbox'],
   ]) {
     const input = make('input', { id: 'observation-' + name, type, autocomplete: type === 'password' ? 'new-password' : 'off', disabled: true });

@@ -18,10 +18,14 @@ import { z } from 'zod';
 import { registerMemoryToken } from '../host/powercontext-auth.ts';
 import { memoryServerUrlValid } from '../shared/chat-memory-config.ts';
 import { readPrivateJson, writePrivateJson } from './ai-storage.ts';
-import { installMemoryRuntime, memoryProcessEnv, type MemoryStage } from './memory-install.ts';
+import { MemoryCommandError, installMemoryRuntime, memoryProcessEnv, type MemoryStage } from './memory-install.ts';
 
 import { memoryObservabilityEnvironment } from './memory-observability.ts';
 import { memoryRuntimeDirectory, memoryRuntimePath } from './memory-runtime.ts';
+
+const HEALTH_CHECK_INTERVAL_MS = 30_000;
+// Allow two polling intervals plus request latency before a successful readiness result expires.
+const HEALTH_READY_TTL_MS = HEALTH_CHECK_INTERVAL_MS * 2 + 5_000;
 
 const printable = (s: string): boolean => [...s].every((c) => c.charCodeAt(0) >= 32 && c.charCodeAt(0) !== 127);
 const text = z.string().trim().min(1).max(200).refine(printable);
@@ -151,7 +155,7 @@ export class ManagedMemory {
   }
   /** Readiness must come from the latest health check; process survival itself does not mean that the model and storage are available. */
   get ready(): boolean {
-    return this.running && this.readyAt > 0 && Date.now() - this.readyAt < 30_000;
+    return this.running && this.readyAt > 0 && Date.now() - this.readyAt < HEALTH_READY_TTL_MS;
   }
 
   /** Check the current child process. The late response of the old process cannot change the state after restart. */
@@ -181,7 +185,7 @@ export class ManagedMemory {
       void this.checkReady().finally(() => {
         if (this.child === child && this.running) this.monitorHealth();
       });
-    }, 10_000);
+    }, HEALTH_CHECK_INTERVAL_MS);
     this.healthTimer.unref();
   }
   settings(): Omit<MemoryModels, 'apiKey' | 'embeddingApiKey'> | undefined {
@@ -360,15 +364,18 @@ export class ManagedMemory {
     });
     this.releaseToken = registerMemoryToken(this.url!, this.config.token);
     const deadline = Date.now() + (database === 'seekdb' ? 600_000 : 120_000);
+    let retryDelayMs = 1_000;
     try {
       while (Date.now() < deadline) {
         signal.throwIfAborted();
-        if (failed || !this.running) throw new Error('memory_start_failed');
+        if (failed || !this.running)
+          throw new MemoryCommandError('memory_start_failed', child.exitCode, child.signalCode);
         if (await this.checkReady(signal)) {
           this.monitorHealth();
           return this.url!;
         }
-        await delay(500, undefined, { signal });
+        await delay(Math.min(retryDelayMs, Math.max(0, deadline - Date.now())), undefined, { signal });
+        retryDelayMs = retryDelayMs === 1_000 ? 2_000 : 5_000;
       }
       throw new Error('memory_not_ready');
     } catch (error) {

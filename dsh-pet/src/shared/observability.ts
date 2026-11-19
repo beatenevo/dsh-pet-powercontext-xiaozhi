@@ -1,6 +1,10 @@
-/** Optional, content-free AI Vision connection and runtime status. */
+/** Optional, consent-controlled AI Vision connection and runtime status. */
 export interface ObservabilityConfig {
   enabled: boolean;
+  /** Export only this turn’s user text and final reply; preselected for new configurations. */
+  captureContent?: boolean;
+  /** Include standalone background and maintenance traces; off by default. */
+  includeBackground?: boolean;
   baseUrl: string;
   agentId: string;
   spaceId: string;
@@ -55,6 +59,8 @@ export interface ObservabilityStatus {
 
 export const DEFAULT_OBSERVABILITY: ObservabilityConfig = {
   enabled: false,
+  captureContent: true,
+  includeBackground: false,
   baseUrl: '',
   agentId: '',
   spaceId: '',

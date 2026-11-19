@@ -139,8 +139,9 @@ export function makeModelCard(
           ),
         }),
         memory
-          ? h('div', {
+          ? h('details', {
               children: [
+                h('summary', { children: t('memoryExistingService') }),
                 field(
                   t('longTermMemory'),
                   h('select', {

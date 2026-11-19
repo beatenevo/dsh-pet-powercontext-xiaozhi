@@ -1,13 +1,23 @@
 /** Install an isolated, pinned PowerContext runtime without changing the user's Python or PATH. */
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
+import { promisify } from 'node:util';
 import { isIP } from 'node:net';
 import { memoryRuntimePath, seekdbRuntimeCheck, type MemoryDatabase } from './memory-runtime.ts';
 
 const UV_VERSION = '0.9.26';
-export type MemoryStage = 'checking_runtime' | 'downloading' | 'installing_python' | 'installing_memory' | 'starting';
+export type MemoryStage =
+  | 'checking_runtime'
+  | 'downloading'
+  | 'checking_python'
+  | 'reusing_python'
+  | 'installing_python'
+  | 'using_cached_dependencies'
+  | 'installing_memory'
+  | 'validating_runtime'
+  | 'starting';
 const ARCHIVES: Record<string, [string, string]> = {
   'linux-x64': [
     'uv-x86_64-unknown-linux-gnu.tar.gz',
@@ -75,6 +85,18 @@ export function memoryProcessEnv(directory: string): NodeJS.ProcessEnv {
   };
 }
 
+/** Safe process diagnostics, without command arguments, environment or child output. */
+export class MemoryCommandError extends Error {
+  readonly exitCode: number | null;
+  readonly exitSignal: NodeJS.Signals | null;
+
+  constructor(code: string, exitCode: number | null, exitSignal: NodeJS.Signals | null) {
+    super(code);
+    this.exitCode = exitCode;
+    this.exitSignal = exitSignal;
+  }
+}
+
 /** Fixed executables/arguments only. Output can include credentials and is deliberately discarded. */
 export function runMemoryCommand(
   command: string,
@@ -123,7 +145,7 @@ export function runMemoryCommand(
     child.once('error', (error: NodeJS.ErrnoException) => {
       failure = error.code === 'ENOENT' ? 'runtime_tool_missing' : 'runtime_command_failed';
     });
-    child.once('close', (code) => {
+    child.once('close', (code, exitSignal) => {
       clearTimeout(timer);
       if (killTimer) {
         // A parent may exit on SIGTERM while one of its descendants ignores it.
@@ -137,12 +159,63 @@ export function runMemoryCommand(
       signal.removeEventListener('abort', terminate);
       if (signal.aborted) reject(signal.reason);
       else if (code === 0 && !failure) resolve();
-      else reject(new Error(failure || 'runtime_command_failed'));
+      else reject(new MemoryCommandError(failure || 'runtime_command_failed', code, exitSignal));
     });
   });
 }
 
-/** Download official uv with a release-pinned SHA-256, then let it install Python and PowerContext privately. */
+/** Discover a runnable native CPython without inheriting project environments or downloading an interpreter. */
+async function findSystemPython(uv: string, env: NodeJS.ProcessEnv, signal: AbortSignal): Promise<string | undefined> {
+  const options = {
+    env: { ...env, UV_PYTHON_PREFERENCE: 'only-system' },
+    signal,
+    timeout: 15_000,
+    maxBuffer: 8192,
+    windowsHide: true,
+  };
+  try {
+    const { stdout } = await promisify(execFile)(
+      uv,
+      ['python', 'find', '--system', '--no-project', '--offline', '--no-python-downloads', 'cpython>=3.11,<3.15'],
+      options,
+    );
+    const python = stdout.trim();
+    if (!isAbsolute(python)) return undefined;
+    const machines = process.arch === 'arm64' ? ['arm64', 'aarch64'] : ['x86_64', 'amd64'];
+    // Windows 的 platform.machine() 依赖环境变量；构建平台标识在受限环境中仍能反映解释器架构。
+    const probe = await promisify(execFile)(
+      python,
+      [
+        '-I',
+        '-c',
+        'import sys, platform, struct, sysconfig, venv, json; print(json.dumps({"implementation": sys.implementation.name, "major": sys.version_info.major, "minor": sys.version_info.minor, "bits": struct.calcsize("P") * 8, "machine": (sysconfig.get_platform().removeprefix("win-") if sys.platform == "win32" else platform.machine()).lower(), "freeThreaded": bool(sysconfig.get_config_var("Py_GIL_DISABLED"))}))',
+      ],
+      options,
+    );
+    const runtime: unknown = JSON.parse(probe.stdout);
+    if (!runtime || typeof runtime !== 'object') return undefined;
+    if (!('implementation' in runtime) || runtime.implementation !== 'cpython') return undefined;
+    if (!('major' in runtime) || runtime.major !== 3) return undefined;
+    if (
+      !('minor' in runtime) ||
+      typeof runtime.minor !== 'number' ||
+      !Number.isInteger(runtime.minor) ||
+      runtime.minor < 11 ||
+      runtime.minor > 14
+    )
+      return undefined;
+    if (!('bits' in runtime) || runtime.bits !== 64) return undefined;
+    if (!('machine' in runtime) || typeof runtime.machine !== 'string' || !machines.includes(runtime.machine))
+      return undefined;
+    if (!('freeThreaded' in runtime) || runtime.freeThreaded !== false) return undefined;
+    return python;
+  } catch {
+    signal.throwIfAborted();
+    return undefined;
+  }
+}
+
+/** Reuse a compatible interpreter and cached packages, downloading missing runtime components privately. */
 export async function installMemoryRuntime(
   directory: string,
   signal: AbortSignal,
@@ -163,8 +236,10 @@ export async function installMemoryRuntime(
     try {
       await runMemoryCommand(python, ['-c', check], env, signal);
       return python;
-    } catch {
+    } catch (error) {
       signal.throwIfAborted();
+      // A crashing interpreter must not be treated as a missing dependency.
+      if (error instanceof MemoryCommandError && error.exitSignal) throw error;
     }
   }
   const artifact = ARCHIVES[`${process.platform}-${process.arch}`];
@@ -222,23 +297,36 @@ export async function installMemoryRuntime(
     }
   }
   if (!existsSync(python)) {
-    progress('installing_python');
-    await runMemoryCommand(uv, ['venv', '--clear', '--python', '3.12', join(directory, 'venv')], env, signal);
+    progress('checking_python');
+    const systemPython = await findSystemPython(uv, env, signal);
+    progress(systemPython ? 'reusing_python' : 'installing_python');
+    await runMemoryCommand(
+      uv,
+      ['venv', '--clear', '--python', systemPython ?? '3.12', join(directory, 'venv')],
+      systemPython ? { ...env, UV_PYTHON_PREFERENCE: 'only-system', UV_PYTHON_DOWNLOADS: 'never' } : env,
+      signal,
+    );
   }
-  progress('installing_memory');
-  await runMemoryCommand(
-    uv,
-    [
-      'pip',
-      'install',
-      '--python',
-      python,
-      ...(database === 'seekdb' ? ['-r', memoryRuntimePath('requirements.txt')] : ['powercontext[cli,server]==1.5.0']),
-    ],
-    env,
-    signal,
-  );
+  const installArgs = [
+    'pip',
+    'install',
+    '--python',
+    python,
+    ...(database === 'seekdb' ? ['-r', memoryRuntimePath('requirements.txt')] : ['powercontext[cli,server]==1.5.0']),
+  ];
+  progress('using_cached_dependencies');
+  try {
+    await runMemoryCommand(uv, [...installArgs, '--offline'], env, signal);
+  } catch (error) {
+    signal.throwIfAborted();
+    // Retry only a normal offline resolution failure; crashes and timeouts need diagnosis.
+    if (!(error instanceof MemoryCommandError) || error.exitSignal || error.message !== 'runtime_command_failed')
+      throw error;
+    progress('installing_memory');
+    await runMemoryCommand(uv, installArgs, env, signal);
+  }
   // Do not treat a partial download/installation as a usable runtime.
+  progress('validating_runtime');
   await runMemoryCommand(python, ['-c', check], env, signal);
   return python;
 }

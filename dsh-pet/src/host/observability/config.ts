@@ -5,6 +5,8 @@ import { DEFAULT_OBSERVABILITY, type ObservabilityConfig } from '../../shared/ob
 export const observabilityUpdateSchema = z
   .strictObject({
     enabled: z.boolean(),
+    captureContent: z.boolean().optional(),
+    includeBackground: z.boolean().default(false),
     baseUrl: z.string().trim().max(2048),
     agentId: z.union([z.literal(''), z.string().uuid()]),
     spaceId: z.union([z.literal(''), z.string().uuid()]),
@@ -42,6 +44,8 @@ export const observabilityUpdateSchema = z
 export function publicConfig(value: ObservabilityConfig = DEFAULT_OBSERVABILITY): ObservabilityConfig {
   return {
     enabled: value.enabled,
+    captureContent: value.captureContent === true,
+    includeBackground: value.includeBackground === true,
     baseUrl: value.baseUrl.replace(/\/+$/, ''),
     agentId: value.agentId,
     spaceId: value.spaceId,

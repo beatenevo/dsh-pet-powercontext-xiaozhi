@@ -29,6 +29,9 @@ test('managed seekdb uses the saved Agent destination and refreshes credentials 
     Buffer.from(env.OTEL_EXPORTER_OTLP_TRACES_HEADERS!.split('%20')[1], 'base64').toString(),
     config.agentId + ':test-key',
   );
+  assert.equal(env.OTEL_TRACES_SAMPLER, 'parentbased_always_off');
+  save({ includeBackground: true });
+  assert.equal(memoryObservabilityEnvironment(directory).OTEL_TRACES_SAMPLER, 'parentbased_always_on');
   save({ baseUrl: 'https://user:password@vision.example' });
   assert.equal(memoryObservabilityEnvironment(directory).OTEL_EXPORTER_OTLP_TRACES_HEADERS, undefined);
   save({ enabled: false });

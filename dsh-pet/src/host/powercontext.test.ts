@@ -159,6 +159,7 @@ test('chat, private recall and deferred capture export correlated metadata witho
   try {
     observation.configure({
       enabled: true,
+      captureContent: false,
       baseUrl: 'https://vision.example',
       agentId: '11111111-1111-4111-8111-111111111111',
       spaceId: '22222222-2222-4222-8222-222222222222',
@@ -182,7 +183,8 @@ test('chat, private recall and deferred capture export correlated metadata witho
       f.calls.find((call) => call.path === '/v1/sources/content')?.traceparent,
       `00-${capture.spanContext().traceId}-${capture.spanContext().spanId}-01`,
     );
-    assert.equal(capture.links[0].context.traceId, root.spanContext().traceId);
+    assert.equal(capture.spanContext().traceId, root.spanContext().traceId);
+    assert.equal(capture.parentSpanContext?.spanId, root.spanContext().spanId);
     assert.equal(capture.attributes['dsh_pet.memory.status'], 'accepted');
     assert.doesNotMatch(
       JSON.stringify(spans.map((span) => span.attributes)),

@@ -2,8 +2,10 @@
 export const observabilityEn = {
   observationTitle: 'AI Vision observability',
   observationHint:
-    'Optional operation timings, outcomes and reported token counts. Prompts, replies, memory text and audio are not exported. Pet features remain available when export fails. For managed seekdb, pause and resume memory after saving to apply Server tracing.',
+    'Optional operation timings, outcomes and reported token counts. AI Vision is off by default. For new setups, current input and reply capture is preselected; uncheck it to exclude text. Enabling it sends up to 4,000 characters per message to AI Vision; system prompts, recalled memory and audio remain excluded. Pet features remain available when export fails. For managed seekdb, pause and resume memory after saving to apply Server tracing.',
   observationEnabled: 'Enable observability',
+  observationContent: 'Send current input and reply to AI Vision (can be turned off; may contain private information)',
+  observationBackground: 'Include background and maintenance traces (requires memory restart)',
   observationBaseUrl: 'AI Vision URL',
   observationAgentId: 'Agent UUID',
   observationSpaceId: 'Space UUID',
@@ -36,8 +38,10 @@ export const observabilityEn = {
 export const observabilityZh: Record<keyof typeof observabilityEn, string> = {
   observationTitle: 'AI Vision 可观测性',
   observationHint:
-    '可选采集操作耗时、结果和模型返回的 Token 用量。不导出提示词、回复、记忆正文或音频。导出失败不影响桌宠功能。使用本机托管 seekdb 时，保存后暂停再恢复记忆，使服务端观测配置生效。',
+    '可选采集操作耗时、结果和模型返回的 Token 用量。AI Vision 默认关闭。首次配置时默认勾选当轮输入与回复，可取消；启用后每条最多发送 4000 字符至 AI Vision，可随时关闭。不采集系统提示词、召回记忆或音频。导出失败不影响桌宠功能。使用本机托管 seekdb 时，保存后暂停再恢复记忆，使服务端观测配置生效。',
   observationEnabled: '启用可观测性',
+  observationContent: '向 AI Vision 发送当轮输入与回复（可随时关闭，可能含私人信息）',
+  observationBackground: '采集后台与管理操作（需重启记忆服务）',
   observationBaseUrl: 'AI Vision 地址',
   observationAgentId: 'Agent UUID',
   observationSpaceId: 'Space UUID',

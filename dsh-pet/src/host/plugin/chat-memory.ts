@@ -563,6 +563,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     observe(
       'chat',
       async () => {
+        deps.observability?.content('user', text);
         const robotChat = await deps.robot?.prepareChat(petId);
         // Query optional weather outside the journal lock so it does not block other conversations.
         const env = await environmentForPrompt();
@@ -701,6 +702,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
             image,
           });
           if (!generated.ok) return generated;
+          deps.observability?.content('assistant', generated.text);
           const now = Date.now();
           // The pictures uploaded by the user are only saved but not sent: the memory must be able to restore the
           // "pictures brought in this round" (chat record archive), but the picture itself is not resent to the model; the

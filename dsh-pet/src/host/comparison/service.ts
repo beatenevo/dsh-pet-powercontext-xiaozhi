@@ -248,6 +248,7 @@ export class ComparisonService {
             async () => {
               this.fields(run, strategy, index + 1);
               answer.traceUrl = this.traceUrl();
+              this.deps.observation.content('user', round.question);
               let context = strategy === 'full' ? run.input.corpus : recent;
               if (strategy === 'memory') {
                 const recalled = await this.deps.observation.run('memory.recall', () =>
@@ -273,6 +274,7 @@ export class ComparisonService {
                 },
                 { model: run.model },
               );
+              this.deps.observation.content('assistant', answer.text);
               answer.status = 'complete';
             },
             { conversationKey: 'comparison:' + run.id },

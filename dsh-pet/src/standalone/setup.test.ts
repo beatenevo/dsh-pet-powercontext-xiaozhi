@@ -619,3 +619,41 @@ test('onboarding updates one provider profile and preserves other saved keys acr
     reloaded.dispose();
   }
 });
+
+test(
+  'startup failure exposes its phase and exit code without child output',
+  { skip: process.platform === 'win32' },
+  async (t) => {
+    const home = mkdtempSync(join(tmpdir(), 'pet-setup-diagnostics-'));
+    const memory = new ManagedMemory(home);
+    await memory.configure({
+      baseUrl: draft.baseUrl,
+      model: draft.model,
+      apiKey: draft.apiKey,
+      embeddingBaseUrl: draft.baseUrl,
+      embeddingModel: 'vector',
+      embeddingApiKey: draft.apiKey,
+      embeddingDimension: 4,
+    });
+    fakeInstalledRuntime(memory.directory);
+    const python = join(memory.directory, 'venv', 'bin', 'python');
+    writeFileSync(
+      python,
+      `#!${process.execPath}\nif (process.argv[3]?.includes('importlib.metadata')) process.exit(0);\nconsole.error('synthetic-private-child-output'); process.exit(23);\n`,
+      { mode: 0o700 },
+    );
+    await memory.dispose();
+    const setup = createSetup(home, undefined, binding);
+    t.after(async () => {
+      await setup.dispose();
+      rmSync(home, { recursive: true, force: true });
+    });
+    setup.submit({ action: 'retry' });
+    const status = await settled(setup);
+    assert.equal(status.stage, 'error');
+    assert.equal(status.errorCode, 'memory_start_failed');
+    assert.equal(status.failedStage, 'starting');
+    assert.equal(status.runtimeExitCode, 23);
+    assert.doesNotMatch(JSON.stringify(status), /synthetic-private-child-output|synthetic-setup-key/);
+  },
+);

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
-import { installMemoryRuntime, memoryProcessEnv, runMemoryCommand } from './memory-install.ts';
+import { MemoryCommandError, installMemoryRuntime, memoryProcessEnv, runMemoryCommand } from './memory-install.ts';
 
 test('Python runtime accepts DSH IPv6 proxy bypasses without changing the host environment', () => {
   const previous = { NO_PROXY: process.env.NO_PROXY, no_proxy: process.env.no_proxy };
@@ -97,3 +97,139 @@ require('node:fs').writeFileSync(${JSON.stringify(capture)}, JSON.stringify(proc
     }
   },
 );
+
+test('failed installer reports safe exit metadata without command output', async () => {
+  await assert.rejects(
+    runMemoryCommand(
+      process.execPath,
+      ['-e', 'console.error("private-test-secret"); process.exit(23)'],
+      process.env,
+      new AbortController().signal,
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof MemoryCommandError);
+      assert.equal(error.message, 'runtime_command_failed');
+      assert.equal(error.exitCode, 23);
+      assert.equal(error.exitSignal, null);
+      assert.doesNotMatch(JSON.stringify(error), /private-test-secret/);
+      return true;
+    },
+  );
+});
+
+test(
+  'terminated interpreter preserves the signal for crash diagnosis',
+  { skip: process.platform === 'win32' },
+  async () => {
+    await assert.rejects(
+      runMemoryCommand(
+        process.execPath,
+        ['-e', 'process.kill(process.pid, "SIGTERM")'],
+        process.env,
+        new AbortController().signal,
+      ),
+      (error: unknown) => error instanceof MemoryCommandError && error.exitSignal === 'SIGTERM',
+    );
+  },
+);
+
+for (const scenario of [
+  'cached',
+  'cache-miss',
+  'incompatible',
+  'crash',
+  '3.11',
+  '3.13',
+  '3.14',
+  '3.10',
+  '3.15',
+  'free-threaded',
+  'pypy',
+  'wrong-arch',
+] as const) {
+  test(
+    `runtime installation selects Python and preserves cache: ${scenario}`,
+    { skip: process.platform === 'win32' },
+    async (t) => {
+      const rejected = ['incompatible', '3.10', '3.15', 'free-threaded', 'pypy', 'wrong-arch'].includes(scenario);
+      const runtime = {
+        implementation: scenario === 'pypy' ? 'pypy' : 'cpython',
+        major: 3,
+        minor: scenario.startsWith('3.') ? Number(scenario.slice(2)) : 12,
+        bits: 64,
+        machine: scenario === 'wrong-arch' ? 'unsupported' : process.arch === 'arm64' ? 'aarch64' : 'x86_64',
+        freeThreaded: scenario === 'free-threaded',
+      };
+      const directory = mkdtempSync(join(tmpdir(), 'pet-python-reuse-'));
+      t.after(() => rmSync(directory, { recursive: true, force: true }));
+      const capture = join(directory, 'commands.jsonl');
+      const systemPython = join(directory, 'system python');
+      const python = join(directory, 'venv', 'bin', 'python');
+      const cache = join(directory, 'cache');
+      mkdirSync(cache);
+      writeFileSync(join(cache, 'existing-cache'), 'keep');
+      mkdirSync(join(directory, 'uv'));
+      writeFileSync(
+        systemPython,
+        `#!${process.execPath}
+console.log(${JSON.stringify(JSON.stringify(runtime))});
+process.exit(${scenario === 'incompatible' ? 1 : 0});
+`,
+        { mode: 0o700 },
+      );
+      writeFileSync(
+        join(directory, 'uv', 'uv'),
+        `#!${process.execPath}
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(capture)}, JSON.stringify({args, cache: process.env.UV_CACHE_DIR, preference: process.env.UV_PYTHON_PREFERENCE, downloads: process.env.UV_PYTHON_DOWNLOADS}) + '\\n');
+if (args[0] === 'python') console.log(${JSON.stringify(systemPython)});
+if (args[0] === 'venv') {
+  fs.mkdirSync(${JSON.stringify(join(directory, 'venv', 'bin'))}, {recursive: true});
+  fs.writeFileSync(${JSON.stringify(python)}, '#!${process.execPath}\\n', {mode: 0o700});
+}
+if (args.includes('--offline') && args[0] === 'pip') {
+  if (${JSON.stringify(scenario)} === 'cache-miss') process.exit(1);
+  if (${JSON.stringify(scenario)} === 'crash') process.kill(process.pid, 'SIGTERM');
+}
+`,
+        { mode: 0o700 },
+      );
+      const stages: string[] = [];
+      const job = installMemoryRuntime(
+        directory,
+        new AbortController().signal,
+        (stage) => stages.push(stage),
+        'seekdb',
+      );
+      if (scenario === 'crash')
+        await assert.rejects(
+          job,
+          (error: unknown) => error instanceof MemoryCommandError && error.exitSignal === 'SIGTERM',
+        );
+      else assert.equal(await job, python);
+      const calls = readFileSync(capture, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as { args: string[]; cache: string; preference: string; downloads?: string });
+      assert.ok(calls.find((call) => call.args[0] === 'python')?.args.includes('cpython>=3.11,<3.15'));
+      const venv = calls.find((call) => call.args[0] === 'venv')!;
+      assert.equal(venv.args[venv.args.indexOf('--python') + 1], rejected ? '3.12' : systemPython);
+      assert.equal(venv.preference, rejected ? 'only-managed' : 'only-system');
+      if (!rejected) assert.equal(venv.downloads, 'never');
+      const installs = calls.filter((call) => call.args[0] === 'pip');
+      assert.equal(installs.length, scenario === 'cache-miss' ? 2 : 1);
+      assert.equal(installs[0].args.includes('--offline'), true);
+      assert.ok(installs.every((call) => call.cache === cache));
+      assert.equal(readFileSync(join(cache, 'existing-cache'), 'utf8'), 'keep');
+      assert.ok(stages.includes(rejected ? 'installing_python' : 'reusing_python'));
+      assert.equal(stages.includes('installing_memory'), scenario === 'cache-miss');
+      assert.equal(stages.includes('validating_runtime'), scenario !== 'crash');
+      if (scenario !== 'crash') {
+        const before = calls.length;
+        assert.equal(await installMemoryRuntime(directory, new AbortController().signal), python);
+        assert.equal(readFileSync(capture, 'utf8').trim().split('\n').length, before);
+      }
+    },
+  );
+}

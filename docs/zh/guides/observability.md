@@ -2,7 +2,7 @@
 
 [English](../../en/guides/observability.md)
 
-这是开发中的功能，已发布的 `0.1.0-beta.1` 包尚不包含它，需要使用包含本次改动的构建。观测为可选功能；关闭观测、未配置密钥或采集端不可用，都不应阻止聊天、记忆降级、语音或已有机器人控制。
+本文描述当前源码构建；正文采集、后台过滤与同 Trace 记忆写入需使用包含这些改动的版本。观测为可选功能；关闭观测、未配置密钥或采集端不可用，都不应阻止聊天、记忆降级、语音或已有机器人控制。
 
 ## 连接平台
 
@@ -20,6 +20,7 @@
 
 ```dotenv
 POWERCONTEXT_SERVER_TRACING_ENABLED=true
+OTEL_TRACES_SAMPLER=parentbased_always_off
 OTEL_SERVICE_NAME=powercontext-server
 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://vision.example/api/public/otel/v1/traces
 OTEL_EXPORTER_OTLP_TRACES_HEADERS=Authorization=Basic%20BASE64_OF_AGENT_UUID_COLON_SPACE_KEY
@@ -31,11 +32,13 @@ OTEL_EXPORTER_OTLP_TRACES_HEADERS=Authorization=Basic%20BASE64_OF_AGENT_UUID_COL
 - **共享 DSH PowerContext：** 安装支持 `powercontext.companion-memory.v1` 可选 `traceContext` 字段的 `powercontext-dsh` 构建。它复用已有认证客户端，将父级传递给 `prepare_context`。旧插件可能忽略该字段，召回仍可用，但 Server 链路可能分离。本次扩展不关联工作区绑定请求。共享模式仍然只读，不把桌宠对话采集到项目中。
 - **原生记忆：** 不会产生 PowerContext Server 链路，保留已有提供者行为。
 
+本机自动安装的服务会在启动时读取观测配置，保存后暂停再恢复记忆即可应用。默认保留有父链路的问答、对照请求及其中的 SQL 节点；无父链路的健康检查、记忆列表/来源/纠错/遗忘和后台任务不创建独立 Trace。需要排查这些操作时，开启 **采集后台与管理操作** 并重启记忆服务。不要通过关闭 `POWERCONTEXT_SERVER_TRACING_ENABLED` 过滤健康检查，否则 SQL 观测也会关闭。独立部署的服务需自行配置上面的 sampler。
+
 ## 用真实交互演示
 
 将真实 DSH 对话与桌宠窗口放在 AI Vision 旁边。向桌宠发送一条消息，然后打开 **最近交互 → 查看本次交互**。聊天链路包含召回和各次模型调用；在本机保留对应近期身份期间，回复／碎碎念的自动语音合成会关联到原交互。手动语音请求和机器人命令执行各有独立链路。观测不会触发任何机器人动作。
 
-独立记忆模式下，**memory.capture** 是单独的后台链路，通过 OpenTelemetry link 关联原聊天，不延长聊天耗时。分别确认 Source 接受、后续提炼和召回。点击 **打开记忆观测** 使用已有原生记忆视图。界面不会编造记忆数量、完成百分比或 Token 节省比例。
+独立记忆模式下，**memory.capture** 沿用原聊天的 Trace ID，以原聊天 span 为父级；后台提交不阻塞回复。Trace 的总时间范围可能延伸到后台提交完成，聊天 span 的耗时仍表示回复耗时。更早版本保存但没有追踪引用的待发送记录，默认不会新建后台 Trace。分别确认 Source 接受、后续提炼和召回。点击 **打开记忆观测** 使用已有原生记忆视图。界面不会编造记忆数量、完成百分比或 Token 节省比例。
 
 面板在进程内存中保留最近 30 次根交互，显示其中十次。随机生成的会话身份在进程运行期间按桌宠和 DSH 会话归组，重启或修改配置后重置。不会导出原始本地分区键、工作区路径或会话名称。面板用于查看近期活动，不是持久化审计历史。
 
@@ -51,7 +54,9 @@ OTEL_EXPORTER_OTLP_TRACES_HEADERS=Authorization=Basic%20BASE64_OF_AGENT_UUID_COL
 | 机器人                         | SDK 工作进程返回结果，不证明实体已经移动或完成动作。                                                                                                                                     |
 | 接入端已接受                   | 端点确认接收；存储和页面回读需另行验证。                                                                                                                                                 |
 
-不采集提示词、回复、召回记忆正文、音频、图片内容、凭据或原始异常消息。本实现不增加正文采集模式。需要展示的演示内容在已有 DSH／桌宠界面中展示，不要为了演示而将正文写入 PowerContext 运行观测。
+AI Vision 默认关闭。全新配置中，**向 AI Vision 发送当轮输入与回复** 默认勾选，可在启用前取消，也可随时关闭；启用并保存后，当前用户文本和最终回复通过 `gen_ai.input.messages` / `gen_ai.output.messages` 导出，每条最多 4000 字符，截断会标记 `dsh_pet.content.truncated`。平台可据此展示预览与消息步骤。只影响之后的调用，不会补齐历史 Trace；关闭后停止后续采集，不删除已经导出的内容。输入和回复本身可能含私人信息。已保存的正文开关在升级、关闭再启用后保持不变；旧配置若没有该字段，仍不采集正文，不会因升级自动开启。
+
+不导出完整系统提示词、拼接的历史与召回记忆、音频、图片、连接凭据或原始异常。桌宠直接问答没有执行工具时，不会编造工具步骤。对照实验保留 prepare 和各策略 answer 链路，通过实验身份、策略与轮次区分；缺失的提炼、向量化或模型用量仍为未知，不用问答 Token 小计冒充总成本。
 
 导出器使用私有 OTel provider，队列最多 256 个 span，单批最多 64 个，并限制导出等待时间。它不注册全局 provider，也不替换 `observ-dsh`；后者继续负责 DSH 任务／会话观测。npm 包包含 JavaScript 导出依赖和可选的 Python 服务入口；不捆绑 AI Vision、SigNoz、Python 解释器或 PowerContext，桌宠不会自动启动第二个 Server。
 

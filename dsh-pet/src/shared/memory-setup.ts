@@ -19,9 +19,15 @@ export interface MemorySetupStatus {
   available: boolean;
   stage: string;
   errorCode?: string;
+  /** Last failed phase and safe child exit metadata; no command output or credentials. */
+  failedStage?: string;
+  runtimeExitCode?: number;
+  runtimeExitSignal?: string;
   busy: boolean;
   canCancel: boolean;
   startedAt?: number;
+  /** Start of the current preparation phase, Unix milliseconds. */
+  stageStartedAt?: number;
   memoryReady: boolean;
   memoryEnabled: boolean;
   memoryRunning: boolean;

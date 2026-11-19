@@ -1,4 +1,4 @@
-/** A bounded, content-free exporter owned by the pet; never registers global OTel providers. */
+/** A bounded, opt-in content exporter owned by the pet; never registers global OTel providers. */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
@@ -28,7 +28,7 @@ interface RunOptions {
   parentInteractionId?: string;
   /** Local partition key, never exported. Conversation identities are random and process-local. */
   conversationKey?: string;
-  /** Detached background work links to its originating turn, instead of extending its latency. */
+  /** Deferred capture retains the originating trace, even after its parent span ends. */
   link?: TraceReference;
   model?: { provider: string; model: string };
   attempt?: number;
@@ -99,7 +99,8 @@ export class PetObservability {
   configure(value: unknown): ObservabilityStatus {
     if (this.disposed) throw new Error('observability_unavailable');
     const parsed = observabilityUpdateSchema.parse(value);
-    const config = publicConfig(parsed);
+    // Older clients omit this field; preserve the saved choice instead of silently enabling capture.
+    const config = publicConfig({ ...parsed, captureContent: parsed.captureContent ?? this.config.captureContent });
     // Never silently forward a saved key to a different destination or Agent.
     const sameTarget =
       config.baseUrl === this.config.baseUrl &&
@@ -162,7 +163,7 @@ export class PetObservability {
           exportTimeoutMillis: 2500,
         }),
       ],
-      spanLimits: { attributeCountLimit: 32, attributeValueLengthLimit: 200, eventCountLimit: 0 },
+      spanLimits: { attributeCountLimit: 32, attributeValueLengthLimit: 32768, eventCountLimit: 0 },
     });
     this.provider = provider;
   }
@@ -204,6 +205,17 @@ export class PetObservability {
     } catch {
       /* Telemetry cannot change the operation's result. */
     }
+  }
+
+  /** Export bounded current-turn text only after explicit consent; never infer prompts or memory contents. */
+  content(role: 'user' | 'assistant', text: string): void {
+    const active = this.active.getStore();
+    if (!this.config.captureContent || !active || active.provider !== this.provider) return;
+    const limit = 4000;
+    // AI Vision's preview and execution views both accept role/content messages.
+    const value = JSON.stringify([{ role, content: text.slice(0, limit) }]);
+    active.span.setAttribute(role === 'user' ? 'gen_ai.input.messages' : 'gen_ai.output.messages', value);
+    if (text.length > limit) active.span.setAttribute('dsh_pet.content.truncated', true);
   }
 
   /** DSH input excludes cache reads/writes; GenAI input includes them. Missing usage remains absent. */
@@ -256,15 +268,23 @@ export class PetObservability {
       if (options.link?.conversationId && /^[a-f0-9-]{36}$/.test(options.link.conversationId))
         conversationId = options.link.conversationId;
       const link = referenceContext(options.link);
+      if (
+        !parent &&
+        !link &&
+        !this.config.includeBackground &&
+        ['whisper', 'sleep_talk', 'memory.capture', 'memory.recall', 'model'].includes(operation)
+      )
+        // Defer invocation so a synchronous business error cannot enter telemetry fallback and run twice.
+        return Promise.resolve().then(task);
       const span = provider.getTracer('dsh-pet-powercontext').startSpan(
         'dsh_pet.' + operation,
         {
           kind: operation === 'model' ? SpanKind.CLIENT : SpanKind.INTERNAL,
-          links: link ? [{ context: link }] : [],
+          links: [],
           attributes: {
             'dsh_pet.operation': operation,
             ...(conversationId ? { 'gen_ai.conversation.id': conversationId } : {}),
-            ...(!parent
+            ...(!parent && !link
               ? { 'gen_ai.operation.name': 'invoke_agent', 'gen_ai.agent.name': 'dsh-pet-powercontext' }
               : {}),
             ...(options.model
@@ -278,10 +298,14 @@ export class PetObservability {
             ...(options.attempt !== undefined ? { 'dsh_pet.model.attempt': options.attempt } : {}),
           },
         },
-        parent ? trace.setSpan(ROOT_CONTEXT, parent.span) : ROOT_CONTEXT,
+        parent
+          ? trace.setSpan(ROOT_CONTEXT, parent.span)
+          : link
+            ? trace.setSpanContext(ROOT_CONTEXT, link)
+            : ROOT_CONTEXT,
       );
       active = { span, provider, conversationId };
-      if (!parent) {
+      if (!parent && !link) {
         const startedAt = Date.now();
         interaction = {
           traceId: span.spanContext().traceId,

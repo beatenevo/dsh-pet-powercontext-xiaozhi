@@ -33,7 +33,7 @@ macOS 下限来自固定版本的 pylibseekdb 原生 wheel。Windows ARM64 暂�
 
 ## 构建与验收
 
-`Offline plugin packages` 会在相关文件的 PR 上运行，也支持手动选择分支或 tag；两种方式都只生成 Actions artifacts，不发布。正式版本在主 Release 成功后调用，三个原生平台均验收成功才上传到已有 Release；不会发布平台特定包到 npm。
+`Offline plugin packages` 不在创建或更新 PR 时自动运行。手动触发可选择分支或 tag，只生成 Actions artifacts，不发布。正式版本在 npm 发布和 GitHub Release 创建成功后调用，三个原生平台均验收成功才上传到已有 Release；不会发布平台特定包到 npm。离线包构建失败会使整条 Release 流水线显示失败，但不会阻塞或撤回此前已完成的 npm 发布。
 
 流水线先运行单元测试及 npm prepack 门禁，再组装原生依赖。随后分别使用空 pnpm store 和空 npm 缓存强制离线安装 tgz，将安装目录搬移至含空格的新路径，再验证插件实际运行环境选择、SQLite 扩展能力、真实 seekdb 写入/检索及 Trace 连续性，并在第二个 Python 进程中验证重启后的记忆检索。Python 集成测试拒绝非回环连接，模型使用固定向量替身，因此不证明云模型质量。包内包含 `runtime/offline/manifest.json`、Python 精确依赖版本和 Node 锁文件。
 

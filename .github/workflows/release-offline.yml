@@ -2,16 +2,6 @@
 name: Offline plugin packages
 
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/release-offline.yml"
-      - ".github/workflows/release.yml"
-      - "dsh-pet/scripts/*offline.mjs"
-      - "dsh-pet/src/standalone/**"
-      - "dsh-pet/src/host/paths.ts"
-      - "dsh-pet/runtime/powercontext/**"
-      - "dsh-pet/package.json"
-      - "dsh-pet/pnpm-lock.yaml"
   workflow_dispatch:
     inputs:
       ref:

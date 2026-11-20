@@ -29,6 +29,8 @@ dsh plugin --profile web add dsh-pet-powercontext@0.2.0
 
 DSH 桌面版将 `--profile web` 换为 `--profile desktop`。重启 DSH，在「设置 → 桌宠配置」调整桌宠，在右侧栏「桌宠对话」中聊天。若已启用上游 `dsh-pet`，先停用它并保留数据目录。
 
+已安装 DSH 的机器可使用 [平台专用离线插件包](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/zh/guides/offline-installation.md)，无需在启用记忆时下载 Python 和依赖。
+
 ### 独立运行（Windows、macOS、Linux）
 
 安装 **Node.js 22.12+** 后，在 PowerShell 或终端执行：
@@ -45,7 +47,7 @@ Windows x64 使用原生安装路径；长期记忆会自动准备 Python 和 se
 
 1. **先配置聊天模型。** DSH 桌宠沿用宿主聊天模型；在 DSH 模型设置中使用下表的 MiniMax 地址、模型与订阅 Key。独立模式在自己的设置页填写。
 2. **打开本机长期记忆。** DSH 进入「设置 → 桌宠配置 → 本机长期记忆」，选择 MiniMax 中国端与通义千问·北京，填写各自密钥。聊天模型与记忆整理模型的配置分别保存。
-3. **点击「检查并启用记忆」。** 程序检查模型连接，自动安装 PowerContext 1.5.2 和 seekdb，并启动服务。首次安装需要联网，记忆功能按需开启。
+3. **点击「检查并启用记忆」。** 程序检查模型连接，自动安装 PowerContext 1.5.2 和 seekdb，并启动服务。普通 npm 包首次使用时下载运行环境，离线包使用内置环境；云模型调用仍需联网。记忆功能按需开启。
 4. **验证记忆。** 告诉桌宠一条独特偏好，等待「记得的事」出现对应事实；清空近期聊天后再追问，检查是否召回。仅显示「已同步」不代表整理已完成。
 
 | 配置项                     | 值                                                  |

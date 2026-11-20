@@ -576,3 +576,34 @@ test('memory provider discovery supports mixed services and rejects stale result
   assert.equal(requests.at(-1).apiKey, 'vector-draft');
   assert.equal(requests.at(-1).kind, 'embedding');
 });
+
+test('liveliness slider saves chatter and motion together and survives reload', async (t) => {
+  let stored = { main: { ...customized.main, eventsRefreshSec: { whisper: 600, balance: 900, sleepTalk: 90 } } };
+  const { page, writes } = await open(t, {
+    get: (route) => route.fulfill({ json: stored }),
+    put: (route) => {
+      stored = { main: { ...stored.main, ...route.request().postDataJSON() } };
+      return route.fulfill({ json: stored });
+    },
+  });
+  const slider = page.getByRole('slider', { name: 'Liveliness', exact: true });
+  await slider.waitFor();
+  assert.equal(await slider.inputValue(), '50');
+  await slider.fill('100');
+  assert.equal(writes.length, 0);
+  await save(page);
+  assert.deepEqual(writes[0].eventsRefreshSec, { whisper: 60, balance: 900, sleepTalk: 90 });
+  assert.deepEqual(writes[0].animationWeights, { idle: 0, turn: 5, move: 5 });
+  await page.reload();
+  await slider.waitFor();
+  assert.equal(await slider.inputValue(), '100');
+  await slider.fill('0');
+  await save(page);
+  assert.equal(writes[1].eventsRefreshSec.whisper, 1800);
+  assert.equal(writes[1].animationWeights.idle, 90);
+  await page.goto(`${url}/?lang=zh`);
+  const chinese = page.getByRole('slider', { name: '活泼程度', exact: true });
+  await chinese.waitFor();
+  await chinese.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(process.env.TMPDIR || '/data/codex-tmp', 'pet-liveliness-settings.png') });
+});

@@ -383,7 +383,7 @@
 
   // Event intervals in seconds (global default, overridable per entry).
   // The entire object is replaced; omitted keys are not copied from this file.
-  // whisper: per-entry interval, fallback 300 seconds.
+  // whisper: per-entry interval, fallback 600 seconds.
   // sleepTalk: per-entry interval while asleep, fallback 60 seconds; stops immediately on waking.
   // balance: read only from main because the host shares one balance timer; fallback 1800 seconds.
   //   Refresh immediately on startup as well.
@@ -392,7 +392,7 @@
   // 反而变成每秒一次。
   "eventsRefreshSec": {
     "balance": 1800,
-    "whisper": 300,
+    "whisper": 600,
     "sleepTalk": 60
   },
 

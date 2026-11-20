@@ -2444,9 +2444,9 @@ paths:
            `notificationsEnabled` / `notifyWhenFocused` / `clickSoundEnabled` / `whisperImageEnabled` / `chatImageEnabled` /
            `chatAnimationEnabled` / `confineToScreen` / `trayEnabled` / `voiceEnabled` / `voiceName` / `speechProvider` / `voiceWhisperEnabled` /
            `voiceTodoEnabled`/`voiceNotifyEnabled`/`physics`/`font`/`whisperModel`/`chatModel`/`chatMemoryRounds`/
-           `chatImageLimit`/`chatMemory`/`environmentCity`.
+           `chatImageLimit`/`chatMemory`/`environmentCity`/`eventsRefreshSec`/`animationWeights`.
           The remaining fields will use the original values in the user file on disk (retained through transparent transmission), so the settings page is saved
-          **Won’t erase** your handwritten fine-tuning configuration (`whisperPrompt` / `memes` / `eventsRefreshSec`, etc.).
+          **Won’t erase** your handwritten fine-tuning configuration (`whisperPrompt` / `memes`, etc.).
           The whitelist field is only considered whitelisted when the request body is actually passed: if it is not passed, it will be passed through and will not be erased to the default value.
         - When the user layer file ** exists but cannot be parsed even by JSONC ** (really damaged), the default is ** not to write to the disk first **,
           Return `200` + `reason: user-config-unparsable` (with `needConfirm`, `userFile`) and let the caller confirm——
@@ -5847,6 +5847,12 @@ components:
           minItems: 1
           items:
             $ref: "#/components/schemas/PetEntry"
+        eventsRefreshSec:
+          type: object
+          description: Event periods in seconds. Replaces the supplied map; omitted field preserves existing values. The liveliness slider changes whisper while retaining other event periods.
+          additionalProperties:
+            type: number
+            exclusiveMinimum: 0
         notificationsEnabled:
           type: boolean
         notifyWhenFocused:

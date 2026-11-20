@@ -36,7 +36,7 @@ function addPet() {
     id: id,
     name: '新宠物',
     size: 462,
-    display: 'none',
+    display: 'both',
     balanceEnabled: true,
     whisperEnabled: true,
     workStatusEnabled: true,

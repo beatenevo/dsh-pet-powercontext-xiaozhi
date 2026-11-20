@@ -68,6 +68,8 @@ export interface SaveFields {
   font: FontConfig;
   /** Action frequency weight (main entry): The total of the three items is ≤ 100, and random actions are the margin. */
   animationWeights: Weights;
+  /** 可选事件周期；缺省时保留原配置。 */
+  eventsRefreshSec?: Record<string, number>;
 }
 
 /** Save the result: The caller branches according to `kind` and no longer guesses the HTTP details. */
@@ -111,6 +113,7 @@ export function buildSaveBody(fields: SaveFields): Record<string, unknown> {
     chatImageLimit: fields.chatImageLimit,
     font: fields.font,
     animationWeights: fields.animationWeights,
+    ...(fields.eventsRefreshSec === undefined ? {} : { eventsRefreshSec: fields.eventsRefreshSec }),
   };
 }
 

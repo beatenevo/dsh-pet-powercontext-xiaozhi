@@ -147,6 +147,7 @@ export function apply(ctx: any): void {
   ensureDeepseekTtsProvider({ resolveKey: resolveDeepseekKey });
   ensureDeepseekAsrProvider({ resolveKey: resolveDeepseekKey });
 
+  let refreshWhisperSchedule = (): void => {};
   const deps: PetRouteDeps = {
     comparison,
     observability,
@@ -158,6 +159,10 @@ export function apply(ctx: any): void {
     ...chatMemory,
     ...balancePoll,
     ...desktopHelper,
+    requestRestart: () => {
+      refreshWhisperSchedule();
+      return desktopHelper.requestRestart();
+    },
     ...sessionNotify,
     ctx,
     todos,
@@ -214,7 +219,7 @@ export function apply(ctx: any): void {
 
   registerBalanceCommand({ ctx, effectivePetList, refreshBalance, sleep, sleepRefusalText });
 
-  registerLoops({
+  refreshWhisperSchedule = registerLoops({
     ctx,
     balancePeriodSec,
     configPaths,

@@ -68,7 +68,7 @@ describe('draftPet - New pet draft', () => {
     const draft = draftPet(template, 'pet-2');
     assert.equal(draft.size, 260);
     assert.equal(draft.balanceEnabled, true);
-    assert.equal(draft.display, 'front');
+    assert.equal(draft.display, 'both');
     assert.deepEqual(draft.position, { corner: 'bottom-left', marginX: 40, marginY: 60 });
 
     draft.position.marginX = 1;

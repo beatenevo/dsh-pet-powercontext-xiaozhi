@@ -1,3 +1,4 @@
+import { livelinessEn } from './liveliness.ts';
 import { interfaceAccessEn } from './interface-access.ts';
 /**
  * Settings page Portuguese copy; key set is exactly the same as zh.
@@ -11,6 +12,7 @@ import { dshMemoryEn } from '../../dsh-memory-status.ts';
 import { observabilityEn } from './observability.ts';
 
 export const pt: Record<Key, string> = {
+  ...livelinessEn,
   ...interfaceAccessEn,
   ...observabilityEn,
   ...dshMemoryEn,

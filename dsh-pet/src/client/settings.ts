@@ -32,6 +32,7 @@ import { makeAccessTokenCard } from './settings/access-token-card.ts';
 import { makeObservabilityCard } from './settings/observability-card.ts';
 import type { MemorySetupStatus } from '../shared/memory-setup.ts';
 import { makeMobileCard } from './settings/mobile-card.ts';
+import { makeLivelinessCard } from './settings/liveliness-card.ts';
 import { makeMotionCard } from './settings/motion-card.ts';
 import { makeModelPicker } from './settings/picker/index.ts';
 import { makeVoicePicker } from './settings/picker/voice-picker.ts';
@@ -99,6 +100,7 @@ export function makePetConfigSection(
   const ObservabilityCard = makeObservabilityCard(rt);
   const PhysicsCard = makePhysicsCard(rt);
   const MotionCard = makeMotionCard(rt);
+  const LivelinessCard = makeLivelinessCard(rt);
   const ShortcutsCard = makeShortcutsCard(rt, ctx);
   const MobileCard = makeMobileCard(rt);
   const Actions = makeActions(rt);
@@ -220,6 +222,7 @@ export function makePetConfigSection(
     // Font (global default): The same set of semantics as physics; the initial value is only a placeholder, and editing and saving are allowed only after the resolved value is loaded successfully.
     const [font, setFont] = useState<FontConfig>({ ...DEFAULT_FONT });
     // Action frequency weight (main entry): The total of the three items is ≤ 100, and the random action is the margin; written with the "Save" package.
+    const [periods, setPeriods] = useState<Record<string, number>>({});
     const [weights, setWeights] = useState<Weights>({ ...DEFAULT_WEIGHTS });
     // AI model (entry level): whisper / talk to the respective service provider and model, leave both blank = follow the current conversation; write the entire package with "Save".
     const [whisperModel, setWhisperModel] = useState<ModelSelection>({ provider: '', model: '' });
@@ -260,6 +263,7 @@ export function makePetConfigSection(
         if (patch.environmentCity !== undefined) setEnvironmentCity(patch.environmentCity);
         if (patch.physics !== undefined) setPhysics(patch.physics);
         if (patch.font !== undefined) setFont(patch.font);
+        setPeriods(patch.eventsRefreshSec ?? {});
         if (patch.animationWeights !== undefined) setWeights(patch.animationWeights);
         if (patch.whisperModel !== undefined) setWhisperModel(patch.whisperModel);
         if (patch.chatModel !== undefined) setChatModel(patch.chatModel);
@@ -393,6 +397,7 @@ export function makePetConfigSection(
         chatImageLimit,
         font,
         animationWeights: weights,
+        eventsRefreshSec: periods,
       }),
       busy: () => busy,
       setBusy,
@@ -512,6 +517,14 @@ export function makePetConfigSection(
           },
         }),
         h(PhysicsCard, { busy, physics, onChange: patchPhysics }),
+        h(LivelinessCard, {
+          busy,
+          periods,
+          onChange: (next: Record<string, number>, nextWeights: Weights) => {
+            setPeriods(next);
+            setWeights(nextWeights);
+          },
+        }),
         h(MotionCard, { busy, weights, onChange: setWeights }),
         h(MobileCard, { busy, physics, onChange: patchPhysics }),
         h(EnvironmentCard, { busy, city: environmentCity, onChange: setEnvironmentCity }),

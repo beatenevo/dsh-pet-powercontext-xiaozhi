@@ -53,6 +53,8 @@ export interface MainConfigPatch {
   font?: FontConfig;
   /** Action frequency weight (main entry): The default indicates that there is no credible value in this response. */
   animationWeights?: Weights;
+  /** 各事件周期，单位秒。 */
+  eventsRefreshSec?: Record<string, number>;
   whisperModel?: ModelSelection;
   chatModel?: ModelSelection;
   chatMemoryRounds?: number;
@@ -109,6 +111,11 @@ export function readMainConfig(merged: MergedConfig): MainConfigPatch | null {
   }
   if (main.font && typeof main.font === 'object') {
     patch.font = { ...DEFAULT_FONT, ...(main.font as FontConfig) };
+  }
+  if (main.eventsRefreshSec && typeof main.eventsRefreshSec === 'object' && !Array.isArray(main.eventsRefreshSec)) {
+    const entries = Object.entries(main.eventsRefreshSec);
+    if (entries.every(([, value]) => typeof value === 'number' && Number.isFinite(value) && value > 0))
+      patch.eventsRefreshSec = Object.fromEntries(entries) as Record<string, number>;
   }
   const weights = parseWeights(main.animationWeights);
   if (weights) patch.animationWeights = weights;

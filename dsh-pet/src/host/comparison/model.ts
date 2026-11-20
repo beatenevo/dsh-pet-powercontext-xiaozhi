@@ -37,7 +37,8 @@ export async function comparisonModel(
     messages,
     system: COMPARISON_SYSTEM,
     temperature: 1,
-    maxTokens: 1024,
+    // 输出预算包含模型推理；为正文预留空间，三组对照使用相同上限。
+    maxTokens: 8192,
     signal,
     ...(supportsOff ? { reasoningEffort: ReasoningEffortId('off') } : {}),
   })) {

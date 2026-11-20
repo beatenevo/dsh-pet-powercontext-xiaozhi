@@ -135,7 +135,7 @@ export function usePetList(
     const template = group[0];
     if (!template) return;
     const id = nextPetId(pets, kind);
-    // The new instance follows the template (size/position/display mode/switch), just change the identity to the new id and attach the type.
+    // The new instance follows the template (size/position/switch), just change the identity to the new id and attach the type.
     const draft: Pet = { ...draftPet(template, id), assetRoot: kind };
     setPets((list) => {
       const next = [...list];

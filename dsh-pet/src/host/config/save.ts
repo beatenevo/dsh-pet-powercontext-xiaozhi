@@ -16,7 +16,7 @@ import { fontValid, modelSelectionValid, physicsValid, topFieldValid } from './v
 
 /**
  * Saving user layer ( PUT /config ): accepts pets + global switch + physics / font / two models / dialog parameters.
- * The non-whitelist top-level fields (whisperPrompt, eventsRefreshSec, memes, etc.) are transparently transmitted from
+ * The non-whitelist top-level fields (whisperPrompt, memes, etc.) are transparently transmitted from
  * existing and retained as they are - the fine-tuned configuration manually edited by the user will not be erased by
  * the settings page save; the whitelist field is only considered whitelisted when the request body is actually
  * transmitted. Invalid → Return null, route returns 200 + failed entity. Decoupled from reading: file pets never write
@@ -163,6 +163,9 @@ export function saveUserConfig(
   // remain unchanged).
   const ph = o.physics;
   if (ph !== undefined && !physicsValid(ph)) return null;
+  // 周期沿用读取侧校验，提交时整段替换，未提交时保留原值。
+  const periods = o.eventsRefreshSec;
+  if (periods !== undefined && !topFieldValid('eventsRefreshSec', periods)) return null;
   // animationWeights (action frequency; this is what is written on the "action frequency" card on the settings page):
   // The same set of semantics as physics - if it is passed, the entire segment will be verified and then entered into
   // the whitelist. If it is not passed, the transparent transmission and retention below will be used. Verify
@@ -232,6 +235,10 @@ export function saveUserConfig(
   if (ec !== undefined) outConfig.environmentCity = String(ec).trim();
   if (te !== undefined) outConfig.trayEnabled = te;
   if (ph !== undefined) outConfig.physics = ph;
+  if (periods !== undefined)
+    outConfig.eventsRefreshSec = Object.fromEntries(
+      Object.entries(periods as Record<string, unknown>).map(([key, value]) => [key, Number(value)]),
+    );
   if (aw !== undefined) outConfig.animationWeights = cleanWeights(aw as Record<string, unknown>);
   if (fo !== undefined) outConfig.font = fo;
   if (wm !== undefined) outConfig.whisperModel = cleanModel(wm as Record<string, unknown>);
@@ -264,6 +271,7 @@ export function saveUserConfig(
   if (ec !== undefined) bodyOwned.add('environmentCity');
   if (te !== undefined) bodyOwned.add('trayEnabled');
   if (ph !== undefined) bodyOwned.add('physics');
+  if (periods !== undefined) bodyOwned.add('eventsRefreshSec');
   if (aw !== undefined) bodyOwned.add('animationWeights');
   if (fo !== undefined) bodyOwned.add('font');
   if (wm !== undefined) bodyOwned.add('whisperModel');

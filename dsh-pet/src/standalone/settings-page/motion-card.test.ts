@@ -19,6 +19,7 @@ import { widgetsScript } from './script/widgets.ts';
 
 interface FakeNode {
   nodeType: number;
+  style: Record<string, string>;
   attrs: Record<string, string>;
   children: FakeNode[];
   listeners: Record<string, () => void>;
@@ -30,12 +31,19 @@ interface FakeNode {
 
 interface Probe {
   state: {
-    globals: { animationWeights: { idle: number; turn: number; move: number } };
+    globals: {
+      eventsRefreshSec?: Record<string, number>;
+      animationWeights: { idle: number; turn: number; move: number };
+    };
     pets: Record<string, unknown[]>;
   };
   motionCard(): FakeNode;
+  livelinessCard(): FakeNode;
   pickGlobals(main: Record<string, unknown>): { animationWeights: { idle: number; turn: number; move: number } };
-  petsBody(): { animationWeights: { idle: number; turn: number; move: number } };
+  petsBody(): {
+    eventsRefreshSec?: Record<string, number>;
+    animationWeights: { idle: number; turn: number; move: number };
+  };
 }
 
 /** Minimum false DOM: Only enough for the script to render the card and trigger input once. */
@@ -44,6 +52,7 @@ function probe(): Probe {
   const node = (): FakeNode => {
     const el: FakeNode = {
       nodeType: 1,
+      style: {},
       attrs: {},
       children: [],
       listeners: {},
@@ -82,7 +91,7 @@ function probe(): Probe {
     widgetsScript(),
     globalsScript(),
     petsScript(),
-    'globalThis.__probe = { state, motionCard, pickGlobals, petsBody };',
+    'globalThis.__probe = { state, motionCard, livelinessCard, pickGlobals, petsBody };',
   ].join('\n');
   const context: Record<string, unknown> = {
     document,
@@ -135,4 +144,16 @@ describe('Standalone mode action frequency card', () => {
     api.state.pets = { main: [] };
     assert.deepEqual({ ...api.petsBody().animationWeights }, { idle: 10, turn: 5, move: 5 });
   });
+});
+
+test('standalone slider keeps other timers and synchronizes advanced weights', () => {
+  const api = probe();
+  api.state.globals = api.pickGlobals({ eventsRefreshSec: { whisper: 300, balance: 900 } });
+  api.state.pets = { main: [] };
+  const advanced = inputs(api.motionCard());
+  const slider = inputs(api.livelinessCard()).find((node) => node.attrs.id === 'g-liveliness')!;
+  slider.value = '0';
+  slider.listeners.input();
+  assert.deepEqual({ ...api.petsBody().eventsRefreshSec }, { whisper: 1800, balance: 900 });
+  assert.equal(advanced.find((node) => node.attrs.id === 'g-motion-idle')!.value, '90');
 });

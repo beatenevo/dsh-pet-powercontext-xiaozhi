@@ -49,7 +49,7 @@ export function createBalancePoll(deps: BalancePollInput) {
    */
   const whisperPeriodSec = (conf: Record<string, unknown>): number => {
     const ers = conf.eventsRefreshSec as Record<string, unknown> | undefined;
-    return clampPeriodSec(ers?.whisper, 300);
+    return clampPeriodSec(ers?.whisper, 600);
   };
 
   /**

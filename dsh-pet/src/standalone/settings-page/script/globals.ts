@@ -8,14 +8,16 @@
  * @module dsh-pet/src/standalone/settings-page/script/globals
  */
 
+import { LIVELINESS_PRESETS } from '../../../shared/liveliness.ts';
 import { DEFAULT_CHAT_MEMORY } from '../../../shared/chat-memory-config.ts';
 
 /** Generate global card fragments. */
 export function globalsScript(): string {
   return `
+const LIVELINESS_PRESETS = ${JSON.stringify(LIVELINESS_PRESETS)};
 const FALLBACK_CHAT_MEMORY = ${JSON.stringify(DEFAULT_CHAT_MEMORY)};
 function globalCards() {
-  return [globalFlagsCard, voiceCard, fontCard, physicsCard, motionCard, modelCard, memoryCard, environmentCard, advancedCard];
+  return [globalFlagsCard, voiceCard, fontCard, physicsCard, livelinessCard, motionCard, modelCard, memoryCard, environmentCard, advancedCard];
 }
 
 function setGlobal(key, value) {
@@ -120,6 +122,32 @@ function physicsCard() {
     ]),
     toggleRow('g-ceiling', '顶部反弹', '关掉后上方没有边界，抛掷可以飞出屏幕顶部。', g.physics.ceilingBounce !== false, (value) => { g.physics = Object.assign({}, g.physics, { ceilingBounce: value }); }),
     toggleRow('g-collide', '宠物互相碰撞', '飞行中的宠物撞到其它宠物时按动量弹开。', g.physics.petCollision !== false, (value) => { g.physics = Object.assign({}, g.physics, { petCollision: value }); }),
+  ]);
+}
+
+function livelinessCard() {
+  const g = state.globals;
+  const period = g.eventsRefreshSec.whisper || 600;
+  const level = LIVELINESS_PRESETS.reduce((best, item, index) => Math.abs(item.whisper - period) < Math.abs(LIVELINESS_PRESETS[best].whisper - period) ? index : best, 0);
+  const input = make('input', { type: 'range', id: 'g-liveliness', min: '0', max: '100', step: '1', value: String(level) });
+  input.style.width = '100%';
+  const hint = make('p', { text: '碎碎念间隔：' + Math.round(period / 6) / 10 + ' 分钟' });
+  input.addEventListener('input', () => {
+    const preset = LIVELINESS_PRESETS[Number(input.value)];
+    if (!preset) return;
+    g.eventsRefreshSec = Object.assign({}, g.eventsRefreshSec, { whisper: preset.whisper });
+    Object.assign(g.animationWeights, preset.weights);
+    hint.textContent = '碎碎念间隔：' + Math.round(preset.whisper / 6) / 10 + ' 分钟';
+    for (const key of ['idle', 'turn', 'move']) {
+      const field = byId('g-motion-' + key);
+      if (field) field.value = String(preset.weights[key]);
+    }
+    const action = byId('g-motion-action');
+    if (action) action.value = String(100 - preset.weights.idle - preset.weights.turn - preset.weights.move);
+    markDirty(true);
+  });
+  return card('活泼程度', '拖动后统一调整碎碎念周期和自主动作，保存后生效。已关闭的碎碎念保持关闭，宠物包单独配置仍优先。越活泼，模型调用越频繁。', [
+    fieldRow('g-liveliness', '安静陪伴 → 活泼好动', input), hint,
   ]);
 }
 

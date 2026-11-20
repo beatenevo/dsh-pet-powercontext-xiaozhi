@@ -41,8 +41,9 @@ export type LoopsInput = {
   Pick<HostSetup, 'standaloneAiPolicy'> &
   Pick<BalancePoll, 'whisperPeriodSec'>;
 
-/** register polling loop; the returned cleanup function is collected by ctx.effect. */
-export function registerLoops(deps: LoopsInput): void {
+/** 注册轮询；返回配置保存后的碎碎念重排入口，清理由 ctx.effect 托管。 */
+export function registerLoops(deps: LoopsInput): () => void {
+  let refreshWhisper = (): void => {};
   const {
     ctx,
     balancePeriodSec,
@@ -193,7 +194,9 @@ export function registerLoops(deps: LoopsInput): void {
           }
           const sec = schedule.periodSec;
           min = Math.min(min, sec);
-          if (now - (lastWhisperAt.get(petId) ?? 0) < sec * 1000) {
+          const elapsed = now - (lastWhisperAt.get(petId) ?? 0);
+          if (elapsed < sec * 1000) {
+            min = Math.min(min, (sec * 1000 - elapsed) / 1000);
             notDue += 1;
             continue;
           }
@@ -243,6 +246,11 @@ export function registerLoops(deps: LoopsInput): void {
       }
       arm(next);
     }
+    refreshWhisper = () => {
+      if (disposed) return;
+      if (timer !== null) clearTimeout(timer);
+      tick();
+    };
     void tick(); // Generate once at startup, not waiting for the first cycle
     return () => {
       disposed = true;
@@ -299,6 +307,7 @@ export function registerLoops(deps: LoopsInput): void {
       if (timer !== null) clearTimeout(timer);
     };
   }, 'dsh-pet: sleep talk poll');
+  return () => refreshWhisper();
 }
 
 /**

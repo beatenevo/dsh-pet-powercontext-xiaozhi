@@ -70,6 +70,7 @@ function pickGlobals(main) {
     chatMemoryRounds: Number.isFinite(Number(source.chatMemoryRounds)) ? Number(source.chatMemoryRounds) : 0,
     chatImageLimit: Number.isFinite(Number(source.chatImageLimit)) ? Number(source.chatImageLimit) : 0,
     animationWeights: pickWeights(source.animationWeights),
+    eventsRefreshSec: Object.assign({}, source.eventsRefreshSec || {}),
   };
 }
 
@@ -163,6 +164,7 @@ function petsBody() {
     chatMemoryRounds: state.globals.chatMemoryRounds,
     chatImageLimit: state.globals.chatImageLimit,
     animationWeights: state.globals.animationWeights,
+    eventsRefreshSec: state.globals.eventsRefreshSec,
   });
 }
 

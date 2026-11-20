@@ -34,7 +34,8 @@ function run(command, args, cwd = root, env = process.env) {
 const npm = (args, cwd = root) => run(process.execPath, [npmCli, ...args], cwd);
 console.log('Packing the validated plugin');
 const packed = JSON.parse(npm(['pack', '--ignore-scripts', '--json', '--pack-destination', output]))[0];
-run('tar', ['-xf', join(output, packed.filename), '-C', output]);
+// Git Bash 的 tar 会把 Windows 盘符中的冒号当成远程归档；在产物目录内使用相对路径。
+run('tar', ['-xf', packed.filename], output);
 const stage = join(output, 'package');
 const manifestPath = join(stage, 'package.json');
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));

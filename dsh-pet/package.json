@@ -89,6 +89,8 @@
     "start:desktop": "node scripts/start-desktop.mjs",
     "standalone": "node lib/standalone.js",
     "start:app": "node scripts/start-app.mjs",
+    "pack:offline": "node scripts/build-offline.mjs",
+    "test:offline": "node scripts/test-offline.mjs",
     "dist": "node scripts/dist.mjs",
     "release": "node scripts/publish.mjs",
     "dev:mock": "node scripts/dev/mock-server.mjs",

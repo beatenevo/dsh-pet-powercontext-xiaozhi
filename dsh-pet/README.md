@@ -29,6 +29,8 @@ dsh plugin --profile web add dsh-pet-powercontext@0.2.0
 
 For DSH desktop, replace `--profile web` with `--profile desktop`. Restart DSH, open **Settings → Pet Config**, and use **Pet chat** in the sidebar. Disable the upstream `dsh-pet` plugin first if enabled; retain its data directory.
 
+Existing DSH installations can use the [platform-specific offline plugin package](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/zh/guides/offline-installation.md) to enable memory without downloading Python or its dependencies.
+
 ### Standalone on Windows, macOS or Linux
 
 With **Node.js 22.12+**, run in PowerShell or a terminal:
@@ -45,7 +47,7 @@ Windows x64 uses native installation; enabling memory automatically prepares Pyt
 
 1. **Configure chat first.** The DSH pet uses the host chat model: enter the MiniMax endpoint, model and subscription key below in DSH model settings. Standalone users enter them in the app's settings.
 2. **Open local long-term memory.** In DSH, open **Settings → Pet Config → Local long-term memory**, select MiniMax China and Qwen Beijing, and enter each service's key. Chat and memory extraction settings are saved separately.
-3. **Click Check and enable memory.** The app checks model connections, installs PowerContext 1.5.2 and seekdb, and starts the service. Initial installation requires internet access. Memory is optional.
+3. **Click Check and enable memory.** The app checks model connections, installs PowerContext 1.5.2 and seekdb, and starts the service. The standard npm package downloads its runtime on first use; offline packages use the bundled runtime. Cloud model calls still require network access. Memory is optional.
 4. **Verify recall.** Tell the pet a distinctive preference and wait for it to appear in **Remembered facts**. Clear recent chat, then ask about it again. A synced status alone does not mean extraction has completed.
 
 | Setting                      | Value                                                                              |

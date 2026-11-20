@@ -9,13 +9,20 @@ import { MemoryCommandError, installMemoryRuntime, memoryProcessEnv, runMemoryCo
 test('Python runtime accepts DSH IPv6 proxy bypasses without changing the host environment', () => {
   const previous = { NO_PROXY: process.env.NO_PROXY, no_proxy: process.env.no_proxy };
   try {
-    process.env.NO_PROXY = 'localhost,127.0.0.1,::1,[::1],.example.com,192.168.0.0/16';
-    process.env.no_proxy = ' [2001:db8::1],internal.example ';
-    const env = memoryProcessEnv('/private/runtime');
-    assert.equal(env.NO_PROXY, 'localhost,127.0.0.1,::1,::1,.example.com,192.168.0.0/16');
-    assert.equal(env.no_proxy, '2001:db8::1,internal.example');
-    assert.ok(process.env.NO_PROXY.endsWith('[::1],.example.com,192.168.0.0/16'));
-    assert.equal(process.env.no_proxy, ' [2001:db8::1],internal.example ');
+    // Windows 环境变量名不区分大小写，分别验证两种拼写，避免测试夹具互相覆盖。
+    for (const [key, original, normalized] of [
+      [
+        'NO_PROXY',
+        'localhost,127.0.0.1,::1,[::1],.example.com,192.168.0.0/16',
+        'localhost,127.0.0.1,::1,::1,.example.com,192.168.0.0/16',
+      ],
+      ['no_proxy', ' [2001:db8::1],internal.example ', '2001:db8::1,internal.example'],
+    ]) {
+      process.env[key] = original;
+      const env = memoryProcessEnv('/private/runtime');
+      assert.equal(env[key], normalized);
+      assert.equal(process.env[key], original);
+    }
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[key];

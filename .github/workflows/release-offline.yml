@@ -1,0 +1,103 @@
+# Native dependencies must be assembled and exercised on their destination OS/architecture.
+name: Offline plugin packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or tag to build and validate (artifacts only, no publication)"
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            target: win32-x64
+          - runner: macos-15
+            target: darwin-arm64
+          - runner: macos-15-intel
+            target: darwin-x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: dsh-pet
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || inputs.ref || github.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.3
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.26"
+          enable-cache: false
+      - name: Verify runner architecture and release metadata
+        env:
+          EXPECTED_TARGET: ${{ matrix.target }}
+          RELEASE_REF: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || inputs.ref || github.ref }}
+        run: |
+          node -e 'if (`${process.platform}-${process.arch}` !== process.env.EXPECTED_TARGET) process.exit(1)'
+          node -e 'require("node:fs").appendFileSync(process.env.GITHUB_ENV, `TMPDIR=${process.env.RUNNER_TEMP}\n`)'
+          node scripts/release-metadata.mjs --write
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: npm test
+      # Runs all packaging gates before the offline variant adds its platform-specific runtime.
+      - run: npm pack --pack-destination "$RUNNER_TEMP"
+      - name: Assemble native offline plugin
+        run: npm run pack:offline -- "$RUNNER_TEMP/offline-plugin"
+      - name: Verify offline installation through the DSH package manager
+        run: |
+          mkdir -p "$RUNNER_TEMP/offline-pnpm"
+          pnpm --dir "$RUNNER_TEMP/offline-pnpm" add --offline --ignore-scripts --config.auto-install-peers=false --store-dir "$RUNNER_TEMP/empty-offline-store" "$RUNNER_TEMP/offline-plugin/release/"*-offline.tgz
+      - name: Install from empty cache and validate relocated runtime without remote services
+        run: npm run test:offline -- "$RUNNER_TEMP/offline-plugin"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-pet-plugin-${{ matrix.target }}-offline
+          path: ${{ runner.temp }}/offline-plugin/release/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    # Only the tag release workflow may publish; manual ref builds remain downloadable artifacts.
+    if: inputs.tag != ''
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dsh-pet-plugin-*-offline
+          path: offline-artifacts
+      - name: Verify and attach packages to the existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          for directory in offline-artifacts/*; do
+            (cd "$directory" && sha256sum --check *.sha256)
+          done
+          gh release view "$RELEASE_TAG"
+          gh release upload "$RELEASE_TAG" offline-artifacts/*/*.tgz offline-artifacts/*/*.sha256 --clobber

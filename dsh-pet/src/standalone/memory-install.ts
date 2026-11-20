@@ -7,6 +7,8 @@ import { promisify } from 'node:util';
 import { isIP } from 'node:net';
 import { memoryRuntimePath, seekdbRuntimeCheck, type MemoryDatabase } from './memory-runtime.ts';
 
+import { offlineMemoryPython } from './memory-offline.ts';
+
 const UV_VERSION = '0.9.26';
 export type MemoryStage =
   | 'checking_runtime'
@@ -226,6 +228,29 @@ export async function installMemoryRuntime(
   progress('checking_runtime');
   if (database === 'seekdb' && process.platform === 'win32' && process.arch !== 'x64')
     throw new Error('seekdb_unsupported_architecture');
+  const offlinePython = offlineMemoryPython(memoryRuntimePath('../offline'), memoryRuntimePath('requirements.txt'));
+  if (offlinePython) {
+    if (database !== 'seekdb') throw new Error('offline_runtime_requires_seekdb');
+    progress('validating_runtime');
+    try {
+      await runMemoryCommand(
+        offlinePython,
+        [
+          '-I',
+          '-B',
+          '-c',
+          seekdbRuntimeCheck() +
+            '; import sqlite3; c = sqlite3.connect(":memory:"); c.enable_load_extension(True); c.close()',
+        ],
+        { ...memoryProcessEnv(directory), PYTHONDONTWRITEBYTECODE: '1' },
+        signal,
+      );
+    } catch {
+      signal.throwIfAborted();
+      throw new Error('offline_runtime_invalid');
+    }
+    return offlinePython;
+  }
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const check =
     database === 'seekdb'

@@ -1,21 +1,21 @@
-/** 选取大会截图中的三条议程事实，用于小样本流程演示。 */
+/** 三条虚构事实用于小样本流程演示，不用于证明长历史召回或 Token 节省。 */
 export const demoZh = {
-  comparisonDemoCorpus: `【2026 AI 数据大会】
-技术主论坛的首场演讲时间为13:30–14:00。
-该演讲主题为“OceanBase AI 数据平台：为 AI 时代设计的数据基础设施”。
-该演讲嘉宾为韩富晟。`,
-  comparisonDemoQuestions: `技术主论坛的首场演讲在什么时间举行？
-这场演讲的主题是什么？
-这场演讲的嘉宾是谁？`,
+  comparisonDemoCorpus: `【虚构演示：星河书店阅读活动】
+活动日期为4月19日。
+活动地点为一楼阅读角。
+活动负责人是陈晨。`,
+  comparisonDemoQuestions: `活动在哪一天举行？
+活动在什么地点举行？
+活动负责人是谁？`,
 };
 
 /** 英文演示保留同样的三个事实和三个问题。 */
 export const demoEn = {
-  comparisonDemoCorpus: `2026 AI Data Conference.
-The first talk in the main technical forum runs from 13:30 to 14:00.
-Its topic is "OceanBase AI Data Platform: Data Infrastructure Designed for the AI Era".
-Its speaker is Han Fusheng (韩富晟).`,
-  comparisonDemoQuestions: `What time is the first talk in the main technical forum?
-What is the topic of this talk?
-Who is the speaker?`,
+  comparisonDemoCorpus: `Fictional demo: Riverside Bookshop reading event.
+The event date is April 19.
+The event location is the ground-floor reading corner.
+The event owner is Alex.`,
+  comparisonDemoQuestions: `On what date is the event?
+Where is the event held?
+Who is responsible for the event?`,
 };

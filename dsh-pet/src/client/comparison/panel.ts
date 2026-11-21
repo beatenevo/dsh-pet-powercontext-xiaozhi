@@ -27,6 +27,7 @@ export function makeComparisonPanel(rt: ChatPanelRuntime): (pet: CompanionIdenti
       const trigger = launchRef.current;
       if (open) return () => trigger?.focus();
     }, [open]);
+    const [confirmDemo, setConfirmDemo] = useState(false);
     const [corpus, setCorpus] = useState('');
     const [questions, setQuestions] = useState('');
     const [moreQuestions, setMoreQuestions] = useState('');
@@ -288,11 +289,32 @@ export function makeComparisonPanel(rt: ChatPanelRuntime): (pet: CompanionIdenti
         'data-positive': positive,
         children: [h('small', { children: label }), h('strong', { children: value }), h('span', { children: detail })],
       });
+    const fillDemo = (): void => {
+      setCorpus(t('comparisonDemoCorpus'));
+      setQuestions(t('comparisonDemoQuestions'));
+      setConfirmDemo(false);
+    };
     const setup = h('details', {
       className: 'pet-comparison-setup',
       open: !run,
       children: [
         h('summary', { children: t(run ? 'comparisonNewRun' : 'comparisonSetup') }),
+        button(
+          t(corpus.trim() || questions.trim() ? 'comparisonDemoReplace' : 'comparisonDemo'),
+          () => (corpus.trim() || questions.trim() ? setConfirmDemo(true) : fillDemo()),
+          busy,
+        ),
+        confirmDemo
+          ? h('div', {
+              className: 'pet-comparison-toolbar',
+              children: [
+                h('span', { children: t('comparisonDemoConfirm') }),
+                button(t('comparisonDemoReplace'), fillDemo, busy),
+                button(t('comparisonDemoKeep'), () => setConfirmDemo(false)),
+              ],
+            })
+          : null,
+        h('p', { className: 'pet-comparison-note', children: t('comparisonDemoHint') }),
         h('div', {
           className: 'pet-comparison-form',
           children: [

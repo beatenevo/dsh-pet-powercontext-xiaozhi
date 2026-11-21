@@ -1,5 +1,15 @@
+import { demoEn, demoZh } from './demo.ts';
+
 /** The comparison tool ships English and Chinese copy; other locales use English. */
 export const comparisonEn = {
+  ...demoEn,
+  comparisonDemoKeep: 'Keep current content',
+  comparisonDemo: 'Fill demo content',
+  comparisonDemoReplace: 'Replace with demo content',
+  comparisonDemoConfirm: 'Replace the background record and questions you have entered?',
+  comparisonDemoHint:
+    'Fill three fictional facts and three questions locally to try the complete workflow. You can edit them before starting model calls. This small sample may use more tokens with memory.',
+
   comparisonCompanion: 'Pet chat',
   comparisonSetup: 'Set up a comparison',
   comparisonNewRun: 'Start a new comparison',
@@ -75,6 +85,14 @@ export const comparisonEn = {
     'Review the supplied facts and answer requirements before interpreting savings. Short-history control is shown below each pair.',
 };
 export const comparisonZh: Record<keyof typeof comparisonEn, string> = {
+  ...demoZh,
+  comparisonDemoKeep: '保留当前内容',
+  comparisonDemo: '一键填入演示内容',
+  comparisonDemoReplace: '替换为演示内容',
+  comparisonDemoConfirm: '是否替换当前填写的背景资料和问题？',
+  comparisonDemoHint:
+    '一键填入 3 条虚构事实和 3 个问题，用于体验完整流程；内容可编辑，开始对照后才调用模型。小样本启用记忆后，Token 用量可能增加。',
+
   comparisonCompanion: '桌宠对话',
   comparisonSetup: '准备对照实验',
   comparisonNewRun: '开始新的对照',

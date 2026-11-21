@@ -17,14 +17,14 @@ kind: package-reference
 
 ## 使用本包
 
-以下命令明确安装 **v0.2.0**，也可以从 [GitHub Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.2.0) 下载发布包。
+**v0.3.0 已发布**，以下命令安装该版本，也可以从 [GitHub Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.3.0) 下载发布包。
 
 ### 已经在用 DSH
 
 安装 DSH 与 **Node.js 24.9+** 后，在终端执行：
 
 ```sh
-dsh plugin --profile web add dsh-pet-powercontext@0.2.0
+dsh plugin --profile web add dsh-pet-powercontext@0.3.0
 ```
 
 DSH 桌面版将 `--profile web` 换为 `--profile desktop`。重启 DSH，在「设置 → 桌宠配置」调整桌宠，在右侧栏「桌宠对话」中聊天。若已启用上游 `dsh-pet`，先停用它并保留数据目录。
@@ -36,18 +36,18 @@ DSH 桌面版将 `--profile web` 换为 `--profile desktop`。重启 DSH，在�
 安装 **Node.js 22.12+** 后，在 PowerShell 或终端执行：
 
 ```sh
-npx --yes dsh-pet-powercontext@0.2.0 --setup
+npx --yes dsh-pet-powercontext@0.3.0 --setup
 ```
 
 在打开的设置页选择聊天模型、填写密钥并检查连接。使用期间保持终端运行；图形桌宠需要桌面环境，首次启动可能下载 Electron。独立运行不需要先安装 DSH。
 
-Windows x64 使用原生安装路径；长期记忆会自动准备 Python 和 seekdb。Windows ARM64 的本机 seekdb 暂不支持。Linux 已完成真实服务验证，Windows x64 和 macOS 的完整安装流程仍待实机验证。桌面安装包请以 [Release 附件](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.2.0)实际提供的文件为准。
+Windows x64 使用原生安装路径；长期记忆会自动准备 Python 和 seekdb。Windows ARM64 的本机 seekdb 暂不支持。Linux 已完成真实服务验证，Windows x64 和 macOS 的完整安装流程仍待实机验证。桌面安装包请以 [Release 附件](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.3.0)实际提供的文件为准。
 
 ### 配置模型并开启长期记忆
 
 1. **先配置聊天模型。** DSH 桌宠沿用宿主聊天模型；在 DSH 模型设置中使用下表的 MiniMax 地址、模型与订阅 Key。独立模式在自己的设置页填写。
 2. **打开本机长期记忆。** DSH 进入「设置 → 桌宠配置 → 本机长期记忆」，选择 MiniMax 中国端与通义千问·北京，填写各自密钥。聊天模型与记忆整理模型的配置分别保存。
-3. **点击「检查并启用记忆」。** 程序检查模型连接，自动安装 PowerContext 1.5.2 和 seekdb，并启动服务。普通 npm 包首次使用时下载运行环境，离线包使用内置环境；云模型调用仍需联网。记忆功能按需开启。
+3. **点击「检查并启用记忆」。** 程序检查模型连接，自动安装 PowerContext 1.5.2 和 seekdb，并启动服务。普通 npm 包优先复用兼容的本机 Python 和依赖缓存，并显示安装进度；缺少组件时下载。离线包使用内置环境；云模型调用仍需联网。记忆功能按需开启。
 4. **验证记忆。** 告诉桌宠一条独特偏好，等待「记得的事」出现对应事实；清空近期聊天后再追问，检查是否召回。仅显示「已同步」不代表整理已完成。
 
 | 配置项                     | 值                                                  |
@@ -66,9 +66,11 @@ Windows x64 使用原生安装路径；长期记忆会自动准备 Python 和 se
 
 ### 按需接入 AI Vision 与 Token 对照
 
-AI Vision 是可选的外部可观测平台。在可观测性设置中填写已有平台地址与认证信息，保存并检查连接；暂停再恢复记忆，使新配置应用到本机记忆服务。插件不会自动部署 AI Vision 平台。
+AI Vision 是可选的外部可观测平台。在可观测性设置中填写已有平台地址与认证信息，保存并检查连接；暂停再恢复记忆，使新配置应用到本机记忆服务。插件不会自动部署 AI Vision 平台。启用可观测性时，正文采集默认开启，可在设置中关闭；开启后提示词、回复及相关记忆内容会发送到所配置的平台。
 
-Token 对照是辅助实验功能，用于比较不同上下文策略的回答与用量。请把记忆整理与向量化开销计入比较；短对话不保证节省 Token。
+在桌宠对话中打开「Token 对照」，点击「一键填入演示内容」，即可填入虚构的星河书店场景：三条事实、三个问题。内容可以编辑，替换已有草稿前会确认；点击「准备记忆并运行」后才开始调用模型。
+
+对照实验使用同一模型比较完整历史、短历史加 PowerContext、仅短历史三组回答。v0.3.0 将三组回答的输出预算统一提高到 8192 Token，为推理模型返回正文留出空间；用量按实际返回值统计，截断或空回答仍会报告失败。请把记忆整理与向量化开销计入比较。内置小样本用于演示流程，不保证节省 Token。
 
 [安装详情](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/zh/guides/installation.md) · [记忆指南](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/zh/guides/memory.md) · [AI Vision](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/zh/guides/observability.md) · [Token 对照](https://github.com/ob-labs/dsh-pet-powercontext/blob/master/docs/zh/guides/token-comparison.md)
 

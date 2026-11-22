@@ -15,7 +15,7 @@ export const DEFAULT_CHAT_MEMORY: Readonly<ChatMemoryConfig> = {
   serverUrl: 'http://127.0.0.1:8000',
   maxRecallBytes: 4096,
   recallLimit: 3,
-  timeoutMs: 1500,
+  timeoutMs: 3000,
 };
 
 /** Keep credentials out of configuration responses and disallow cleartext remote transport. */

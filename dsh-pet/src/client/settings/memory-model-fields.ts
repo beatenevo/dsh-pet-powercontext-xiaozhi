@@ -39,6 +39,7 @@ export function makeMemoryModelFields(rt: SettingsRuntime) {
     const [models, setModels] = useState<Array<{ id: string; name: string }>>([]);
     const [notice, setNotice] = useState('');
     const [loading, setLoading] = useState(false);
+    const [checking, setChecking] = useState(false);
     const active = useRef<AbortController | null>(null);
     const url = embedding ? draft.embeddingBaseUrl || draft.baseUrl : draft.baseUrl;
     const apiKey = embedding
@@ -49,17 +50,64 @@ export function makeMemoryModelFields(rt: SettingsRuntime) {
       (sameModelEndpoint(url, props.models.baseUrl) ||
         (embedding && sameModelEndpoint(url, props.models.embeddingBaseUrl)));
     const kind = embedding ? 'embedding' : 'generation';
+    const model = embedding ? draft.embeddingModel : draft.model;
+    const dimension = embedding ? draft.embeddingDimension : '';
+    const sendDimensions = embedding && draft.embeddingSendDimensions;
     const listId = 'memory-model-list-' + kind;
     useEffect(() => {
       setPreset(MODEL_PRESETS.find((entry) => sameModelEndpoint(entry.baseUrl, url))?.id ?? 'custom');
     }, [url]);
     useEffect(() => {
-      active.current?.abort();
       setModels([]);
+    }, [url, apiKey, locked]);
+    useEffect(() => {
+      active.current?.abort();
       setNotice('');
       setLoading(false);
+      setChecking(false);
       return () => active.current?.abort();
-    }, [url, apiKey, locked]);
+    }, [url, apiKey, locked, model, dimension, sendDimensions]);
+    const check = async () => {
+      active.current?.abort();
+      const controller = new AbortController();
+      active.current = controller;
+      setChecking(true);
+      setNotice('');
+      try {
+        const response = await fetch(ROUTE_PATH + '/powercontext/setup', {
+          method: 'POST',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          redirect: 'error',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'check',
+            kind,
+            baseUrl: url,
+            model,
+            apiKey,
+            ...(embedding
+              ? { dimension: Number(draft.embeddingDimension), sendDimensions: draft.embeddingSendDimensions }
+              : {}),
+          }),
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(35_000)]),
+        });
+        const result = await response.json();
+        if (controller.signal.aborted) return;
+        const errorKey = 'memorySetup_error_' + result.errorCode;
+        setNotice(
+          response.ok && result.ok === true
+            ? t(embedding ? 'memorySetupEmbeddingChecked' : 'memorySetupGenerationChecked')
+            : t(errorKey) !== errorKey
+              ? t(errorKey)
+              : t('memorySetupCheckFailed'),
+        );
+      } catch {
+        if (!controller.signal.aborted) setNotice(t('memorySetupCheckFailed'));
+      } finally {
+        if (!controller.signal.aborted) setChecking(false);
+      }
+    };
     const discover = async () => {
       active.current?.abort();
       const controller = new AbortController();
@@ -125,6 +173,7 @@ export function makeMemoryModelFields(rt: SettingsRuntime) {
           className: INPUT_CLASS,
           type,
           value: draft[key],
+          placeholder: type === 'password' && savedKey ? '·········' : undefined,
           readOnly: locked && type !== 'password',
           'aria-label': t('memorySetup_' + key),
           list: key === 'model' || key === 'embeddingModel' ? listId : undefined,
@@ -171,11 +220,23 @@ export function makeMemoryModelFields(rt: SettingsRuntime) {
         }),
         h('button', {
           type: 'button',
-          disabled: locked || loading || !url,
+          disabled: locked || loading || checking || !url,
           onClick: () => void discover(),
           children: t(loading ? 'memorySetupModelsLoading' : 'memorySetupModelsFetch'),
         }),
         input(embedding ? 'embeddingModel' : 'model'),
+        h('button', {
+          type: 'button',
+          disabled: checking || loading || !url || !model,
+          onClick: () => void check(),
+          children: t(
+            checking
+              ? 'memorySetupCheckingModel'
+              : embedding
+                ? 'memorySetupCheckEmbedding'
+                : 'memorySetupCheckGeneration',
+          ),
+        }),
         h('datalist', {
           id: listId,
           children: models.map((entry) => h('option', { value: entry.id, children: entry.name }, entry.id)),

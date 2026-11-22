@@ -40,6 +40,10 @@ export function setupHandler(
         sendJson(res, 200, await setup.discover(input));
         return;
       }
+      if (input && typeof input === 'object' && 'action' in input && input.action === 'check' && setup.check) {
+        sendJson(res, 200, await setup.check(input));
+        return;
+      }
       setup.submit(input);
       sendJson(res, 202, setup.status());
     } catch (error) {

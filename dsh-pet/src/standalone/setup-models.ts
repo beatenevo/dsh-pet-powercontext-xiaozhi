@@ -54,7 +54,10 @@ export function setupErrorCode(error: unknown): string {
 }
 
 /** DSH mode only checks the memory extraction model and does not modify the host chat model or credentials. */
-export async function checkGeneration(models: MemoryModels, signal: AbortSignal): Promise<void> {
+export async function checkGeneration(
+  models: Pick<MemoryModels, 'baseUrl' | 'model' | 'apiKey'>,
+  signal: AbortSignal,
+): Promise<void> {
   const timeout = AbortSignal.timeout(30_000);
   try {
     const response = await fetch(models.baseUrl.replace(/\/+$/, '') + '/chat/completions', {
@@ -89,7 +92,13 @@ export async function checkGeneration(models: MemoryModels, signal: AbortSignal)
   }
 }
 
-export async function checkEmbedding(models: MemoryModels, signal: AbortSignal): Promise<void> {
+export async function checkEmbedding(
+  models: Pick<
+    MemoryModels,
+    'embeddingBaseUrl' | 'embeddingModel' | 'embeddingApiKey' | 'embeddingDimension' | 'embeddingSendDimensions'
+  >,
+  signal: AbortSignal,
+): Promise<void> {
   const timeout = AbortSignal.timeout(15_000);
   try {
     const response = await fetch(models.embeddingBaseUrl.replace(/\/+$/, '') + '/embeddings', {

@@ -1,5 +1,12 @@
 /** Chinese and English text of the local memory wizard; other languages will fall back to English. */
 export const memorySetupEn = {
+  memorySetupCheckGeneration: 'Test LLM connection',
+  memorySetupCheckEmbedding: 'Test embedding connection',
+  memorySetupCheckingModel: 'Testing connection…',
+  memorySetupGenerationChecked: 'LLM connection verified. This test does not save settings.',
+  memorySetupEmbeddingChecked: 'Embedding connection and vector dimension verified. This test does not save settings.',
+  memorySetupCheckFailed: 'Connection test failed. Check the endpoint, model and key, then retry.',
+
   memorySetupDatabase: 'Memory database',
   memorySetupMiniMaxKey:
     'Use the sk-cp- subscription key. A pay-as-you-go API key does not share the subscription quota.',
@@ -45,7 +52,7 @@ export const memorySetupEn = {
   memorySetup_embeddingModel: 'Embedding model',
   memorySetup_embeddingDimension: 'Embedding dimensions',
   memorySetup_embeddingApiKey: 'Embedding API key',
-  memorySetupSavedKey: 'A key is saved for this address. Leave it blank to reuse it, or enter a replacement.',
+  memorySetupSavedKey: 'Your saved key is reused automatically after reopening. Enter a new value only to replace it.',
   memorySetupDraftKey:
     'Key entered. It is saved after setup succeeds; failed checks keep it in this form so you can correct and resubmit.',
   memorySetupNewKey:
@@ -144,6 +151,13 @@ export const memorySetupEn = {
 
 /** Chinese and English keep the same key set, and the stages are from the real service state. */
 export const memorySetupZh: Record<keyof typeof memorySetupEn, string> = {
+  memorySetupCheckGeneration: '测试 LLM 连接',
+  memorySetupCheckEmbedding: '测试向量模型连接',
+  memorySetupCheckingModel: '正在测试连接…',
+  memorySetupGenerationChecked: 'LLM 连接验证成功。本次测试不会保存配置。',
+  memorySetupEmbeddingChecked: '向量模型连接及向量维度验证成功。本次测试不会保存配置。',
+  memorySetupCheckFailed: '连接测试失败，请检查接口地址、模型和密钥后重试。',
+
   memorySetupDatabase: '记忆数据库',
   memorySetupMiniMaxKey: '请填写 sk-cp- 开头的套餐订阅 Key；按量 API Key 不共用订阅额度。',
   memorySetup_error_database_change_requires_new_store: '已有库不能原地更换数据库类型，请使用独立数据目录或服务。',
@@ -184,7 +198,7 @@ export const memorySetupZh: Record<keyof typeof memorySetupEn, string> = {
   memorySetup_embeddingModel: 'Embedding 模型',
   memorySetup_embeddingDimension: '向量维度',
   memorySetup_embeddingApiKey: 'Embedding 密钥',
-  memorySetupSavedKey: '当前地址已保存密钥，留空沿用，填写新值可更新。',
+  memorySetupSavedKey: '重新打开后会自动沿用已保存的密钥；仅需更换密钥时填写新值。',
   memorySetupDraftKey: '密钥已填写，设置成功后保存；检查失败时会保留在本表单中，便于修改后重新提交。',
   memorySetupNewKey:
     '尚未保存此地址的密钥。远程服务请填写自己的密钥，本机服务可留空；设置成功后凭据私密保存在 DSH 所在机器。',

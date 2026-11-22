@@ -484,7 +484,10 @@ test('failed memory checks retain draft keys and show the failing provider until
   await card.getByText('本次配置已完成。', { exact: true }).waitFor();
   assert.equal(await card.getByLabel('生成模型密钥', { exact: true }).inputValue(), '');
   assert.equal(await card.getByLabel('Embedding 密钥', { exact: true }).inputValue(), '');
-  assert.equal(await card.getByText('当前地址已保存密钥，留空沿用，填写新值可更新。', { exact: true }).count(), 2);
+  assert.equal(
+    await card.getByText('重新打开后会自动沿用已保存的密钥；仅需更换密钥时填写新值。', { exact: true }).count(),
+    2,
+  );
 
   // Updating only a key must also clear the draft after success, even though public model fields are unchanged.
   await card.getByLabel('生成模型密钥', { exact: true }).fill('replacement-generation-key');
@@ -606,4 +609,45 @@ test('liveliness slider saves chatter and motion together and survives reload', 
   await chinese.waitFor();
   await chinese.scrollIntoViewIfNeeded();
   await page.screenshot({ path: join(process.env.TMPDIR || '/data/codex-tmp', 'pet-liveliness-settings.png') });
+});
+
+test('independent model checks validate current drafts without starting setup and discard stale results', async (t) => {
+  let pending;
+  const requests = [];
+  const { page } = await open(t, {
+    lang: 'zh',
+    memorySetup: (route) => {
+      const body = route.request().postDataJSON();
+      if (body?.action === 'check') {
+        requests.push(body);
+        if (body.kind === 'generation') {
+          pending = route;
+          return;
+        }
+        return route.fulfill({ json: { ok: false, errorCode: 'embedding_dimension' } });
+      }
+      return route.fulfill({ json: { ok: true, available: true, stage: 'idle', busy: false, configured: false } });
+    },
+  });
+  const card = page.locator('[data-memory-setup]');
+  await card.getByLabel('生成模型密钥', { exact: true }).fill('generation-draft');
+  await card.getByRole('button', { name: '测试 LLM 连接', exact: true }).click();
+  await card.getByRole('button', { name: '正在测试连接…', exact: true }).waitFor();
+  assert.equal(requests[0].apiKey, 'generation-draft');
+  await pending.fulfill({ json: { ok: true } });
+  await card.getByText('LLM 连接验证成功。本次测试不会保存配置。', { exact: true }).waitFor();
+  await card.getByRole('button', { name: '测试 LLM 连接', exact: true }).click();
+  await card.getByRole('button', { name: '正在测试连接…', exact: true }).waitFor();
+  await card.getByLabel('记忆整理模型', { exact: true }).fill('another-model');
+  await pending.fulfill({ json: { ok: true } });
+  await page.waitForTimeout(100);
+  assert.equal(await card.getByText('LLM 连接验证成功。本次测试不会保存配置。', { exact: true }).count(), 0);
+  await card.getByLabel('Embedding 密钥', { exact: true }).fill('embedding-draft');
+  await card.getByRole('button', { name: '测试向量模型连接', exact: true }).click();
+  await card.getByText('Embedding 返回的向量维度不匹配，请核对填写的维度。', { exact: true }).waitFor();
+  assert.equal(requests.at(-1).apiKey, 'embedding-draft');
+  assert.equal(requests.at(-1).dimension, 1024);
+  assert.equal(requests.at(-1).sendDimensions, true);
+  assert.ok(requests.every((request) => request.action === 'check'));
+  await page.screenshot({ path: join(process.env.TMPDIR || '/data/codex-tmp', 'model-check-buttons.png') });
 });

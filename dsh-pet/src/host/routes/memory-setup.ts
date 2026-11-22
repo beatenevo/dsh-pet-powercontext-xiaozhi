@@ -17,6 +17,7 @@ export const handleMemorySetupRoutes: RouteHandler = async (deps, { rest, method
     try {
       const input = JSON.parse(body ?? 'null');
       if (input?.action === 'models' && setup.discover) return okResult(await setup.discover(input));
+      if (input?.action === 'check' && setup.check) return okResult(await setup.check(input));
       setup.submit(input);
     } catch (error) {
       return failResult('bad-request', error instanceof SyntaxError ? 'invalid_setup' : setupErrorCode(error));

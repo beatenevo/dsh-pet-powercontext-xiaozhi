@@ -5,6 +5,7 @@ import { memoryConfigBinding } from '../host/plugin/memory-binding.ts';
 import { ROUTE_SEGMENT } from '../shared/constants.ts';
 import { localModelKey } from '../shared/memory-presets.ts';
 import { discoverSetupModels } from './setup-discovery.ts';
+import { checkSetupModel, type SetupCheckResult } from './setup-check.ts';
 import type { ModelDiscoveryResult } from './ai-provider/types.ts';
 import type { StandaloneAiService } from './ai-provider.ts';
 import { ManagedMemory, memoryModelsSchema } from './managed-memory.ts';
@@ -93,6 +94,8 @@ export interface SetupService {
   dispose(): Promise<void>;
   /** The read-only discovery model does not return credentials and does not trigger the preparation process. */
   discover?(input: unknown): Promise<ModelDiscoveryResult>;
+  /** 独立验证模型连接，不修改准备进度或保存配置。 */
+  check?(input: unknown): Promise<SetupCheckResult>;
 }
 
 /** Use the host configuration boundary for persistence, desktop refresh, and rollback. */
@@ -289,6 +292,7 @@ export function createSetup(
   };
   return {
     discover: (input) => discoverSetupModels(input, memory, ai),
+    check: (input) => checkSetupModel(input, lifetime.signal, memory, ai),
     status() {
       if (stage === 'ready' && memory?.enabled && !memory.running && !job) {
         stage = 'error';

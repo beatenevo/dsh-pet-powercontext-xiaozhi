@@ -2157,6 +2157,7 @@ paths:
         Only application/json accepted, cross-site browser request rejected. start asynchronously checks the generated and Embedding models, installs and starts PowerContext.
         The DSH chat model is not modified; memory bindings for default entries are saved when ready. retry retry draft or start saved configuration; stop pause and retain data; cancel cancel current preparation.
         The saved key is only reused if the full endpoint address is the same. The process starts and stops with the DSH plugin, and only one process is allowed to manage the same database.
+        check sends one generation or embedding request without saving configuration or installing services; embedding checks also validate vector dimensions. Model calls may incur usage.
          models read-only discovers generated or vector models, does not save settings; returns clear matches and candidates with unknown capabilities, actual capabilities still need to be checked by connection.
       requestBody:
         required: true
@@ -2175,6 +2176,7 @@ paths:
                 oneOf:
                   - $ref: "#/components/schemas/MemorySetupStatus"
                   - $ref: "#/components/schemas/MemoryModelDiscovery"
+                  - $ref: "#/components/schemas/MemoryModelCheckResult"
                   - $ref: "#/components/schemas/FailureResponse"
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
@@ -5503,6 +5505,43 @@ components:
             baseUrl: { type: string, format: uri, maxLength: 2048 }
             apiKey:
               { type: string, maxLength: 4096, writeOnly: true, default: "" }
+
+        - type: object
+          additionalProperties: false
+          required: [action, kind, baseUrl, model]
+          properties:
+            action: { type: string, const: check }
+            kind: { type: string, const: generation }
+            baseUrl: { type: string, format: uri, maxLength: 2048 }
+            model: { type: string, minLength: 1, maxLength: 200 }
+            apiKey:
+              { type: string, maxLength: 4096, writeOnly: true, default: "" }
+        - type: object
+          additionalProperties: false
+          required: [action, kind, baseUrl, model, dimension, sendDimensions]
+          properties:
+            action: { type: string, const: check }
+            kind: { type: string, const: embedding }
+            baseUrl: { type: string, format: uri, maxLength: 2048 }
+            model: { type: string, minLength: 1, maxLength: 200 }
+            apiKey:
+              { type: string, maxLength: 4096, writeOnly: true, default: "" }
+            dimension: { type: integer, minimum: 1, maximum: 65536 }
+            sendDimensions: { type: boolean }
+
+    MemoryModelCheckResult:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [ok]
+          properties:
+            ok: { type: boolean, const: true }
+        - type: object
+          additionalProperties: false
+          required: [ok, errorCode]
+          properties:
+            ok: { type: boolean, const: false }
+            errorCode: { type: string }
 
     MemoryModelDiscovery:
       oneOf:

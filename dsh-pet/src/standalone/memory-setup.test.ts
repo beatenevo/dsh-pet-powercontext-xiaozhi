@@ -120,6 +120,12 @@ process.stdin.resume(); process.stdin.on('end', () => server.close());
     const resumed = await settled(setup);
     assert.equal(resumed.serverUrl, ready.serverUrl);
     assert.equal(resumed.memoryReady, true);
+    deny = false;
+    const beforeRecheck = auth.length;
+    setup.submit({ ...draft, apiKey: '', embeddingApiKey: '' });
+    assert.equal((await settled(setup)).memoryReady, true);
+    assert.ok(auth.length > beforeRecheck);
+    assert.ok(auth.slice(beforeRecheck).every((value) => value === 'Bearer synthetic-dsh-key'));
   },
 );
 

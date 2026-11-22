@@ -163,7 +163,7 @@ test('optional memory stays off by default and saves its backend and separate by
     serverUrl: 'https://memory.example.test',
     maxRecallBytes: 2048,
     recallLimit: 3,
-    timeoutMs: 1500,
+    timeoutMs: 3000,
   });
   await backend.selectOption('native');
   await save(page);

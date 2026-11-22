@@ -33,7 +33,7 @@ Retrying synchronization resends Source records; it does not run extraction. Old
 
 ## Budgets and latency
 
-Managed setup starts with 4 recent rounds, 6,000 recent-text bytes and 4,096 recall-text bytes. Existing bindings retain adjusted values. The default foreground recall/single-delivery timeout is 1,500 ms; background generation has a separate 120-second timeout. These are limits, not completion-time guarantees.
+Managed setup starts with 4 recent rounds, 6,000 recent-text bytes and 4,096 recall-text bytes. Existing bindings retain adjusted values. The default foreground recall/single-delivery timeout is 3,000 ms; background generation has a separate 120-second timeout. These are limits, not completion-time guarantees.
 
 Retrieval uses the current question and up to two budgeted recent rounds to understand follow-ups. Recalled content is historical evidence; current user corrections take priority. When PowerContext is explicitly selected, it owns recall/capture instead of a registered third-party Cordis memory backend.
 

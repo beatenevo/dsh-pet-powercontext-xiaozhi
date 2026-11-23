@@ -5,8 +5,10 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
 import { isIP } from 'node:net';
-import { memoryRuntimePath, seekdbRuntimeCheck, type MemoryDatabase } from './memory-runtime.ts';
+import { memoryRuntimePath, memoryRuntimeVersion, seekdbRuntimeCheck, type MemoryDatabase } from './memory-runtime.ts';
 
+import { memoryInstallSources } from './env.ts';
+import { extractUvWheel, uvWheelArtifact } from './memory-uv.ts';
 import { offlineMemoryPython } from './memory-offline.ts';
 
 const UV_VERSION = '0.9.26';
@@ -255,7 +257,7 @@ export async function installMemoryRuntime(
   const check =
     database === 'seekdb'
       ? seekdbRuntimeCheck()
-      : 'from importlib.metadata import version; assert version("powercontext") == "1.5.0"; import uvicorn';
+      : `from importlib.metadata import version; assert version("powercontext") == ${JSON.stringify(memoryRuntimeVersion())}; import uvicorn`;
   const python = join(directory, 'venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
   const env = memoryProcessEnv(directory);
   if (existsSync(python)) {
@@ -285,6 +287,8 @@ export async function installMemoryRuntime(
       if (error instanceof MemoryCommandError && error.exitSignal) throw error;
     }
   }
+  const sources = memoryInstallSources();
+  Object.assign(env, sources.env);
   const artifact = ARCHIVES[`${process.platform}-${process.arch}`];
   if (!artifact) throw new Error('unsupported_platform');
   const bin = join(directory, 'uv');
@@ -300,7 +304,10 @@ export async function installMemoryRuntime(
   }
   if (!existsSync(uv)) {
     progress('downloading');
-    const [name, digest] = artifact;
+    const download = sources.uvBaseUrl
+      ? { name: artifact[0], digest: artifact[1], url: `${sources.uvBaseUrl}/${UV_VERSION}/${artifact[0]}` }
+      : uvWheelArtifact(`${process.platform}-${process.arch}`);
+    const { name, digest } = download;
     const archive = join(directory, name);
     try {
       // System curl honors proxy settings on all supported platforms. -q disables user curlrc commands.
@@ -314,27 +321,41 @@ export async function installMemoryRuntime(
           '=https',
           '--proto-redir',
           '=https',
+          '--connect-timeout',
+          '30',
           '--max-time',
-          '120',
+          '300',
+          '--retry',
+          '2',
+          '--retry-delay',
+          '2',
+          '--retry-max-time',
+          '600',
           '--max-filesize',
           '50000000',
           '--silent',
           '--output',
           archive,
-          `https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${name}`,
+          download.url,
         ],
         env,
         signal,
       );
       if (createHash('sha256').update(readFileSync(archive)).digest('hex') !== digest)
         throw new Error('download_checksum_failed');
-      // Windows tar (bsdtar) supports zip. Unix archives contain one enclosing directory.
-      const args =
-        process.platform === 'win32'
-          ? ['-xf', archive, '-C', bin]
-          : ['-xzf', archive, '--strip-components=1', '-C', bin];
-      await runMemoryCommand('tar', args, env, signal);
-      chmodSync(uv, 0o700);
+      signal.throwIfAborted();
+      if (sources.uvBaseUrl) {
+        // 自定义源沿用 Release 压缩包格式，Windows tar 支持 zip。
+        const args =
+          process.platform === 'win32'
+            ? ['-xf', archive, '-C', bin]
+            : ['-xzf', archive, '--strip-components=1', '-C', bin];
+        await runMemoryCommand('tar', args, env, signal);
+        chmodSync(uv, 0o700);
+      } else {
+        await extractUvWheel(archive, bin, process.platform === 'win32' ? 'uv.exe' : 'uv');
+      }
+      signal.throwIfAborted();
     } finally {
       rmSync(archive, { force: true });
     }
@@ -355,7 +376,9 @@ export async function installMemoryRuntime(
     'install',
     '--python',
     python,
-    ...(database === 'seekdb' ? ['-r', memoryRuntimePath('requirements.txt')] : ['powercontext[cli,server]==1.5.0']),
+    ...(database === 'seekdb'
+      ? ['-r', memoryRuntimePath('requirements.txt')]
+      : [`powercontext[cli,server]==${memoryRuntimeVersion()}`]),
   ];
   progress('using_cached_dependencies');
   try {

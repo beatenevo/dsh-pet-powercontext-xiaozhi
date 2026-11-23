@@ -42,7 +42,7 @@ Qwen 预设包含北京、新加坡；地址与 Key 的地域须一致，切换�
 
 ## 手动连接已有服务
 
-1. 部署 [PowerContext 1.5.0 Server](https://github.com/oceanbase/powercontext/releases/tag/powercontext-v1.5.0)，配置生成模型及所选检索方式需要的 embedding 模型，并开启 Memory 后台抽取。桌宠的「重试同步」只补传 Source，不执行抽取。
+1. 部署 [PowerContext 1.5.2 Server](https://github.com/oceanbase/powercontext/releases/tag/powercontext-v1.5.2)，配置生成模型及所选检索方式需要的 embedding 模型，并开启 Memory 后台抽取。桌宠的「重试同步」只补传 Source，不执行抽取。
 2. 在 DSH 设置页的「AI 模型与对话上下文」，或独立模式设置页的「长期记忆」中选择 PowerContext，填写服务地址并保存。支持本机 HTTP；远程地址必须使用 HTTPS。
 3. 若手动连接的服务需要 Bearer 令牌，在启动桌宠宿主的环境中设置 `DSH_PET_POWERCONTEXT_TOKEN`。手动连接的令牌不写入宠物配置或 URL，也不会通过设置接口返回。请求不跟随重定向。本机自动服务使用自己的私有令牌，不覆盖此环境变量。
 4. 告诉桌宠一条独特偏好，聊到它退出近期窗口，等待后台抽取后再追问。可在设置页刷新当前宠物的状态。

@@ -64,3 +64,45 @@ dsh plugin --profile web remove dsh-pet-powercontext
 如果安装在桌面版，将 `--profile web` 换成 `--profile desktop`。卸载插件和删除数据是两件事，不打算删除配置和记忆时，请保留用户目录。详见[记忆管理](memory.md#删除与停用)。
 
 需要修改源码时，请阅读[开发指南](../reference/development.md)。
+
+## 中国网络与自定义下载源
+
+普通包首次安装 uv 时默认直接从清华 PyPI 镜像下载固定版本 `0.9.26` 的平台 wheel，无需配置环境变量，也不先访问 GitHub。wheel 内已包含独立的 uv 可执行文件，安装器使用 Node 解包，因此不需要预装 Python、pip 或 tar。下载失败不会自动回退 GitHub。
+
+Python 解释器默认从 npmmirror 的 `python-build-standalone` 镜像下载；PowerContext、seekdb 等 Python 依赖默认使用清华 PyPI 索引。三个环节均无需手动设置环境变量，也不自动回退官方源。兼容本机 Python 和已缓存的依赖仍优先复用。显式设置的下载源优先于默认值；仅修改依赖索引不会改变 uv 的下载地址。
+
+| 环境变量                       | 作用与地址格式                                                                                                        |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `DSH_PET_UV_DOWNLOAD_BASE_URL` | uv Release 根地址；安装器追加 `/0.9.26/<平台压缩包名>`。显式配置时覆盖默认清华 wheel，改用该根地址下的 Release 压缩包 |
+| `UV_PYTHON_INSTALL_MIRROR`     | 默认 `https://registry.npmmirror.com/-/binary/python-build-standalone`；自定义根地址须保留日期与文件名布局            |
+| `UV_DEFAULT_INDEX`             | Python 包的完整 simple 索引地址，默认 `https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple`                          |
+| `UV_INDEX_URL`                 | 兼容 uv 的旧索引变量；与 `UV_DEFAULT_INDEX` 同时设置时，后者优先                                                      |
+
+地址必须使用 HTTPS，且不能包含用户名、密码、查询参数或片段。uv 使用固定版本及 SHA256 校验；默认 wheel 摘要固定来自官方 PyPI 发布记录，自定义 Release 压缩包沿用原有固定摘要，校验失败不会解包执行。下载连接超时为 30 秒，单次传输上限 300 秒，瞬时错误最多重试两次，整个命令仍受 10 分钟上限及用户取消控制。Python 和依赖沿用 uv 自身的网络重试机制。
+
+通常无需运行以下命令。需要显式指定依赖索引时，Windows PowerShell 示例：
+
+```powershell
+$env:UV_DEFAULT_INDEX = 'https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple'
+```
+
+macOS/Linux shell：
+
+```sh
+export UV_DEFAULT_INDEX='https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple'
+```
+
+设置后，完全退出原有 DSH/独立应用，再从同一个终端启动安装了此功能版本的应用，点击「重试本次设置」。桌面快捷方式不会继承另一个终端的临时变量；也可以在操作系统用户环境变量中配置，再重新登录并启动应用。
+
+uv 和 Python 已默认走国内源。仅需覆盖默认值时，可在 PowerShell 中设置以下变量。`mirror.example` 是地址格式占位符，必须换成实际可访问、包含对应文件的镜像，不能原样运行：
+
+```powershell
+$env:DSH_PET_UV_DOWNLOAD_BASE_URL = 'https://mirror.example/astral-sh/uv/releases/download'
+$env:UV_PYTHON_INSTALL_MIRROR = 'https://mirror.example/astral-sh/python-build-standalone/releases/download'
+```
+
+这些变量仅传给安装子进程；记忆服务不继承包源设置。安装器继续忽略全局 `uv.toml`，不导入额外索引、证书校验绕过或其它任意 `UV_*` 设置。兼容本机 Python 与已有依赖缓存仍优先复用，已就绪环境和离线包无需配置镜像。
+
+Workshop 建议提前准备[平台专用离线包](offline-installation.md)，并在演示电脑完成启用记忆与召回验证；镜像可达性和速度取决于现场网络，云模型仍需联网。
+
+安装源解析位于 `dsh-pet/src/standalone/env.ts`，下载、校验和缓存复用位于 `dsh-pet/src/standalone/memory-install.ts`，固定 wheel 地址及 Node 解包逻辑位于 `dsh-pet/src/standalone/memory-uv.ts`。

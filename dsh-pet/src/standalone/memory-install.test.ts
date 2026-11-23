@@ -141,6 +141,7 @@ test(
 );
 
 for (const scenario of [
+  'sqlite',
   'cached',
   'cache-miss',
   'incompatible',
@@ -160,6 +161,27 @@ for (const scenario of [
     `runtime installation selects Python and preserves cache: ${scenario}`,
     { skip: process.platform === 'win32' },
     async (t) => {
+      const defaultSources = scenario === 'cache-miss' || scenario === 'incompatible';
+      const previousLegacyIndex = process.env.UV_INDEX_URL;
+      delete process.env.UV_INDEX_URL;
+      const previousIndex = process.env.UV_DEFAULT_INDEX;
+      const previousMirror = process.env.UV_PYTHON_INSTALL_MIRROR;
+      process.env.UV_DEFAULT_INDEX = 'https://mirror.example/simple';
+      process.env.UV_PYTHON_INSTALL_MIRROR = 'https://mirror.example/python';
+      if (defaultSources) {
+        delete process.env.UV_DEFAULT_INDEX;
+        delete process.env.UV_PYTHON_INSTALL_MIRROR;
+      }
+      t.after(() => {
+        if (previousLegacyIndex === undefined) delete process.env.UV_INDEX_URL;
+        else process.env.UV_INDEX_URL = previousLegacyIndex;
+        if (previousIndex === undefined) delete process.env.UV_DEFAULT_INDEX;
+        else process.env.UV_DEFAULT_INDEX = previousIndex;
+        if (previousMirror === undefined) delete process.env.UV_PYTHON_INSTALL_MIRROR;
+        else process.env.UV_PYTHON_INSTALL_MIRROR = previousMirror;
+      });
+      assert.equal(memoryProcessEnv('/runtime').UV_DEFAULT_INDEX, undefined);
+      assert.equal(memoryProcessEnv('/runtime').UV_PYTHON_INSTALL_MIRROR, undefined);
       const rejected = [
         'incompatible',
         '3.10',
@@ -182,6 +204,7 @@ for (const scenario of [
       const directory = mkdtempSync(join(tmpdir(), 'pet-python-reuse-'));
       t.after(() => rmSync(directory, { recursive: true, force: true }));
       const capture = join(directory, 'commands.jsonl');
+      const checks = join(directory, 'checks.jsonl');
       const systemPython = join(directory, 'system python');
       const python = join(directory, 'venv', 'bin', 'python');
       const cache = join(directory, 'cache');
@@ -196,16 +219,17 @@ process.exit(${scenario === 'incompatible' ? 1 : 0});
 `,
         { mode: 0o700 },
       );
+      const installedPython = `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(checks)}, JSON.stringify(process.argv.slice(2)) + '\\n');\n`;
       writeFileSync(
         join(directory, 'uv', 'uv'),
         `#!${process.execPath}
 const fs = require('node:fs');
 const args = process.argv.slice(2);
-fs.appendFileSync(${JSON.stringify(capture)}, JSON.stringify({args, cache: process.env.UV_CACHE_DIR, preference: process.env.UV_PYTHON_PREFERENCE, downloads: process.env.UV_PYTHON_DOWNLOADS}) + '\\n');
+fs.appendFileSync(${JSON.stringify(capture)}, JSON.stringify({args, index: process.env.UV_DEFAULT_INDEX, mirror: process.env.UV_PYTHON_INSTALL_MIRROR, cache: process.env.UV_CACHE_DIR, preference: process.env.UV_PYTHON_PREFERENCE, downloads: process.env.UV_PYTHON_DOWNLOADS}) + '\\n');
 if (args[0] === 'python') console.log(${JSON.stringify(systemPython)});
 if (args[0] === 'venv') {
   fs.mkdirSync(${JSON.stringify(join(directory, 'venv', 'bin'))}, {recursive: true});
-  fs.writeFileSync(${JSON.stringify(python)}, '#!${process.execPath}\\n', {mode: 0o700});
+  fs.writeFileSync(${JSON.stringify(python)}, ${JSON.stringify(installedPython)}, {mode: 0o700});
 }
 if (args.includes('--offline') && args[0] === 'pip') {
   if (${JSON.stringify(scenario)} === 'cache-miss') process.exit(1);
@@ -223,7 +247,7 @@ if (args.includes('--offline') && args[0] === 'pip') {
         directory,
         new AbortController().signal,
         (stage) => stages.push(stage),
-        'seekdb',
+        scenario === 'sqlite' ? 'sqlite' : 'seekdb',
       );
       if (scenario === 'crash')
         await assert.rejects(
@@ -234,8 +258,34 @@ if (args.includes('--offline') && args[0] === 'pip') {
       const calls = readFileSync(capture, 'utf8')
         .trim()
         .split('\n')
-        .map((line) => JSON.parse(line) as { args: string[]; cache: string; preference: string; downloads?: string });
+        .map(
+          (line) =>
+            JSON.parse(line) as {
+              args: string[];
+              cache: string;
+              preference: string;
+              downloads?: string;
+              index: string;
+              mirror: string;
+            },
+        );
       assert.ok(calls.find((call) => call.args[0] === 'python')?.args.includes('cpython>=3.11,<3.15'));
+      assert.ok(
+        calls.every(
+          (call) =>
+            call.index ===
+            (defaultSources ? 'https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple' : 'https://mirror.example/simple'),
+        ),
+      );
+      assert.ok(
+        calls.every(
+          (call) =>
+            call.mirror ===
+            (defaultSources
+              ? 'https://registry.npmmirror.com/-/binary/python-build-standalone'
+              : 'https://mirror.example/python'),
+        ),
+      );
       const venv = calls.find((call) => call.args[0] === 'venv')!;
       assert.equal(venv.args[venv.args.indexOf('--python') + 1], rejected ? '3.12' : systemPython);
       assert.equal(venv.preference, rejected ? 'only-managed' : 'only-system');
@@ -243,6 +293,14 @@ if (args.includes('--offline') && args[0] === 'pip') {
       const installs = calls.filter((call) => call.args[0] === 'pip');
       assert.equal(installs.length, scenario === 'cache-miss' ? 2 : 1);
       assert.equal(installs[0].args.includes('--offline'), true);
+      if (scenario === 'sqlite') {
+        assert.ok(installs.every((call) => call.args.includes('powercontext[cli,server]==1.5.2')));
+        const validation = JSON.parse(readFileSync(checks, 'utf8').trim()) as string[];
+        assert.equal(
+          validation[1],
+          'from importlib.metadata import version; assert version("powercontext") == "1.5.2"; import uvicorn',
+        );
+      }
       assert.ok(installs.every((call) => call.cache === cache));
       assert.equal(readFileSync(join(cache, 'existing-cache'), 'utf8'), 'keep');
       assert.ok(stages.includes(rejected ? 'installing_python' : 'reusing_python'));
@@ -256,3 +314,60 @@ if (args.includes('--offline') && args[0] === 'pip') {
     },
   );
 }
+
+// 可执行替身验证下载调度与校验边界，不访问外部镜像。
+for (const customSource of [false, true])
+  test(
+    `uv downloads retain checksum verification and bounded retries, custom source: ${customSource}`,
+    { skip: process.platform === 'win32' },
+    async (t) => {
+      const directory = mkdtempSync(join(tmpdir(), 'pet-uv-mirror-'));
+      const bin = join(directory, 'commands');
+      const capture = join(directory, 'curl.json');
+      const extracted = join(directory, 'extracted');
+      mkdirSync(bin);
+      writeFileSync(
+        join(bin, 'curl'),
+        `#!${process.execPath}
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.writeFileSync(${JSON.stringify(capture)}, JSON.stringify(args));
+fs.writeFileSync(args[args.indexOf('--output') + 1], 'tampered archive');
+`,
+        { mode: 0o700 },
+      );
+      writeFileSync(
+        join(bin, 'tar'),
+        `#!${process.execPath}
+require('node:fs').writeFileSync(${JSON.stringify(extracted)}, 'unexpected');
+`,
+        { mode: 0o700 },
+      );
+      const previous = {
+        PATH: process.env.PATH,
+        DSH_PET_UV_DOWNLOAD_BASE_URL: process.env.DSH_PET_UV_DOWNLOAD_BASE_URL,
+      };
+      t.after(() => {
+        for (const [key, value] of Object.entries(previous)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+        rmSync(directory, { recursive: true, force: true });
+      });
+      process.env.PATH = bin;
+      if (customSource) process.env.DSH_PET_UV_DOWNLOAD_BASE_URL = 'https://mirror.example/uv/';
+      else delete process.env.DSH_PET_UV_DOWNLOAD_BASE_URL;
+      await assert.rejects(installMemoryRuntime(directory, new AbortController().signal), {
+        message: 'download_checksum_failed',
+      });
+      const args = JSON.parse(readFileSync(capture, 'utf8')) as string[];
+      if (customSource) assert.match(args[args.length - 1], /^https:\/\/mirror\.example\/uv\/0\.9\.26\/uv-/);
+      else assert.equal(new URL(args[args.length - 1]).origin, 'https://mirrors.tuna.tsinghua.edu.cn');
+      assert.equal(args[args.indexOf('--proto') + 1], '=https');
+      assert.equal(args[args.indexOf('--proto-redir') + 1], '=https');
+      assert.equal(args[args.indexOf('--retry') + 1], '2');
+      assert.equal(args[args.indexOf('--max-time') + 1], '300');
+      assert.equal(existsSync(extracted), false);
+      assert.equal(existsSync(args[args.indexOf('--output') + 1]), false);
+    },
+  );

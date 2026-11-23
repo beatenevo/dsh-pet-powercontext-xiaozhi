@@ -64,3 +64,45 @@ dsh plugin --profile web remove dsh-pet-powercontext
 Use `--profile desktop` if that is where you installed it. Removing the plugin and deleting your data are separate actions. Keep the user data directory unless you intend to remove configuration and memories. See [memory controls](memory.md#deletion-and-disabling).
 
 To change the code, see the [development guide](../reference/development.md).
+
+## Download mirrors
+
+The standard package downloads the pinned uv `0.9.26` platform wheel directly from the Tsinghua PyPI mirror by default, without environment configuration or a preliminary GitHub request. The wheel contains a standalone uv executable, which Node extracts without requiring Python, pip or tar. Download failures do not automatically fall back to GitHub.
+
+Managed Python defaults to the npmmirror `python-build-standalone` mirror; Python dependencies such as PowerContext and seekdb default to the Tsinghua PyPI index. All three stages work without environment configuration and do not automatically fall back to upstream sources. Compatible local Python and cached dependencies are still reused first. Explicit source settings override defaults. Changing the dependency index does not change the uv bootstrap URL.
+
+| Environment variable           | Meaning                                                                                                                                                    |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DSH_PET_UV_DOWNLOAD_BASE_URL` | uv release root, with `/0.9.26/<platform-archive>` appended. An explicit value overrides the default Tsinghua wheel with a Release archive from this root. |
+| `UV_PYTHON_INSTALL_MIRROR`     | Defaults to `https://registry.npmmirror.com/-/binary/python-build-standalone`; custom roots must preserve the date/file layout.                            |
+| `UV_DEFAULT_INDEX`             | Full Python simple-index URL; defaults to `https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple`.                                                          |
+| `UV_INDEX_URL`                 | Legacy uv index variable; `UV_DEFAULT_INDEX` takes precedence when both are set.                                                                           |
+
+URLs must use HTTPS without credentials, query parameters or fragments. uv artifacts require a pinned SHA256 digest before extraction: default wheel digests come from the official PyPI release metadata, while custom Release archives retain their existing digests. Downloads use a 30-second connection timeout, a 300-second per-attempt limit and at most two transient-error retries, subject to the existing 10-minute command deadline and cancellation. Python and dependency downloads retain uv's own retry behavior.
+
+No commands are normally needed. To explicitly set the dependency index in PowerShell:
+
+```powershell
+$env:UV_DEFAULT_INDEX = 'https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple'
+```
+
+macOS/Linux:
+
+```sh
+export UV_DEFAULT_INDEX='https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple'
+```
+
+Fully quit DSH/the standalone app, launch a version containing this feature from the same terminal, and retry setup. A desktop shortcut does not inherit another terminal's temporary variables. Alternatively, configure OS user environment variables and sign in again before launching.
+
+uv and Python already use mainland China mirrors by default. Only set these variables when overriding the defaults. Replace `mirror.example` with an accessible mirror containing the required files; these are placeholders, not working public services:
+
+```powershell
+$env:DSH_PET_UV_DOWNLOAD_BASE_URL = 'https://mirror.example/astral-sh/uv/releases/download'
+$env:UV_PYTHON_INSTALL_MIRROR = 'https://mirror.example/astral-sh/python-build-standalone/releases/download'
+```
+
+Only installation subprocesses receive these source settings. The memory server does not inherit them. Global `uv.toml`, extra indexes, TLS verification bypasses and arbitrary `UV_*` variables remain excluded. Compatible local Python and cached packages are still reused; ready environments and offline bundles do not need mirrors.
+
+For workshops, prepare a platform-specific offline plugin and verify memory creation and recall on the demonstration machine beforehand. Mirror availability and performance depend on the local network; cloud model calls still need connectivity.
+
+Source map: `dsh-pet/src/standalone/env.ts` parses download sources; `dsh-pet/src/standalone/memory-install.ts` handles downloads, verification and cache reuse; `dsh-pet/src/standalone/memory-uv.ts` pins wheel artifacts and extracts them with Node.

@@ -2,7 +2,7 @@
 
 English · [简体中文](../../zh/guides/memory.md) · [Documentation](../README.md)
 
-Memory is optional. The pet keeps recent chat locally; PowerContext 1.5.0 captures completed text exchanges, extracts facts in the background and retrieves relevant evidence for later replies. Each pet and server endpoint has its own persisted scope and delivery queue.
+Memory is optional. The pet keeps recent chat locally; PowerContext 1.5.2 captures completed text exchanges, extracts facts in the background and retrieves relevant evidence for later replies. Each pet and server endpoint has its own persisted scope and delivery queue.
 
 ## Reuse DSH project memory
 
@@ -24,7 +24,7 @@ Data, private model settings, runtime and database live under `$DSH_HOME/dsh-pet
 
 ## Connect an existing server
 
-1. Prepare a PowerContext 1.5.0 server with generation, the embeddings required by its retrieval mode, and background memory extraction enabled.
+1. Prepare a PowerContext 1.5.2 server with generation, the embeddings required by its retrieval mode, and background memory extraction enabled.
 2. Select the PowerContext backend in pet model/context settings and enter its server URL. Local HTTP is allowed; remote servers require HTTPS.
 3. For an authenticated external server, set `DSH_PET_POWERCONTEXT_TOKEN` in the pet host's environment. Do not put the token in the URL or pet config. Managed local memory uses its own private token.
 4. Tell the pet a distinctive fact, let it leave the recent window, wait for extraction, then ask about it.

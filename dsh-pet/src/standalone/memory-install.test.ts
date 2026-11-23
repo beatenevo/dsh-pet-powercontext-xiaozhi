@@ -141,6 +141,7 @@ test(
 );
 
 for (const scenario of [
+  'sqlite',
   'cached',
   'cache-miss',
   'incompatible',
@@ -203,6 +204,7 @@ for (const scenario of [
       const directory = mkdtempSync(join(tmpdir(), 'pet-python-reuse-'));
       t.after(() => rmSync(directory, { recursive: true, force: true }));
       const capture = join(directory, 'commands.jsonl');
+      const checks = join(directory, 'checks.jsonl');
       const systemPython = join(directory, 'system python');
       const python = join(directory, 'venv', 'bin', 'python');
       const cache = join(directory, 'cache');
@@ -217,6 +219,7 @@ process.exit(${scenario === 'incompatible' ? 1 : 0});
 `,
         { mode: 0o700 },
       );
+      const installedPython = `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(checks)}, JSON.stringify(process.argv.slice(2)) + '\\n');\n`;
       writeFileSync(
         join(directory, 'uv', 'uv'),
         `#!${process.execPath}
@@ -226,7 +229,7 @@ fs.appendFileSync(${JSON.stringify(capture)}, JSON.stringify({args, index: proce
 if (args[0] === 'python') console.log(${JSON.stringify(systemPython)});
 if (args[0] === 'venv') {
   fs.mkdirSync(${JSON.stringify(join(directory, 'venv', 'bin'))}, {recursive: true});
-  fs.writeFileSync(${JSON.stringify(python)}, '#!${process.execPath}\\n', {mode: 0o700});
+  fs.writeFileSync(${JSON.stringify(python)}, ${JSON.stringify(installedPython)}, {mode: 0o700});
 }
 if (args.includes('--offline') && args[0] === 'pip') {
   if (${JSON.stringify(scenario)} === 'cache-miss') process.exit(1);
@@ -244,7 +247,7 @@ if (args.includes('--offline') && args[0] === 'pip') {
         directory,
         new AbortController().signal,
         (stage) => stages.push(stage),
-        'seekdb',
+        scenario === 'sqlite' ? 'sqlite' : 'seekdb',
       );
       if (scenario === 'crash')
         await assert.rejects(
@@ -290,6 +293,14 @@ if (args.includes('--offline') && args[0] === 'pip') {
       const installs = calls.filter((call) => call.args[0] === 'pip');
       assert.equal(installs.length, scenario === 'cache-miss' ? 2 : 1);
       assert.equal(installs[0].args.includes('--offline'), true);
+      if (scenario === 'sqlite') {
+        assert.ok(installs.every((call) => call.args.includes('powercontext[cli,server]==1.5.2')));
+        const validation = JSON.parse(readFileSync(checks, 'utf8').trim()) as string[];
+        assert.equal(
+          validation[1],
+          'from importlib.metadata import version; assert version("powercontext") == "1.5.2"; import uvicorn',
+        );
+      }
       assert.ok(installs.every((call) => call.cache === cache));
       assert.equal(readFileSync(join(cache, 'existing-cache'), 'utf8'), 'keep');
       assert.ok(stages.includes(rejected ? 'installing_python' : 'reusing_python'));

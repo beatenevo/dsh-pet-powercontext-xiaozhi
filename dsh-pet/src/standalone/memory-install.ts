@@ -5,7 +5,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
 import { isIP } from 'node:net';
-import { memoryRuntimePath, seekdbRuntimeCheck, type MemoryDatabase } from './memory-runtime.ts';
+import { memoryRuntimePath, memoryRuntimeVersion, seekdbRuntimeCheck, type MemoryDatabase } from './memory-runtime.ts';
 
 import { memoryInstallSources } from './env.ts';
 import { extractUvWheel, uvWheelArtifact } from './memory-uv.ts';
@@ -257,7 +257,7 @@ export async function installMemoryRuntime(
   const check =
     database === 'seekdb'
       ? seekdbRuntimeCheck()
-      : 'from importlib.metadata import version; assert version("powercontext") == "1.5.0"; import uvicorn';
+      : `from importlib.metadata import version; assert version("powercontext") == ${JSON.stringify(memoryRuntimeVersion())}; import uvicorn`;
   const python = join(directory, 'venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
   const env = memoryProcessEnv(directory);
   if (existsSync(python)) {
@@ -376,7 +376,9 @@ export async function installMemoryRuntime(
     'install',
     '--python',
     python,
-    ...(database === 'seekdb' ? ['-r', memoryRuntimePath('requirements.txt')] : ['powercontext[cli,server]==1.5.0']),
+    ...(database === 'seekdb'
+      ? ['-r', memoryRuntimePath('requirements.txt')]
+      : [`powercontext[cli,server]==${memoryRuntimeVersion()}`]),
   ];
   progress('using_cached_dependencies');
   try {

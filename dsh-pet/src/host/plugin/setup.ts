@@ -113,9 +113,13 @@ export function createHostSetup(ctx: HostSetupContext): HostSetup {
   // It is only responsible for cleanup when it is created by itself: logger of reuse is managed by standalone/app lifecycle, and the plugin unmount should not turn it off.
   if (!reusedLog) {
     ctx.effect(
-      () => () => {
-        void log.flush();
-        log.dispose();
+      () => async () => {
+        // 等待异步建目录及写盘结束，避免卸载返回后仍修改已清理的目录。
+        try {
+          await log.flush();
+        } finally {
+          log.dispose();
+        }
       },
       'dsh-pet: log file',
     );

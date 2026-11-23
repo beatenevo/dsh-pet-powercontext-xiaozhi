@@ -53,14 +53,14 @@ _后台抽取后，桌宠再次答出项目名 Moonleaf 和“无糖茉莉花茶
 
 ## 先养好一只
 
-**v0.3.0 已发布**，以下命令安装该版本，也可以从 [GitHub Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.3.0) 下载发布包。
+**当前代码版本为 v0.3.2。** 以下命令适用于该版本发布后；已发布版本及安装包请查看 [GitHub Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases)。
 
 ### 已经在用 DSH
 
 安装 DSH 与 **Node.js 24.9+** 后，在终端执行：
 
 ```sh
-dsh plugin --profile web add dsh-pet-powercontext@0.3.0
+dsh plugin --profile web add dsh-pet-powercontext@0.3.2
 ```
 
 DSH 桌面版将 `--profile web` 换为 `--profile desktop`。重启 DSH，在「设置 → 桌宠配置」调整桌宠，在右侧栏「桌宠对话」中聊天。若已启用上游 `dsh-pet`，先停用它并保留数据目录。
@@ -70,12 +70,14 @@ DSH 桌面版将 `--profile web` 换为 `--profile desktop`。重启 DSH，在�
 安装 **Node.js 22.12+** 后，在 PowerShell 或终端执行：
 
 ```sh
-npx --yes dsh-pet-powercontext@0.3.0 --setup
+npx --yes dsh-pet-powercontext@0.3.2 --setup
 ```
 
 在打开的设置页选择聊天模型、填写密钥并检查连接。使用期间保持终端运行；图形桌宠需要桌面环境，首次启动可能下载 Electron。独立运行不需要先安装 DSH。
 
-Windows x64 使用原生安装路径；长期记忆会自动准备 Python 和 seekdb。Windows ARM64 的本机 seekdb 暂不支持。Linux 已完成真实服务验证，Windows x64 和 macOS 的完整安装流程仍待实机验证。桌面安装包请以 [Release 附件](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.3.0)实际提供的文件为准。
+Windows x64 使用原生安装路径；长期记忆会自动准备 Python 和 seekdb。Windows ARM64 的本机 seekdb 暂不支持。Linux 已完成真实服务验证，Windows x64 和 macOS 的完整安装流程仍待实机验证。桌面安装包请以 [Release 附件](https://github.com/ob-labs/dsh-pet-powercontext/releases)实际提供的文件为准。
+
+v0.3.2 的在线记忆安装默认使用国内源，无需手动设置：uv 和 Python 依赖从清华镜像下载，Python 运行时从 npmmirror 下载。PowerContext 固定为 **1.5.2**，SQLite 与 seekdb 安装及环境复用均校验该版本。兼容的本机 Python 和依赖缓存仍会复用；离线包使用内置环境。首次启用还需要建库和迁移，建议演示前提前完成。
 
 ### 配置模型并开启长期记忆
 

@@ -53,14 +53,14 @@ Recorded on **2026-11-11** in **DSH 0.2.2-rc.1**, with **PowerContext + seekdb**
 
 ## Start with one pet
 
-**v0.3.0 is released.** These instructions install that version. Release archives are also available from [GitHub Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.3.0).
+**The current source version is v0.3.2.** Use the commands below after this version is published. See [GitHub Releases](https://github.com/ob-labs/dsh-pet-powercontext/releases) for published versions and assets.
 
 ### Already using DSH
 
 With DSH and **Node.js 24.9+** installed, run:
 
 ```sh
-dsh plugin --profile web add dsh-pet-powercontext@0.3.0
+dsh plugin --profile web add dsh-pet-powercontext@0.3.2
 ```
 
 For DSH desktop, replace `--profile web` with `--profile desktop`. Restart DSH, open **Settings → Pet Config**, and use **Pet chat** in the sidebar. Disable the upstream `dsh-pet` plugin first if enabled; retain its data directory.
@@ -70,12 +70,14 @@ For DSH desktop, replace `--profile web` with `--profile desktop`. Restart DSH, 
 With **Node.js 22.12+**, run in PowerShell or a terminal:
 
 ```sh
-npx --yes dsh-pet-powercontext@0.3.0 --setup
+npx --yes dsh-pet-powercontext@0.3.2 --setup
 ```
 
 Select a chat model, enter its key and check the connection in the setup page. Keep the terminal running. The animated pet needs a desktop environment and may download Electron on first launch. Standalone mode does not require DSH.
 
-Windows x64 uses native installation; enabling memory automatically prepares Python and seekdb. Local seekdb on Windows ARM64 is not supported. Real-service validation has completed on Linux; the full Windows x64 and macOS installation flows still require real-host validation. Check the actual [Release assets](https://github.com/ob-labs/dsh-pet-powercontext/releases/tag/v0.3.0) for desktop downloads.
+Windows x64 uses native installation; enabling memory automatically prepares Python and seekdb. Local seekdb on Windows ARM64 is not supported. Real-service validation has completed on Linux; the full Windows x64 and macOS installation flows still require real-host validation. Check the actual [Release assets](https://github.com/ob-labs/dsh-pet-powercontext/releases) for desktop downloads.
+
+In v0.3.2, online memory setup uses mainland China mirrors by default without manual configuration: uv and Python packages come from Tsinghua, and managed Python comes from npmmirror. PowerContext is pinned to **1.5.2**, with version checks for both SQLite and seekdb installation and runtime reuse. Compatible local Python and cached dependencies are reused; offline packages use their bundled runtime. First-time setup also initializes and migrates the database, so complete it before a live demonstration.
 
 ### Configure models and enable memory
 

@@ -282,52 +282,58 @@ if (args.includes('--offline') && args[0] === 'pip') {
 }
 
 // 可执行替身验证下载调度与校验边界，不访问外部镜像。
-test(
-  'mirrored uv downloads retain checksum verification and bounded retries',
-  { skip: process.platform === 'win32' },
-  async (t) => {
-    const directory = mkdtempSync(join(tmpdir(), 'pet-uv-mirror-'));
-    const bin = join(directory, 'commands');
-    const capture = join(directory, 'curl.json');
-    const extracted = join(directory, 'extracted');
-    mkdirSync(bin);
-    writeFileSync(
-      join(bin, 'curl'),
-      `#!${process.execPath}
+for (const customSource of [false, true])
+  test(
+    `uv downloads retain checksum verification and bounded retries, custom source: ${customSource}`,
+    { skip: process.platform === 'win32' },
+    async (t) => {
+      const directory = mkdtempSync(join(tmpdir(), 'pet-uv-mirror-'));
+      const bin = join(directory, 'commands');
+      const capture = join(directory, 'curl.json');
+      const extracted = join(directory, 'extracted');
+      mkdirSync(bin);
+      writeFileSync(
+        join(bin, 'curl'),
+        `#!${process.execPath}
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 fs.writeFileSync(${JSON.stringify(capture)}, JSON.stringify(args));
 fs.writeFileSync(args[args.indexOf('--output') + 1], 'tampered archive');
 `,
-      { mode: 0o700 },
-    );
-    writeFileSync(
-      join(bin, 'tar'),
-      `#!${process.execPath}
+        { mode: 0o700 },
+      );
+      writeFileSync(
+        join(bin, 'tar'),
+        `#!${process.execPath}
 require('node:fs').writeFileSync(${JSON.stringify(extracted)}, 'unexpected');
 `,
-      { mode: 0o700 },
-    );
-    const previous = { PATH: process.env.PATH, DSH_PET_UV_DOWNLOAD_BASE_URL: process.env.DSH_PET_UV_DOWNLOAD_BASE_URL };
-    t.after(() => {
-      for (const [key, value] of Object.entries(previous)) {
-        if (value === undefined) delete process.env[key];
-        else process.env[key] = value;
-      }
-      rmSync(directory, { recursive: true, force: true });
-    });
-    process.env.PATH = bin;
-    process.env.DSH_PET_UV_DOWNLOAD_BASE_URL = 'https://mirror.example/uv/';
-    await assert.rejects(installMemoryRuntime(directory, new AbortController().signal), {
-      message: 'download_checksum_failed',
-    });
-    const args = JSON.parse(readFileSync(capture, 'utf8')) as string[];
-    assert.match(args[args.length - 1], /^https:\/\/mirror\.example\/uv\/0\.9\.26\/uv-/);
-    assert.equal(args[args.indexOf('--proto') + 1], '=https');
-    assert.equal(args[args.indexOf('--proto-redir') + 1], '=https');
-    assert.equal(args[args.indexOf('--retry') + 1], '2');
-    assert.equal(args[args.indexOf('--max-time') + 1], '300');
-    assert.equal(existsSync(extracted), false);
-    assert.equal(existsSync(args[args.indexOf('--output') + 1]), false);
-  },
-);
+        { mode: 0o700 },
+      );
+      const previous = {
+        PATH: process.env.PATH,
+        DSH_PET_UV_DOWNLOAD_BASE_URL: process.env.DSH_PET_UV_DOWNLOAD_BASE_URL,
+      };
+      t.after(() => {
+        for (const [key, value] of Object.entries(previous)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+        rmSync(directory, { recursive: true, force: true });
+      });
+      process.env.PATH = bin;
+      if (customSource) process.env.DSH_PET_UV_DOWNLOAD_BASE_URL = 'https://mirror.example/uv/';
+      else delete process.env.DSH_PET_UV_DOWNLOAD_BASE_URL;
+      await assert.rejects(installMemoryRuntime(directory, new AbortController().signal), {
+        message: 'download_checksum_failed',
+      });
+      const args = JSON.parse(readFileSync(capture, 'utf8')) as string[];
+      if (customSource) assert.match(args[args.length - 1], /^https:\/\/mirror\.example\/uv\/0\.9\.26\/uv-/);
+      else assert.equal(new URL(args[args.length - 1]).origin, 'https://mirrors.tuna.tsinghua.edu.cn');
+      assert.equal(args[args.indexOf('--proto') + 1], '=https');
+      assert.equal(args[args.indexOf('--proto-redir') + 1], '=https');
+      assert.equal(args[args.indexOf('--retry') + 1], '2');
+      assert.equal(args[args.indexOf('--max-time') + 1], '300');
+      assert.equal(existsSync(extracted), false);
+      assert.equal(existsSync(args[args.indexOf('--output') + 1]), false);
+    },
+  );

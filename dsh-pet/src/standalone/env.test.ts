@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { memoryInstallSources } from './env.ts';
 
-test('download sources keep upstream defaults and accept explicit mirror paths', () => {
+test('download sources leave default selection to the installer and accept explicit mirror paths', () => {
   assert.deepEqual(memoryInstallSources({}), {
-    uvBaseUrl: 'https://github.com/astral-sh/uv/releases/download',
+    uvBaseUrl: undefined,
     env: {},
   });
   assert.deepEqual(

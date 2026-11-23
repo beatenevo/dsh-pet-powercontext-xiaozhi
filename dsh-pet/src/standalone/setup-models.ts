@@ -32,7 +32,7 @@ export const setupErrors: Record<string, string> = {
   offline_runtime_requires_seekdb: '此离线包仅支持 seekdb，请在长期记忆配置中重新执行「检查并启用记忆」。',
   runtime_download_config_invalid: '下载源配置无效。请使用不含凭据、查询参数或片段的 HTTPS 镜像地址，重启后重试。',
   runtime_command_failed: '运行环境安装失败。请检查网络和磁盘空间后重试。',
-  runtime_tool_missing: '缺少自动安装需要的 curl 或 tar。请安装后重试，或连接已有服务。',
+  runtime_tool_missing: '缺少自动安装需要的命令。请检查 curl；自定义 uv Release 下载源还需要 tar。',
   runtime_command_timeout: '下载或安装等待超时。请检查网络后重试，已保存的记忆保留。',
   download_checksum_failed: '下载校验未通过，未执行安装。请检查网络后重试。',
   invalid_setup: '请补全模型信息；自定义服务还需填写 Embedding 模型和维度。',

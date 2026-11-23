@@ -67,16 +67,18 @@ To change the code, see the [development guide](../reference/development.md).
 
 ## Download mirrors
 
-The standard package supports separate sources for uv, managed Python and Python dependencies. Unset variables retain the upstream defaults; there is no automatic third-party fallback. A PyPI mirror alone cannot fix a GitHub timeout while downloading uv or Python.
+The standard package downloads the pinned uv `0.9.26` platform wheel directly from the Tsinghua PyPI mirror by default, without environment configuration or a preliminary GitHub request. The wheel contains a standalone uv executable, which Node extracts without requiring Python, pip or tar. Download failures do not automatically fall back to GitHub.
 
-| Environment variable           | Meaning                                                                                                                       |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| `DSH_PET_UV_DOWNLOAD_BASE_URL` | uv release root, with `/0.9.26/<platform-archive>` appended. Defaults to `https://github.com/astral-sh/uv/releases/download`. |
-| `UV_PYTHON_INSTALL_MIRROR`     | CPython mirror root preserving the date/file layout under upstream `python-build-standalone/releases/download`.               |
-| `UV_DEFAULT_INDEX`             | Full Python simple-index URL, e.g. `https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple`.                                    |
-| `UV_INDEX_URL`                 | Legacy uv index variable; `UV_DEFAULT_INDEX` takes precedence when both are set.                                              |
+Managed Python and Python dependencies retain their existing upstream defaults and can be configured separately below. Changing the dependency index does not change the uv bootstrap URL.
 
-URLs must use HTTPS without credentials, query parameters or fragments. uv archives still require the pinned SHA256 digest before extraction. Downloads use a 30-second connection timeout, a 300-second per-attempt limit and at most two transient-error retries, subject to the existing 10-minute command deadline and cancellation. Python and dependency downloads retain uv's own retry behavior.
+| Environment variable           | Meaning                                                                                                                                                    |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DSH_PET_UV_DOWNLOAD_BASE_URL` | uv release root, with `/0.9.26/<platform-archive>` appended. An explicit value overrides the default Tsinghua wheel with a Release archive from this root. |
+| `UV_PYTHON_INSTALL_MIRROR`     | CPython mirror root preserving the date/file layout under upstream `python-build-standalone/releases/download`.                                            |
+| `UV_DEFAULT_INDEX`             | Full Python simple-index URL, e.g. `https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple`.                                                                 |
+| `UV_INDEX_URL`                 | Legacy uv index variable; `UV_DEFAULT_INDEX` takes precedence when both are set.                                                                           |
+
+URLs must use HTTPS without credentials, query parameters or fragments. uv artifacts require a pinned SHA256 digest before extraction: default wheel digests come from the official PyPI release metadata, while custom Release archives retain their existing digests. Downloads use a 30-second connection timeout, a 300-second per-attempt limit and at most two transient-error retries, subject to the existing 10-minute command deadline and cancellation. Python and dependency downloads retain uv's own retry behavior.
 
 PowerShell (accelerates Python dependencies only):
 
@@ -92,7 +94,7 @@ export UV_DEFAULT_INDEX='https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple'
 
 Fully quit DSH/the standalone app, launch a version containing this feature from the same terminal, and retry setup. A desktop shortcut does not inherit another terminal's temporary variables. Alternatively, configure OS user environment variables and sign in again before launching.
 
-If you have a trusted uv/Python mirror, also set these variables. Replace `mirror.example` with an accessible mirror containing the required files; these are placeholders, not working public services:
+uv already uses the Tsinghua mirror by default, so `DSH_PET_UV_DOWNLOAD_BASE_URL` is optional. To override it with a trusted Release mirror or configure a Python mirror, set these variables. Replace `mirror.example` with an accessible mirror containing the required files; these are placeholders, not working public services:
 
 ```powershell
 $env:DSH_PET_UV_DOWNLOAD_BASE_URL = 'https://mirror.example/astral-sh/uv/releases/download'
@@ -103,4 +105,4 @@ Only installation subprocesses receive these source settings. The memory server 
 
 For workshops, prepare a platform-specific offline plugin and verify memory creation and recall on the demonstration machine beforehand. Mirror availability and performance depend on the local network; cloud model calls still need connectivity.
 
-Source map: `dsh-pet/src/standalone/env.ts` parses download sources; `dsh-pet/src/standalone/memory-install.ts` handles downloads, verification and cache reuse.
+Source map: `dsh-pet/src/standalone/env.ts` parses download sources; `dsh-pet/src/standalone/memory-install.ts` handles downloads, verification and cache reuse; `dsh-pet/src/standalone/memory-uv.ts` pins wheel artifacts and extracts them with Node.

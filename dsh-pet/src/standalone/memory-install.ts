@@ -8,6 +8,7 @@ import { isIP } from 'node:net';
 import { memoryRuntimePath, seekdbRuntimeCheck, type MemoryDatabase } from './memory-runtime.ts';
 
 import { memoryInstallSources } from './env.ts';
+import { extractUvWheel, uvWheelArtifact } from './memory-uv.ts';
 import { offlineMemoryPython } from './memory-offline.ts';
 
 const UV_VERSION = '0.9.26';
@@ -303,7 +304,10 @@ export async function installMemoryRuntime(
   }
   if (!existsSync(uv)) {
     progress('downloading');
-    const [name, digest] = artifact;
+    const download = sources.uvBaseUrl
+      ? { name: artifact[0], digest: artifact[1], url: `${sources.uvBaseUrl}/${UV_VERSION}/${artifact[0]}` }
+      : uvWheelArtifact(`${process.platform}-${process.arch}`);
+    const { name, digest } = download;
     const archive = join(directory, name);
     try {
       // System curl honors proxy settings on all supported platforms. -q disables user curlrc commands.
@@ -332,20 +336,26 @@ export async function installMemoryRuntime(
           '--silent',
           '--output',
           archive,
-          `${sources.uvBaseUrl}/${UV_VERSION}/${name}`,
+          download.url,
         ],
         env,
         signal,
       );
       if (createHash('sha256').update(readFileSync(archive)).digest('hex') !== digest)
         throw new Error('download_checksum_failed');
-      // Windows tar (bsdtar) supports zip. Unix archives contain one enclosing directory.
-      const args =
-        process.platform === 'win32'
-          ? ['-xf', archive, '-C', bin]
-          : ['-xzf', archive, '--strip-components=1', '-C', bin];
-      await runMemoryCommand('tar', args, env, signal);
-      chmodSync(uv, 0o700);
+      signal.throwIfAborted();
+      if (sources.uvBaseUrl) {
+        // 自定义源沿用 Release 压缩包格式，Windows tar 支持 zip。
+        const args =
+          process.platform === 'win32'
+            ? ['-xf', archive, '-C', bin]
+            : ['-xzf', archive, '--strip-components=1', '-C', bin];
+        await runMemoryCommand('tar', args, env, signal);
+        chmodSync(uv, 0o700);
+      } else {
+        await extractUvWheel(archive, bin, process.platform === 'win32' ? 'uv.exe' : 'uv');
+      }
+      signal.throwIfAborted();
     } finally {
       rmSync(archive, { force: true });
     }

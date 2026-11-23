@@ -113,7 +113,7 @@ export const memorySetupEn = {
   memorySetup_error_runtime_command_failed:
     'Runtime installation failed. Check network access and disk space, then retry.',
   memorySetup_error_runtime_tool_missing:
-    'Automatic installation requires curl and tar. Install them or connect an existing memory server.',
+    'An installation command is missing. Check curl; a custom uv Release source also requires tar.',
   memorySetup_error_runtime_command_timeout:
     'Download or installation timed out. Check connectivity and retry; existing memory is retained.',
   memorySetup_error_download_checksum_failed:
@@ -243,7 +243,7 @@ export const memorySetupZh: Record<keyof typeof memorySetupEn, string> = {
   memorySetup_error_runtime_download_config_invalid:
     '下载源配置无效，请使用不含凭据、查询参数或片段的 HTTPS 镜像地址，重启后重试。',
   memorySetup_error_runtime_command_failed: '运行环境安装失败，请检查网络与磁盘空间后重试。',
-  memorySetup_error_runtime_tool_missing: '自动安装需要 curl 和 tar，请安装后重试，或连接已有记忆服务。',
+  memorySetup_error_runtime_tool_missing: '缺少安装命令，请检查 curl；自定义 uv Release 下载源还需要 tar。',
   memorySetup_error_runtime_command_timeout: '下载或安装等待超时，请检查网络后重试；已有记忆保留。',
   memorySetup_error_download_checksum_failed: '下载校验未通过，未执行安装，请检查网络后重试。',
   memorySetup_error_invalid_setup: '请补全模型设置，自定义服务还需填写 Embedding 模型与维度。',

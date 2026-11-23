@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { isIP } from 'node:net';
 import { memoryRuntimePath, seekdbRuntimeCheck, type MemoryDatabase } from './memory-runtime.ts';
 
+import { memoryInstallSources } from './env.ts';
 import { offlineMemoryPython } from './memory-offline.ts';
 
 const UV_VERSION = '0.9.26';
@@ -285,6 +286,8 @@ export async function installMemoryRuntime(
       if (error instanceof MemoryCommandError && error.exitSignal) throw error;
     }
   }
+  const sources = memoryInstallSources();
+  Object.assign(env, sources.env);
   const artifact = ARCHIVES[`${process.platform}-${process.arch}`];
   if (!artifact) throw new Error('unsupported_platform');
   const bin = join(directory, 'uv');
@@ -314,14 +317,22 @@ export async function installMemoryRuntime(
           '=https',
           '--proto-redir',
           '=https',
+          '--connect-timeout',
+          '30',
           '--max-time',
-          '120',
+          '300',
+          '--retry',
+          '2',
+          '--retry-delay',
+          '2',
+          '--retry-max-time',
+          '600',
           '--max-filesize',
           '50000000',
           '--silent',
           '--output',
           archive,
-          `https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${name}`,
+          `${sources.uvBaseUrl}/${UV_VERSION}/${name}`,
         ],
         env,
         signal,

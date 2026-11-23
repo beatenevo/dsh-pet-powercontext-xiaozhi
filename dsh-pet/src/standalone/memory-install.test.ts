@@ -160,6 +160,18 @@ for (const scenario of [
     `runtime installation selects Python and preserves cache: ${scenario}`,
     { skip: process.platform === 'win32' },
     async (t) => {
+      const previousIndex = process.env.UV_DEFAULT_INDEX;
+      const previousMirror = process.env.UV_PYTHON_INSTALL_MIRROR;
+      process.env.UV_DEFAULT_INDEX = 'https://mirror.example/simple';
+      process.env.UV_PYTHON_INSTALL_MIRROR = 'https://mirror.example/python';
+      t.after(() => {
+        if (previousIndex === undefined) delete process.env.UV_DEFAULT_INDEX;
+        else process.env.UV_DEFAULT_INDEX = previousIndex;
+        if (previousMirror === undefined) delete process.env.UV_PYTHON_INSTALL_MIRROR;
+        else process.env.UV_PYTHON_INSTALL_MIRROR = previousMirror;
+      });
+      assert.equal(memoryProcessEnv('/runtime').UV_DEFAULT_INDEX, undefined);
+      assert.equal(memoryProcessEnv('/runtime').UV_PYTHON_INSTALL_MIRROR, undefined);
       const rejected = [
         'incompatible',
         '3.10',
@@ -201,7 +213,7 @@ process.exit(${scenario === 'incompatible' ? 1 : 0});
         `#!${process.execPath}
 const fs = require('node:fs');
 const args = process.argv.slice(2);
-fs.appendFileSync(${JSON.stringify(capture)}, JSON.stringify({args, cache: process.env.UV_CACHE_DIR, preference: process.env.UV_PYTHON_PREFERENCE, downloads: process.env.UV_PYTHON_DOWNLOADS}) + '\\n');
+fs.appendFileSync(${JSON.stringify(capture)}, JSON.stringify({args, index: process.env.UV_DEFAULT_INDEX, mirror: process.env.UV_PYTHON_INSTALL_MIRROR, cache: process.env.UV_CACHE_DIR, preference: process.env.UV_PYTHON_PREFERENCE, downloads: process.env.UV_PYTHON_DOWNLOADS}) + '\\n');
 if (args[0] === 'python') console.log(${JSON.stringify(systemPython)});
 if (args[0] === 'venv') {
   fs.mkdirSync(${JSON.stringify(join(directory, 'venv', 'bin'))}, {recursive: true});
@@ -234,8 +246,20 @@ if (args.includes('--offline') && args[0] === 'pip') {
       const calls = readFileSync(capture, 'utf8')
         .trim()
         .split('\n')
-        .map((line) => JSON.parse(line) as { args: string[]; cache: string; preference: string; downloads?: string });
+        .map(
+          (line) =>
+            JSON.parse(line) as {
+              args: string[];
+              cache: string;
+              preference: string;
+              downloads?: string;
+              index: string;
+              mirror: string;
+            },
+        );
       assert.ok(calls.find((call) => call.args[0] === 'python')?.args.includes('cpython>=3.11,<3.15'));
+      assert.ok(calls.every((call) => call.index === 'https://mirror.example/simple'));
+      assert.ok(calls.every((call) => call.mirror === 'https://mirror.example/python'));
       const venv = calls.find((call) => call.args[0] === 'venv')!;
       assert.equal(venv.args[venv.args.indexOf('--python') + 1], rejected ? '3.12' : systemPython);
       assert.equal(venv.preference, rejected ? 'only-managed' : 'only-system');
@@ -256,3 +280,54 @@ if (args.includes('--offline') && args[0] === 'pip') {
     },
   );
 }
+
+// 可执行替身验证下载调度与校验边界，不访问外部镜像。
+test(
+  'mirrored uv downloads retain checksum verification and bounded retries',
+  { skip: process.platform === 'win32' },
+  async (t) => {
+    const directory = mkdtempSync(join(tmpdir(), 'pet-uv-mirror-'));
+    const bin = join(directory, 'commands');
+    const capture = join(directory, 'curl.json');
+    const extracted = join(directory, 'extracted');
+    mkdirSync(bin);
+    writeFileSync(
+      join(bin, 'curl'),
+      `#!${process.execPath}
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.writeFileSync(${JSON.stringify(capture)}, JSON.stringify(args));
+fs.writeFileSync(args[args.indexOf('--output') + 1], 'tampered archive');
+`,
+      { mode: 0o700 },
+    );
+    writeFileSync(
+      join(bin, 'tar'),
+      `#!${process.execPath}
+require('node:fs').writeFileSync(${JSON.stringify(extracted)}, 'unexpected');
+`,
+      { mode: 0o700 },
+    );
+    const previous = { PATH: process.env.PATH, DSH_PET_UV_DOWNLOAD_BASE_URL: process.env.DSH_PET_UV_DOWNLOAD_BASE_URL };
+    t.after(() => {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      rmSync(directory, { recursive: true, force: true });
+    });
+    process.env.PATH = bin;
+    process.env.DSH_PET_UV_DOWNLOAD_BASE_URL = 'https://mirror.example/uv/';
+    await assert.rejects(installMemoryRuntime(directory, new AbortController().signal), {
+      message: 'download_checksum_failed',
+    });
+    const args = JSON.parse(readFileSync(capture, 'utf8')) as string[];
+    assert.match(args[args.length - 1], /^https:\/\/mirror\.example\/uv\/0\.9\.26\/uv-/);
+    assert.equal(args[args.indexOf('--proto') + 1], '=https');
+    assert.equal(args[args.indexOf('--proto-redir') + 1], '=https');
+    assert.equal(args[args.indexOf('--retry') + 1], '2');
+    assert.equal(args[args.indexOf('--max-time') + 1], '300');
+    assert.equal(existsSync(extracted), false);
+    assert.equal(existsSync(args[args.indexOf('--output') + 1]), false);
+  },
+);

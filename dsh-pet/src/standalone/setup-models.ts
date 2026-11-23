@@ -30,6 +30,7 @@ export const setupErrors: Record<string, string> = {
   memory_port_in_use: '记忆服务端口已被占用。请退出占用程序后重试，原地址和记忆保留。',
   offline_runtime_invalid: '离线运行环境不完整或不兼容，请重新安装与当前系统匹配的离线包。',
   offline_runtime_requires_seekdb: '此离线包仅支持 seekdb，请在长期记忆配置中重新执行「检查并启用记忆」。',
+  runtime_download_config_invalid: '下载源配置无效。请使用不含凭据、查询参数或片段的 HTTPS 镜像地址，重启后重试。',
   runtime_command_failed: '运行环境安装失败。请检查网络和磁盘空间后重试。',
   runtime_tool_missing: '缺少自动安装需要的 curl 或 tar。请安装后重试，或连接已有服务。',
   runtime_command_timeout: '下载或安装等待超时。请检查网络后重试，已保存的记忆保留。',

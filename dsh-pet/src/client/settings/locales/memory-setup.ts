@@ -108,6 +108,8 @@ export const memorySetupEn = {
     'The memory service exited. Retry the saved configuration; existing memory is retained.',
   memorySetup_error_memory_port_in_use:
     'The memory service port is in use. Stop the process using it and retry; existing memory is retained.',
+  memorySetup_error_runtime_download_config_invalid:
+    'Invalid download source. Use an HTTPS mirror URL without credentials, query parameters or fragments, then restart.',
   memorySetup_error_runtime_command_failed:
     'Runtime installation failed. Check network access and disk space, then retry.',
   memorySetup_error_runtime_tool_missing:
@@ -238,6 +240,8 @@ export const memorySetupZh: Record<keyof typeof memorySetupEn, string> = {
   memorySetup_error_memory_not_ready: '记忆服务启动检查超时，请重试并检查模型连接与本机运行环境。',
   memorySetup_error_memory_start_failed: '记忆服务已退出，请按已保存配置重试；已有记忆保留。',
   memorySetup_error_memory_port_in_use: '记忆服务端口已被占用，请停止占用程序后重试；已有记忆保留。',
+  memorySetup_error_runtime_download_config_invalid:
+    '下载源配置无效，请使用不含凭据、查询参数或片段的 HTTPS 镜像地址，重启后重试。',
   memorySetup_error_runtime_command_failed: '运行环境安装失败，请检查网络与磁盘空间后重试。',
   memorySetup_error_runtime_tool_missing: '自动安装需要 curl 和 tar，请安装后重试，或连接已有记忆服务。',
   memorySetup_error_runtime_command_timeout: '下载或安装等待超时，请检查网络后重试；已有记忆保留。',

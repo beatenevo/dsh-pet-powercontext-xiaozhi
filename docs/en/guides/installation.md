@@ -64,3 +64,43 @@ dsh plugin --profile web remove dsh-pet-powercontext
 Use `--profile desktop` if that is where you installed it. Removing the plugin and deleting your data are separate actions. Keep the user data directory unless you intend to remove configuration and memories. See [memory controls](memory.md#deletion-and-disabling).
 
 To change the code, see the [development guide](../reference/development.md).
+
+## Download mirrors
+
+The standard package supports separate sources for uv, managed Python and Python dependencies. Unset variables retain the upstream defaults; there is no automatic third-party fallback. A PyPI mirror alone cannot fix a GitHub timeout while downloading uv or Python.
+
+| Environment variable           | Meaning                                                                                                                       |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `DSH_PET_UV_DOWNLOAD_BASE_URL` | uv release root, with `/0.9.26/<platform-archive>` appended. Defaults to `https://github.com/astral-sh/uv/releases/download`. |
+| `UV_PYTHON_INSTALL_MIRROR`     | CPython mirror root preserving the date/file layout under upstream `python-build-standalone/releases/download`.               |
+| `UV_DEFAULT_INDEX`             | Full Python simple-index URL, e.g. `https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple`.                                    |
+| `UV_INDEX_URL`                 | Legacy uv index variable; `UV_DEFAULT_INDEX` takes precedence when both are set.                                              |
+
+URLs must use HTTPS without credentials, query parameters or fragments. uv archives still require the pinned SHA256 digest before extraction. Downloads use a 30-second connection timeout, a 300-second per-attempt limit and at most two transient-error retries, subject to the existing 10-minute command deadline and cancellation. Python and dependency downloads retain uv's own retry behavior.
+
+PowerShell (accelerates Python dependencies only):
+
+```powershell
+$env:UV_DEFAULT_INDEX = 'https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple'
+```
+
+macOS/Linux:
+
+```sh
+export UV_DEFAULT_INDEX='https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple'
+```
+
+Fully quit DSH/the standalone app, launch a version containing this feature from the same terminal, and retry setup. A desktop shortcut does not inherit another terminal's temporary variables. Alternatively, configure OS user environment variables and sign in again before launching.
+
+If you have a trusted uv/Python mirror, also set these variables. Replace `mirror.example` with an accessible mirror containing the required files; these are placeholders, not working public services:
+
+```powershell
+$env:DSH_PET_UV_DOWNLOAD_BASE_URL = 'https://mirror.example/astral-sh/uv/releases/download'
+$env:UV_PYTHON_INSTALL_MIRROR = 'https://mirror.example/astral-sh/python-build-standalone/releases/download'
+```
+
+Only installation subprocesses receive these source settings. The memory server does not inherit them. Global `uv.toml`, extra indexes, TLS verification bypasses and arbitrary `UV_*` variables remain excluded. Compatible local Python and cached packages are still reused; ready environments and offline bundles do not need mirrors.
+
+For workshops, prepare a platform-specific offline plugin and verify memory creation and recall on the demonstration machine beforehand. Mirror availability and performance depend on the local network; cloud model calls still need connectivity.
+
+Source map: `dsh-pet/src/standalone/env.ts` parses download sources; `dsh-pet/src/standalone/memory-install.ts` handles downloads, verification and cache reuse.

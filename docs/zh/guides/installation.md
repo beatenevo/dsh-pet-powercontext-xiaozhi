@@ -64,3 +64,43 @@ dsh plugin --profile web remove dsh-pet-powercontext
 如果安装在桌面版，将 `--profile web` 换成 `--profile desktop`。卸载插件和删除数据是两件事，不打算删除配置和记忆时，请保留用户目录。详见[记忆管理](memory.md#删除与停用)。
 
 需要修改源码时，请阅读[开发指南](../reference/development.md)。
+
+## 中国网络与自定义下载源
+
+普通包的记忆安装器支持分别配置 uv、Python 和 Python 依赖的下载源。未配置时使用原有上游地址，不自动切换第三方服务。仅修改 PyPI 源不能解决 uv 或 Python 的 GitHub 下载超时。
+
+| 环境变量                       | 作用与地址格式                                                                                                   |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `DSH_PET_UV_DOWNLOAD_BASE_URL` | uv Release 根地址；安装器追加 `/0.9.26/<平台压缩包名>`。默认 `https://github.com/astral-sh/uv/releases/download` |
+| `UV_PYTHON_INSTALL_MIRROR`     | CPython 构建镜像根地址；保留上游 `python-build-standalone/releases/download` 下的日期与文件名布局                |
+| `UV_DEFAULT_INDEX`             | Python 包的完整 simple 索引地址，例如 `https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple`                     |
+| `UV_INDEX_URL`                 | 兼容 uv 的旧索引变量；与 `UV_DEFAULT_INDEX` 同时设置时，后者优先                                                 |
+
+地址必须使用 HTTPS，且不能包含用户名、密码、查询参数或片段。uv 仍使用固定版本及 SHA256 校验；镜像须提供原始压缩包，校验失败不会解压执行。下载连接超时为 30 秒，单次传输上限 300 秒，瞬时错误最多重试两次，整个命令仍受 10 分钟上限及用户取消控制。Python 和依赖沿用 uv 自身的网络重试机制。
+
+Windows PowerShell 示例（仅加速 Python 依赖）：
+
+```powershell
+$env:UV_DEFAULT_INDEX = 'https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple'
+```
+
+macOS/Linux shell：
+
+```sh
+export UV_DEFAULT_INDEX='https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple'
+```
+
+设置后，完全退出原有 DSH/独立应用，再从同一个终端启动安装了此功能版本的应用，点击「重试本次设置」。桌面快捷方式不会继承另一个终端的临时变量；也可以在操作系统用户环境变量中配置，再重新登录并启动应用。
+
+如已准备可信的 uv 和 Python 镜像，可在 PowerShell 中额外设置以下变量。`mirror.example` 是地址格式占位符，必须换成实际可访问、包含对应文件的镜像，不能原样运行：
+
+```powershell
+$env:DSH_PET_UV_DOWNLOAD_BASE_URL = 'https://mirror.example/astral-sh/uv/releases/download'
+$env:UV_PYTHON_INSTALL_MIRROR = 'https://mirror.example/astral-sh/python-build-standalone/releases/download'
+```
+
+这些变量仅传给安装子进程；记忆服务不继承包源设置。安装器继续忽略全局 `uv.toml`，不导入额外索引、证书校验绕过或其它任意 `UV_*` 设置。兼容本机 Python 与已有依赖缓存仍优先复用，已就绪环境和离线包无需配置镜像。
+
+Workshop 建议提前准备[平台专用离线包](offline-installation.md)，并在演示电脑完成启用记忆与召回验证；镜像可达性和速度取决于现场网络，云模型仍需联网。
+
+安装源解析位于 `dsh-pet/src/standalone/env.ts`，下载、校验和缓存复用位于 `dsh-pet/src/standalone/memory-install.ts`。

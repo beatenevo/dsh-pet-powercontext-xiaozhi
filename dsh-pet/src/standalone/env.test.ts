@@ -2,10 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { memoryInstallSources } from './env.ts';
 
-test('download sources leave default selection to the installer and accept explicit mirror paths', () => {
+test('download sources default to domestic mirrors and accept explicit overrides', () => {
   assert.deepEqual(memoryInstallSources({}), {
     uvBaseUrl: undefined,
-    env: {},
+    env: {
+      UV_DEFAULT_INDEX: 'https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple',
+      UV_PYTHON_INSTALL_MIRROR: 'https://registry.npmmirror.com/-/binary/python-build-standalone',
+    },
   });
   assert.deepEqual(
     memoryInstallSources({
@@ -39,6 +42,13 @@ test('invalid download sources return a safe error without echoing credentials',
     ]) {
       assert.throws(() => memoryInstallSources({ [key]: value }), { message: 'runtime_download_config_invalid' });
     }
-    assert.deepEqual(memoryInstallSources({ [key]: '  ' }).env, {});
+    assert.deepEqual(memoryInstallSources({ [key]: '  ' }), memoryInstallSources({}));
   }
+});
+
+test('a legacy explicit package index is not shadowed by the domestic default', () => {
+  const { env } = memoryInstallSources({ UV_INDEX_URL: 'https://private.example/simple/' });
+  assert.equal(env.UV_DEFAULT_INDEX, undefined);
+  assert.equal(env.UV_INDEX_URL, 'https://private.example/simple');
+  assert.equal(env.UV_PYTHON_INSTALL_MIRROR, 'https://registry.npmmirror.com/-/binary/python-build-standalone');
 });

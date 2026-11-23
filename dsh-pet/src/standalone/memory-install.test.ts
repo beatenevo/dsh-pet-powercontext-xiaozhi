@@ -160,11 +160,20 @@ for (const scenario of [
     `runtime installation selects Python and preserves cache: ${scenario}`,
     { skip: process.platform === 'win32' },
     async (t) => {
+      const defaultSources = scenario === 'cache-miss' || scenario === 'incompatible';
+      const previousLegacyIndex = process.env.UV_INDEX_URL;
+      delete process.env.UV_INDEX_URL;
       const previousIndex = process.env.UV_DEFAULT_INDEX;
       const previousMirror = process.env.UV_PYTHON_INSTALL_MIRROR;
       process.env.UV_DEFAULT_INDEX = 'https://mirror.example/simple';
       process.env.UV_PYTHON_INSTALL_MIRROR = 'https://mirror.example/python';
+      if (defaultSources) {
+        delete process.env.UV_DEFAULT_INDEX;
+        delete process.env.UV_PYTHON_INSTALL_MIRROR;
+      }
       t.after(() => {
+        if (previousLegacyIndex === undefined) delete process.env.UV_INDEX_URL;
+        else process.env.UV_INDEX_URL = previousLegacyIndex;
         if (previousIndex === undefined) delete process.env.UV_DEFAULT_INDEX;
         else process.env.UV_DEFAULT_INDEX = previousIndex;
         if (previousMirror === undefined) delete process.env.UV_PYTHON_INSTALL_MIRROR;
@@ -258,8 +267,22 @@ if (args.includes('--offline') && args[0] === 'pip') {
             },
         );
       assert.ok(calls.find((call) => call.args[0] === 'python')?.args.includes('cpython>=3.11,<3.15'));
-      assert.ok(calls.every((call) => call.index === 'https://mirror.example/simple'));
-      assert.ok(calls.every((call) => call.mirror === 'https://mirror.example/python'));
+      assert.ok(
+        calls.every(
+          (call) =>
+            call.index ===
+            (defaultSources ? 'https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple' : 'https://mirror.example/simple'),
+        ),
+      );
+      assert.ok(
+        calls.every(
+          (call) =>
+            call.mirror ===
+            (defaultSources
+              ? 'https://registry.npmmirror.com/-/binary/python-build-standalone'
+              : 'https://mirror.example/python'),
+        ),
+      );
       const venv = calls.find((call) => call.args[0] === 'venv')!;
       assert.equal(venv.args[venv.args.indexOf('--python') + 1], rejected ? '3.12' : systemPython);
       assert.equal(venv.preference, rejected ? 'only-managed' : 'only-system');

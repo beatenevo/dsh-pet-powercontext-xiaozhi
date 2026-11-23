@@ -19,5 +19,8 @@ export function memoryInstallSources(source: NodeJS.ProcessEnv = process.env) {
     const value = readUrl(key);
     if (value) env[key] = value;
   }
+  if (!env.UV_DEFAULT_INDEX && !env.UV_INDEX_URL)
+    env.UV_DEFAULT_INDEX = 'https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple';
+  env.UV_PYTHON_INSTALL_MIRROR ??= 'https://registry.npmmirror.com/-/binary/python-build-standalone';
   return { uvBaseUrl, env };
 }

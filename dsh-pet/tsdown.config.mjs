@@ -16,6 +16,7 @@
 // generation/network logic (see each file header for details). The remaining @deepseek - ai /* are still processed
 // externally (negative assertion) to avoid accidentally entering the DSH code into the product.
 import { dirname, join, resolve } from 'node:path';
+import { copyFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'tsdown';
 
@@ -97,21 +98,30 @@ export default defineConfig([
     entry: {
       app: 'src/app/main.ts',
     },
+    // 原生 ZIP 解包器通过相对路径加载 N-API 文件，必须与生成的 JS 一起交付。
+    onSuccess() {
+      const directory = dirname(fileURLToPath(import.meta.resolve('@electron-internal/extract-zip')));
+      for (const file of readdirSync(directory)) {
+        if (file.endsWith('.node')) copyFileSync(join(directory, file), join(packageRoot, 'lib', file));
+      }
+    },
     // zod is packaged: The application product must be "not dependent on node_modules", and the configuration
     // verification must be used every time it is started. openai / @anthropic - ai/sdk must also be packaged: they
     // consist of src/standalone/ai-transport.ts top-level static import , while electron-builder 's files whitelist
     // does not have node_modules ; when left as external bare import , the product will be unpacked once it leaves the
     // project directory (e.g. unzipped to Downloads ) ERR_MODULE_NOT_FOUND.
-    // @electron / get and @electron - internal/extract-zip remain external - they are only used when "Download
-    // Electron"
-    // Dynamic parsing, application patterns never go that route (see import comments for src/host/helper-process.ts).
+    // Electron 下载器仍按需外置；记忆安装使用的 ZIP 解包器必须随桌面入口打包。
     noExternal: [
       /^@deepseek-ai\/(?:dsh-home-paths|dsh-credentials|dsh-llm)$/,
-      /^zod$/,
+      /^zod(?:\/|$)/,
       /^openai$/,
       /^@anthropic-ai\/sdk$/,
       // Speech synthesis: import at runtime, but the application product does not have node_modules and must be inline (with its ws).
       /^@andresaya\/edge-tts$/,
+      // 桌面归档不携带 node_modules，观测、机器人及记忆安装依赖必须内联。
+      /^@opentelemetry\//,
+      /^@modelcontextprotocol\/sdk(?:\/|$)/,
+      /^@electron-internal\/extract-zip$/,
     ],
     external: ['electron', /^@electron\//, /^node:/, /^@deepseek-ai\/(?!dsh-home-paths$|dsh-credentials$|dsh-llm$)/],
     alias: {

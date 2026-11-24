@@ -83,6 +83,7 @@
   ],
   "scripts": {
     "bundle": "tsdown",
+    "check:desktop-bundle": "node scripts/check-desktop-bundle.mjs",
     "build:desktop-core": "node scripts/build-desktop-core.mjs",
     "watch": "tsdown --watch",
     "ensure:electron": "node scripts/ensure-electron.mjs",

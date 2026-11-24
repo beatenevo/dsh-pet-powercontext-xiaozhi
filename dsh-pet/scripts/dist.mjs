@@ -64,6 +64,8 @@ if (target !== 'dir') {
   process.exit(2);
 }
 
+await import('./check-desktop-bundle.mjs');
+
 const electronDist = resolveElectronDist();
 /** mirror defaults to npmmirror: github.com cannot be accessed on this machine; environment variables can be used on CI to overwrite the official source */
 const env = {

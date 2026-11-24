@@ -28,6 +28,8 @@ if (build.status !== 0) {
   process.exit(1);
 }
 
+await import('./check-desktop-bundle.mjs');
+
 // Desktop shared core and browser bundle are taken from the same src/shared and produce window.PetShared (see build-desktop-core.mjs for details).
 console.log('[prepare] building desktop shared-core...');
 const coreRun = process.platform === 'win32' ? 'cmd /c npm run build:desktop-core' : 'npm run build:desktop-core';

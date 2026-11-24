@@ -1,8 +1,8 @@
 # Package the standalone pet as a Windows desktop application.
 # lib/app.js bundles dependencies except Electron and the download-only dynamic imports
-# (@electron/get and @electron-internal/extract-zip; see tsdown.config.mjs).
+# (@electron/get; see tsdown.config.mjs).
 # scripts/dist.mjs supplies an extracted local electronDist to reuse cached downloads.
-# Assets remain in asar and are read through the main process; no native unpack is needed.
+# Assets remain in asar; the ZIP extractor needs unpacked native N-API binaries.
 appId: com.pc2005.dsh-pet
 productName: dsh-pet
 copyright: dsh-pet contributors
@@ -32,6 +32,8 @@ files:
   - '!node_modules/**'
 
 asar: true
+asarUnpack:
+  - lib/*.node
 npmRebuild: false
 
 # Keep this aligned with the default @electron/get download version.

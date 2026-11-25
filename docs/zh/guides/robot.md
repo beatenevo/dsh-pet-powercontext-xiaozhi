@@ -1,5 +1,7 @@
 # Astra Pro 2.0 MCP 接入
 
+小智设备接入见[小智机器人与桌宠对话](./xiaozhi.md)。
+
 本分支通过 MCP Streamable HTTP 连接机器人服务，不需要客户端 Python 或 Astra SDK。
 
 1. 构建并启动本分支的桌宠，打开 Astra Pro 2.0 机器人面板。

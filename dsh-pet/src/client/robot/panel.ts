@@ -3,6 +3,13 @@ import { makeRobotSettings } from './settings.ts';
 import { robotRequestId, useRobotState, type RobotRuntime } from './state.ts';
 import type { RobotKey } from './locales.ts';
 
+const xiaozhiErrors = new Map<string, RobotKey>([
+  ['xiaozhi_setup_required', 'robotXiaozhiSetupError'],
+  ['xiaozhi_invalid_url', 'robotXiaozhiAddressError'],
+  ['xiaozhi_auth_failed', 'robotXiaozhiAuthError'],
+  ['xiaozhi_device_unavailable', 'robotXiaozhiUnavailable'],
+]);
+
 /** Create one control panel shared by DSH and standalone chat. */
 export function makeRobotPanel(rt: RobotRuntime) {
   const { h, t, useState } = rt;
@@ -11,6 +18,7 @@ export function makeRobotPanel(rt: RobotRuntime) {
     const { snapshot: status, error, pending, send } = useRobotState(rt);
     const [selected, setSelected] = useState('');
     const [text, setText] = useState('');
+    const xiaozhi = !!status?.config.xiaozhi || !status?.config.address;
     const direct = status?.config.directExecution && status.config.chatActions;
     const proposalTitle = direct ? 'robotDirectActionPending' : 'robotProposalTitle';
     const proposal = status?.pendingAction?.petId === props.petId ? status.pendingAction : undefined;
@@ -39,6 +47,7 @@ export function makeRobotPanel(rt: RobotRuntime) {
       : undefined;
     const action = status?.config.actions.find((item) => item.key === selected) ?? status?.config.actions[0];
     const blocked = !status || pending || status.busy || status.stopping;
+    const statusError = status?.error && xiaozhiErrors.get(status.error);
     const button = (label: RobotKey, body: unknown, disabled = false, danger = false) =>
       h('button', {
         type: 'button',
@@ -53,7 +62,7 @@ export function makeRobotPanel(rt: RobotRuntime) {
       children: [
         h('summary', {
           children: [
-            h('span', { children: t('robotTitle') }),
+            h('span', { children: t(xiaozhi ? 'robotXiaozhiTitle' : 'robotTitle') }),
             proposal ? h('span', { className: 'pet-robot-badge', children: t(proposalTitle) }) : null,
           ],
         }),
@@ -65,7 +74,7 @@ export function makeRobotPanel(rt: RobotRuntime) {
               children: !status?.config.enabled
                 ? t('robotDisabled')
                 : status.connected
-                  ? t('robotConnected')
+                  ? t(xiaozhi ? 'robotXiaozhiConnected' : 'robotConnected')
                   : t('robotDisconnected'),
             }),
             direct ? h('p', { role: 'status', children: t('robotDirectExecutionActive') }) : null,
@@ -73,7 +82,12 @@ export function makeRobotPanel(rt: RobotRuntime) {
               className: 'pet-robot-buttons',
               children: [
                 button('robotCheck', { action: 'check' }, pending || !status?.config.enabled || status.checking),
-                button('robotStop', { action: 'stop' }, !status?.config.address || status.stopping, true),
+                button(
+                  'robotStop',
+                  { action: 'stop' },
+                  (!status?.config.address && !status?.config.xiaozhi?.deviceId) || !!status?.stopping,
+                  true,
+                ),
               ],
             }),
             proposal || speech
@@ -101,7 +115,13 @@ export function makeRobotPanel(rt: RobotRuntime) {
                             h('strong', { className: 'pet-robot-proposal-name', children: proposal.name }),
                             h('p', {
                               className: 'pet-robot-note',
-                              children: t(direct ? 'robotDirectExecutionHint' : 'robotProposalHint'),
+                              children: t(
+                                direct
+                                  ? xiaozhi
+                                    ? 'robotXiaozhiDirectHint'
+                                    : 'robotDirectExecutionHint'
+                                  : 'robotProposalHint',
+                              ),
                             }),
                             direct
                               ? null
@@ -152,7 +172,10 @@ export function makeRobotPanel(rt: RobotRuntime) {
                     button('robotDisarm', { action: 'disarm' }, !status?.armed),
                   ],
                 }),
-                h('p', { className: 'pet-robot-note', children: t('robotStopHint') }),
+                h('p', {
+                  className: 'pet-robot-note',
+                  children: t(xiaozhi ? 'robotXiaozhiStopHint' : 'robotStopHint'),
+                }),
                 status?.config.actions.length
                   ? h('label', {
                       children: [
@@ -167,7 +190,7 @@ export function makeRobotPanel(rt: RobotRuntime) {
                         }),
                       ],
                     })
-                  : h('p', { children: t('robotEmpty') }),
+                  : h('p', { children: t(xiaozhi ? 'robotXiaozhiEmpty' : 'robotEmpty') }),
                 h('button', {
                   type: 'button',
                   disabled: blocked || !status?.armed || !status.connected || !action || !props.petId,
@@ -209,7 +232,7 @@ export function makeRobotPanel(rt: RobotRuntime) {
               ],
             }),
             error ? h('p', { role: 'alert', children: `${t('robotRequestError')} (${error})` }) : null,
-            status?.error ? h('p', { role: 'alert', children: status.error }) : null,
+            status?.error ? h('p', { role: 'alert', children: statusError ? t(statusError) : status.error }) : null,
             status?.telemetry ? h('p', { children: status.telemetry.description }) : null,
             status?.stopResult
               ? h('div', {

@@ -1,12 +1,14 @@
-/** Public contracts for the optional Astra Pro 2.0 controller. */
+/** Public contracts for the optional robot controller. */
 
 /** A manufacturer-verified action or ordered action group. */
 export interface RobotAction {
   key: string;
   name: string;
-  tool: 'startTeachProgram' | 'RobotAgvMove';
-  /** 从发现目录中选择，始终保留原始字符串。 */
+  tool: 'startTeachProgram' | 'RobotAgvMove' | 'xiaozhiMcp';
+  /** Discovered program ID, station, or XiaoZhi device tool name. */
   target: string;
+  /** Operator-specified constant arguments for XiaoZhi device tools. */
+  arguments?: Record<string, unknown>;
   petAnimation: string;
 }
 
@@ -20,6 +22,8 @@ export interface RobotConfig {
   /** Execute chat-selected actions without per-action clicks; defaults to false. */
   directExecution: boolean;
   address: string;
+  /** Selects the host-configured XiaoZhi OpenAPI and an exact device ID. */
+  xiaozhi?: { deviceId: string };
   /** MCP 配置版本；旧 SDK 配置迁移时禁用。 */
   version: 2;
   /** Maximum RPC duration in seconds; expired movement requests remain uncertain. */
@@ -41,6 +45,8 @@ export interface RobotCatalog {
   tools?: string[];
   programs: { id: string; name: string }[];
   areas: { areaName: string; parameter: string }[];
+  /** Device tools with a discovered input schema that can be mapped to actions. */
+  xiaozhiTools?: { name: string; arguments: string[]; required: string[] }[];
 }
 
 /** MCP 操作结果；成功仅代表服务端报告。 */

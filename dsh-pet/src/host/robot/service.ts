@@ -260,7 +260,11 @@ export function createRobotService(options: {
           kind: request.action,
           address: config.address,
           pet: request.petId,
-          payload: request.action === 'speak' ? request.text : action && [action.tool, action.target],
+          ...(config.xiaozhi ? { xiaozhi: config.xiaozhi } : {}),
+          payload:
+            request.action === 'speak'
+              ? request.text
+              : action && [action.tool, action.target, ...(action.arguments ? [action.arguments] : [])],
         }),
       )
       .digest('hex');
@@ -313,6 +317,7 @@ export function createRobotService(options: {
             requestId: request.id,
             tool: action!.tool,
             target: action!.target,
+            ...(action!.arguments ? { arguments: action!.arguments } : {}),
             catalog: catalog && structuredClone(catalog),
           }
         : { operation: 'speak', text: request.text };
@@ -329,7 +334,7 @@ export function createRobotService(options: {
     cancelSpeech();
     armed = false;
     if (stopping) return;
-    if (!config.address) throw new Error('robot_address_required');
+    if (!config.address && !config.xiaozhi) throw new Error('robot_address_required');
     stopping = true;
     statusAbort?.abort();
     if (active) {
@@ -550,12 +555,12 @@ export function createRobotService(options: {
       if (!context) return;
       if (!snapshot().connected && !active && !stopping) await check();
       if (!currentChat(context)) return;
-      if (
-        config.chatActions &&
-        config.directExecution &&
-        snapshot().connected &&
-        catalog?.tools?.includes('startTeachProgram')
-      ) {
+      const connected = snapshot().connected;
+      if (config.xiaozhi) {
+        const targets = new Set(connected ? catalog?.xiaozhiTools?.map(({ name }) => name) : []);
+        chatActions = chatActions.filter(({ target }) => targets.has(target));
+      }
+      if (config.chatActions && config.directExecution && connected && catalog?.tools?.includes('startTeachProgram')) {
         for (const program of catalog.programs) {
           if (chatActions.some((action) => action.tool === 'startTeachProgram' && action.target === program.id))
             continue;
@@ -570,10 +575,12 @@ export function createRobotService(options: {
         }
       }
       context.actions = chatActions.map(({ key, name }) => ({ key, name }));
+      const observedCatalog = connected && catalog ? structuredClone(catalog) : undefined;
       context.capabilities = {
-        connected: snapshot().connected,
+        connected,
         chatActions: config.chatActions,
-        catalog: snapshot().connected && catalog ? structuredClone(catalog) : undefined,
+        ...(config.xiaozhi ? { provider: 'xiaozhi' as const } : {}),
+        catalog: observedCatalog,
         mappings: chatActions.map(({ key, tool, target }) => ({ key, tool, target })),
         error: error || undefined,
       };

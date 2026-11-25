@@ -1,5 +1,7 @@
 # Astra Pro 2.0 over MCP
 
+For XiaoZhi devices, see [XiaoZhi robot and pet chat](./xiaozhi.md).
+
 This branch connects through MCP Streamable HTTP. Client-side Python and the Astra SDK are no longer required.
 
 1. Build and start this branch, then open the Astra robot panel.

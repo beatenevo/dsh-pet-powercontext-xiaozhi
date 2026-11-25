@@ -1,4 +1,4 @@
-/** Attach the Astra controller to the plugin lifecycle and existing pet feedback routes. */
+/** Attach the robot controller to the plugin lifecycle and existing pet feedback routes. */
 import { createRobotService, type RobotService } from '../robot/service.ts';
 import { ROUTE_SEGMENT } from '../../shared/constants.ts';
 import type { HostContext } from './context.ts';
@@ -25,6 +25,6 @@ export function registerRobot(
         await route()(ROUTE_SEGMENT + '/anim' + query, 'POST', JSON.stringify({ name: event.animation }));
     },
   });
-  ctx.effect(() => () => service.dispose(), 'dsh-pet: Astra robot controller');
+  ctx.effect(() => () => service.dispose(), 'dsh-pet: robot controller');
   return service;
 }

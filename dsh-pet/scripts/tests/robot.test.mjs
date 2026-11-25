@@ -129,7 +129,7 @@ after(async () => {
   await browser?.close();
   if (server) await new Promise((resolve) => server.close(resolve));
 });
-async function open(t) {
+async function open(t, title = 'Astra Pro 2.0 robot', status = 'MCP connected (verify physical state on site)') {
   const page = await browser.newPage();
   page.setDefaultTimeout(5000);
   const errors = [];
@@ -137,8 +137,8 @@ async function open(t) {
   t.after(() => assert.deepEqual(errors, [], 'The DSH JSX runtime must render robot controls without errors'));
   t.after(() => page.close());
   await page.goto(origin);
-  await page.getByText('Astra Pro 2.0 robot', { exact: true }).click();
-  await page.getByText('MCP connected (verify physical state on site)', { exact: true }).waitFor();
+  await page.locator('[data-robot-panel] > summary').getByText(title, { exact: true }).click();
+  await page.getByText(status, { exact: true }).waitFor();
   return page;
 }
 
@@ -220,6 +220,33 @@ test('chat interaction switches save explicit opt-ins for the current pet', asyn
   assert.equal(requests[0].config.chatSpeech, true);
   assert.equal(requests[0].config.chatActions, true);
   assert.equal(requests[0].config.petId, 'main');
+});
+
+test('XiaoZhi settings save the selected device tool and fixed arguments', async (t) => {
+  state.config.address = '';
+  state.config.xiaozhi = { deviceId: '9007199254740993123' };
+  state.config.actions = [];
+  state.catalog = {
+    programs: [],
+    areas: [],
+    xiaozhiTools: [{ name: 'self_arm_raise', arguments: ['arm'], required: ['arm'] }],
+  };
+  const page = await open(t, 'XiaoZhi robot', 'XiaoZhi device tools discovered');
+  await page.getByText('Robot connection', { exact: true }).click();
+  await page.getByText('Advanced: action mappings and timeout (optional)', { exact: true }).click();
+  await page.getByRole('button', { name: 'Add XiaoZhi action' }).click();
+  await page.locator('.pet-robot-action-row').getByLabel('Action name', { exact: true }).fill('抬手');
+  await page.getByLabel('Discovered XiaoZhi device tool').selectOption('self_arm_raise');
+  await page.getByLabel(/Fixed arguments/).fill('[]');
+  await page.getByRole('button', { name: 'Save robot configuration' }).click();
+  await page.getByText('Action arguments must be a JSON object such as {}.').waitFor();
+  assert.equal(requests.length, 0);
+  await page.getByLabel(/Fixed arguments/).fill('{"arm":"left"}');
+  await page.getByRole('button', { name: 'Save robot configuration' }).click();
+  await page.getByText('Disconnected or stale status', { exact: true }).waitFor();
+  assert.equal(requests[0].config.xiaozhi.deviceId, '9007199254740993123');
+  assert.equal(requests[0].config.actions[0].target, 'self_arm_raise');
+  assert.deepEqual(requests[0].config.actions[0].arguments, { arm: 'left' });
 });
 
 test('a chat-selected action stays visible and sends only its proposal identity after confirmation', async (t) => {

@@ -29,6 +29,8 @@ import { makeLoadStatus } from './settings/load-status.ts';
 import { makeModelCard, type ChatFlagKey, type ChatFlagValues, type ModelFieldKey } from './settings/model-card.ts';
 import { makeMemorySetup } from './settings/memory-setup.ts';
 import { makeAccessTokenCard } from './settings/access-token-card.ts';
+import { makeRobotCard } from './settings/robot-card.ts';
+import type { RobotRuntime } from './robot/state.ts';
 import { makeObservabilityCard } from './settings/observability-card.ts';
 import type { MemorySetupStatus } from '../shared/memory-setup.ts';
 import { makeMobileCard } from './settings/mobile-card.ts';
@@ -71,6 +73,7 @@ export { petBridge };
 export function makePetConfigSection(
   rt: SettingsRuntime,
   ctx: ShortcutHost,
+  robotT: RobotRuntime['t'],
 ): FunctionComponent<{ close?: () => void }> {
   const { h, useState, useEffect, useRef, useCallback, t } = rt;
 
@@ -97,6 +100,7 @@ export function makePetConfigSection(
   );
   const MemorySetup = makeMemorySetup(rt);
   const AccessTokenCard = makeAccessTokenCard(rt);
+  const RobotCard = makeRobotCard({ ...rt, t: robotT });
   const ObservabilityCard = makeObservabilityCard(rt);
   const PhysicsCard = makePhysicsCard(rt);
   const MotionCard = makeMotionCard(rt);
@@ -506,6 +510,7 @@ export function makePetConfigSection(
           values: chatFlags,
           onFlagChange: setChatFlag,
         }),
+        h(RobotCard, { pets }),
         h(MemorySetup, {
           disabled: saving || loadState !== 'ready' || longTermMemory.backend === 'dsh-powercontext',
           onBusy: setPreparingMemory,

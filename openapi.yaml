@@ -79,7 +79,7 @@ tags:
     description: Speech synthesis with host-side validation, queuing and caching; returns MP3 on success
 
   - name: Robot
-    description: Optional Astra Pro 2.0 operator controls and status
+    description: Optional Astra Pro 2.0 and XiaoZhi operator controls and status
 
 paths:
   /dsh-pet-7340/access-token:
@@ -373,7 +373,7 @@ paths:
       tags:
         - Robot
       operationId: getRobot
-      summary: Read cached Astra Pro 2.0 state and receipts
+      summary: Read cached robot state and receipts
       description: >-
         Requires the standalone session token/cookie or DSH host access. Does not send RPCs. Connection
         freshness expires after 15 seconds.
@@ -414,6 +414,36 @@ paths:
           description: Invalid URL or JSON syntax
         "403":
           description: Standalone authentication or cross-site request rejected
+        "415":
+          description: JSON required or cross-site browser request rejected
+  /dsh-pet-7340/robot/credential:
+    post:
+      tags: [Robot]
+      operationId: saveXiaozhiCredential
+      summary: Save a write-only XiaoZhi device API token for the current robot session
+      description: Requires a same-site authenticated DSH session. The token is scoped to the saved OpenAPI URL.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [session, token]
+              properties:
+                session: { type: string, format: uuid }
+                token: { type: string, minLength: 1, maxLength: 4096, writeOnly: true }
+      responses:
+        "200":
+          description: Credential stored or business failure. Inspect ok.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { type: object, required: [ok], properties: { ok: { const: true } } }
+                  - $ref: "#/components/schemas/FailureResponse"
+        "403":
+          description: DSH session access required
         "415":
           description: JSON required or cross-site browser request rejected
   /dsh-pet-7340/state:
@@ -3986,12 +4016,16 @@ components:
           maxLength: 80
         tool:
           type: string
-          enum: [startTeachProgram, RobotAgvMove]
+          enum: [startTeachProgram, RobotAgvMove, xiaozhiMcp]
         target:
           type: string
           minLength: 1
           maxLength: 128
-          description: Original program ID or station string from the MCP catalog. Never convert to Number.
+          description: Original program ID, station string, or XiaoZhi device tool name from discovery.
+        arguments:
+          type: object
+          additionalProperties: true
+          description: Fixed JSON arguments for a XiaoZhi device tool, validated against its discovered schema.
         petAnimation:
           type: string
           maxLength: 128
@@ -4015,11 +4049,30 @@ components:
         chatActions:
           type: boolean
           default: false
-          description: Let petId chat propose configured action keys. Each proposal needs separate on-site confirmation; enabling this never authorizes movement.
+          description: Let petId chat propose configured action keys. Actions require on-site confirmation by default.
+        directExecution:
+          type: boolean
+          default: false
+          description: Dispatch explicit chat-selected actions without per-action confirmation when chatActions is enabled.
         address:
           type: string
           maxLength: 255
-          description: Complete HTTP(S) MCP endpoint without credentials or fragment. Empty only when disabled.
+          description: Complete HTTP(S) MCP endpoint for Astra. Omit the address value for XiaoZhi by passing an empty string.
+        xiaozhi:
+          type: object
+          additionalProperties: false
+          required: [deviceId]
+          description: Selects the XiaoZhi ESP32 Go OpenAPI adapter.
+          properties:
+            deviceId:
+              type: string
+              pattern: '^(?:[1-9]\d{0,19})?$'
+              description: Device record ID. An empty string is accepted while disabled.
+            apiUrl:
+              type: string
+              format: uri
+              maxLength: 2048
+              description: HTTP(S) device OpenAPI root ending in /api/open/v1. Omit to use the host environment.
         version:
           const: 2
           description: MCP configuration version. Legacy SDK configuration is disabled and must be replaced.
@@ -4041,6 +4094,22 @@ components:
       type: object
       required: [programs, areas]
       properties:
+        tools:
+          type: array
+          items: { type: string }
+        xiaozhiTools:
+          type: array
+          items:
+            type: object
+            required: [name, arguments, required]
+            properties:
+              name: { type: string }
+              arguments:
+                type: array
+                items: { type: string }
+              required:
+                type: array
+                items: { type: string }
         programs:
           type: array
           items:

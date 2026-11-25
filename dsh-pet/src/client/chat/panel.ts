@@ -20,11 +20,11 @@ export type { ChatPanelRuntime } from './runtime.ts';
  * @param rt - Injected react capability.
  * @returns parameterless component: status and action are taken from ./state, and does not hold logic.
  */
-export function makePetChatPanel(rt: ChatPanelRuntime): () => unknown {
+export function makePetChatPanel(rt: ChatPanelRuntime, settingsInChat = true): () => unknown {
   const useChatState = createPetChatState(rt);
   const MemoryStatus = makeMemoryStatus(rt);
   const ComparisonPanel = makeComparisonPanel(rt);
-  const RobotPanel = makeRobotPanel(rt);
+  const RobotPanel = makeRobotPanel(rt, settingsInChat);
   return function PetChatPanel(): unknown {
     const state = useChatState();
     return buildPanel(

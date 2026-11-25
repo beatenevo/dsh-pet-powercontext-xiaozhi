@@ -1,19 +1,44 @@
 /** Edit robot connection and manufacturer-provided action mappings in the chat panel. */
 import type { RobotConfig, RobotCatalog } from '../../shared/robot.ts';
 import { robotRequestId, type RobotRuntime } from './state.ts';
+import { makeRobotActionFields, type RobotActionDraft } from './action-fields.ts';
+
+/** Settings inputs shared by the Harness card and standalone chat. */
+export interface RobotSettingsProps {
+  config: RobotConfig;
+  catalog?: RobotCatalog;
+  disabled: boolean;
+  save: (config: RobotConfig) => Promise<boolean>;
+  pets?: readonly { id: string; name: string }[];
+  saveDeviceToken?: (token: string) => Promise<boolean>;
+}
 
 /** Keep operator drafts separate from polled status. */
 export function makeRobotSettings(rt: RobotRuntime) {
   const { h, t, useState } = rt;
-  return function RobotSettings(props: {
-    config: RobotConfig;
-    catalog?: RobotCatalog;
-    disabled: boolean;
-    save: (config: RobotConfig) => Promise<boolean>;
-  }) {
-    const [draft, setDraft] = useState(props.config);
-    const [rows, setRows] = useState(props.config.actions);
+  const ActionFields = makeRobotActionFields(rt);
+  return function RobotSettings(props: RobotSettingsProps) {
+    const [draft, setDraft] = useState(
+      !props.config.xiaozhi && !props.config.address && props.config.actions.length === 0
+        ? { ...props.config, xiaozhi: { deviceId: '' } }
+        : props.config,
+    );
+    const [rows, setRows] = useState<RobotActionDraft[]>(
+      props.config.actions.map(({ arguments: args, ...action }) => ({
+        ...action,
+        ...(args ? { argumentText: JSON.stringify(args) } : {}),
+      })),
+    );
     const [message, setMessage] = useState('');
+    const [token, setToken] = useState('');
+    const isXiaozhi = !!draft.xiaozhi;
+    const savedApiUrl = props.config.xiaozhi?.apiUrl;
+    const savedTarget =
+      !!props.config.xiaozhi === isXiaozhi &&
+      draft.address === props.config.address &&
+      draft.xiaozhi?.deviceId === props.config.xiaozhi?.deviceId &&
+      draft.xiaozhi?.apiUrl === savedApiUrl;
+    const catalog = savedTarget ? props.catalog : undefined;
     const field = (label: string, value: string, onChange: (value: string) => void, type = 'text') =>
       h('label', {
         children: [
@@ -21,35 +46,72 @@ export function makeRobotSettings(rt: RobotRuntime) {
           h('input', { type, value, onChange: (event: { target: { value: string } }) => onChange(event.target.value) }),
         ],
       });
-    return h('details', {
+    return h(props.pets ? 'div' : 'details', {
       children: [
-        h('summary', { children: t('robotSetup') }),
-        h('p', { className: 'pet-robot-note', children: t('robotQuickStart') }),
+        props.pets ? null : h('summary', { children: t('robotSetup') }),
+        h('p', {
+          className: 'pet-robot-note',
+          children: t(
+            isXiaozhi ? (props.pets ? 'robotXiaozhiAddressHint' : 'robotXiaozhiQuickStart') : 'robotQuickStart',
+          ),
+        }),
         h('form', {
           onSubmit: (event: { preventDefault(): void }) => {
             event.preventDefault();
             try {
               const config = {
                 ...draft,
-                actions: rows,
+                actions: rows.map(({ argumentText, ...action }) => {
+                  if (action.tool !== 'xiaozhiMcp') return action;
+                  const args: unknown = JSON.parse(argumentText ?? '{}');
+                  if (typeof args !== 'object' || !args || Array.isArray(args)) throw new Error('invalid_arguments');
+                  return { ...action, arguments: args as Record<string, unknown> };
+                }),
               };
               void props
                 .save(config)
                 .then((ok) =>
                   setMessage(
                     ok
-                      ? t(config.directExecution && config.chatActions ? 'robotSavedDirect' : 'robotSaved')
+                      ? t(
+                          config.directExecution && config.chatActions && !isXiaozhi
+                            ? 'robotSavedDirect'
+                            : 'robotSaved',
+                        )
                       : t('robotRequestError'),
                   ),
                 );
             } catch {
-              setMessage(t('robotInvalidIds'));
+              setMessage(t('robotInvalidArguments'));
             }
           },
           children: [
             h('fieldset', {
               disabled: props.disabled,
               children: [
+                h('label', {
+                  children: [
+                    t('robotProvider'),
+                    h('select', {
+                      value: isXiaozhi ? 'xiaozhi' : 'astra',
+                      onChange: (event: { target: { value: string } }) => {
+                        const xiaozhi = event.target.value === 'xiaozhi';
+                        setRows([]);
+                        setDraft({
+                          ...draft,
+                          enabled: false,
+                          directExecution: false,
+                          address: '',
+                          xiaozhi: xiaozhi ? { deviceId: '' } : undefined,
+                        });
+                      },
+                      children: [
+                        h('option', { value: 'astra', children: t('robotTitle') }),
+                        h('option', { value: 'xiaozhi', children: t('robotXiaozhiTitle') }),
+                      ],
+                    }),
+                  ],
+                }),
                 h('label', {
                   children: [
                     h('input', {
@@ -61,7 +123,37 @@ export function makeRobotSettings(rt: RobotRuntime) {
                     t('robotEnabled'),
                   ],
                 }),
-                field(t('robotAddress'), draft.address, (address) => setDraft({ ...draft, address })),
+                props.pets
+                  ? h('label', {
+                      children: [
+                        t('robotLinkedPet'),
+                        h('select', {
+                          value: draft.petId,
+                          onChange: (event: { target: { value: string } }) =>
+                            setDraft({ ...draft, petId: event.target.value }),
+                          children: [
+                            ...(props.pets.some(({ id }) => id === draft.petId)
+                              ? []
+                              : [h('option', { value: draft.petId, children: draft.petId })]),
+                            ...props.pets.map(({ id, name }) => h('option', { key: id, value: id, children: name })),
+                          ],
+                        }),
+                      ],
+                    })
+                  : null,
+                draft.xiaozhi
+                  ? field(t('robotXiaozhiDeviceId'), draft.xiaozhi.deviceId, (deviceId) =>
+                      setDraft({ ...draft, xiaozhi: { ...draft.xiaozhi, deviceId } }),
+                    )
+                  : field(t('robotAddress'), draft.address, (address) => setDraft({ ...draft, address })),
+                draft.xiaozhi && props.pets
+                  ? field(t('robotXiaozhiAddress'), draft.xiaozhi.apiUrl ?? '', (apiUrl) =>
+                      setDraft({
+                        ...draft,
+                        xiaozhi: { deviceId: draft.xiaozhi!.deviceId, apiUrl: apiUrl || undefined },
+                      }),
+                    )
+                  : null,
                 h('div', {
                   className: 'pet-robot-chat-options',
                   children: [
@@ -92,7 +184,10 @@ export function makeRobotSettings(rt: RobotRuntime) {
                       }),
                     ),
                     h('p', { className: 'pet-robot-note', children: t('robotChatOptionsHint') }),
-                    h('p', { className: 'pet-robot-note', children: t('robotDirectExecutionHint') }),
+                    h('p', {
+                      className: 'pet-robot-note',
+                      children: t(isXiaozhi ? 'robotXiaozhiDirectHint' : 'robotDirectExecutionHint'),
+                    }),
                   ],
                 }),
                 h('details', {
@@ -104,47 +199,16 @@ export function makeRobotSettings(rt: RobotRuntime) {
                       (value) => setDraft({ ...draft, timeoutSeconds: Number(value) }),
                       'number',
                     ),
-                    ...rows.map((item, index) => {
-                      const update = (change: Partial<typeof item>) =>
-                        setRows((old) => old.map((row, n) => (n === index ? { ...row, ...change } : row)));
-                      return h('div', {
+                    ...rows.map((item) =>
+                      h(ActionFields, {
                         key: item.key,
-                        className: 'pet-robot-action-row',
-                        children: [
-                          field(t('robotName'), item.name, (name) => update({ name })),
-                          h('select', {
-                            value: item.tool,
-                            onChange: (event: { target: { value: 'startTeachProgram' | 'RobotAgvMove' } }) =>
-                              update({ tool: event.target.value, target: '' }),
-                            children: [
-                              h('option', { value: 'startTeachProgram', children: t('robotProgram') }),
-                              h('option', { value: 'RobotAgvMove', children: t('robotArea') }),
-                            ],
-                          }),
-                          h('select', {
-                            'aria-label': t('robotIds'),
-                            value: item.target,
-                            onChange: (event: { target: { value: string } }) => update({ target: event.target.value }),
-                            children: [
-                              h('option', { value: '', children: t('robotSelect') }),
-                              ...(item.target ? [h('option', { value: item.target, children: item.target })] : []),
-                              ...(item.tool === 'startTeachProgram'
-                                ? (props.catalog?.programs ?? []).map((p) => ({ id: p.id, name: p.name }))
-                                : (props.catalog?.areas ?? []).map((a) => ({ id: a.parameter, name: a.areaName }))
-                              ).map((entry) =>
-                                h('option', { value: entry.id, children: `${entry.name} (${entry.id})` }),
-                              ),
-                            ],
-                          }),
-                          field(t('robotAnimation'), item.petAnimation, (petAnimation) => update({ petAnimation })),
-                          h('button', {
-                            type: 'button',
-                            onClick: () => setRows((old) => old.filter((_, n) => n !== index)),
-                            children: t('robotRemove'),
-                          }),
-                        ],
-                      });
-                    }),
+                        item,
+                        catalog,
+                        update: (change: Partial<RobotActionDraft>) =>
+                          setRows((old) => old.map((row) => (row.key === item.key ? { ...row, ...change } : row))),
+                        remove: () => setRows((old) => old.filter((row) => row.key !== item.key)),
+                      }),
+                    ),
                     h('button', {
                       type: 'button',
                       disabled: rows.length >= 20,
@@ -154,12 +218,12 @@ export function makeRobotSettings(rt: RobotRuntime) {
                           {
                             key: 'action-' + robotRequestId().slice(0, 8),
                             name: '',
-                            tool: 'startTeachProgram',
+                            tool: isXiaozhi ? 'xiaozhiMcp' : 'startTeachProgram',
                             target: '',
                             petAnimation: '',
                           },
                         ]),
-                      children: t('robotAdd'),
+                      children: t(isXiaozhi ? 'robotXiaozhiAdd' : 'robotAdd'),
                     }),
                   ],
                 }),
@@ -169,6 +233,36 @@ export function makeRobotSettings(rt: RobotRuntime) {
             message ? h('p', { role: 'status', children: message }) : null,
           ],
         }),
+        isXiaozhi && props.saveDeviceToken
+          ? h('div', {
+              children: [
+                h('p', { className: 'pet-robot-note', children: t('robotXiaozhiTokenHint') }),
+                h('label', {
+                  children: [
+                    t('robotXiaozhiToken'),
+                    h('input', {
+                      type: 'password',
+                      value: token,
+                      autoComplete: 'new-password',
+                      maxLength: 4096,
+                      disabled: props.disabled || !savedApiUrl || draft.xiaozhi?.apiUrl !== savedApiUrl,
+                      onChange: (event: { target: { value: string } }) => setToken(event.target.value),
+                    }),
+                  ],
+                }),
+                h('button', {
+                  type: 'button',
+                  disabled: props.disabled || !savedApiUrl || draft.xiaozhi?.apiUrl !== savedApiUrl || !token.trim(),
+                  onClick: () => {
+                    void props.saveDeviceToken?.(token.trim()).then((ok) => {
+                      if (ok) setToken('');
+                    });
+                  },
+                  children: t('robotXiaozhiTokenSave'),
+                }),
+              ],
+            })
+          : null,
       ],
     });
   };

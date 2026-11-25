@@ -196,7 +196,7 @@ export function makeFactory(): (require: (mod: string) => any) => any {
 
       // Setting page "desktop pet configuration": size, position, model, save and take effect immediately. useRef is
       // used for the floating layer positioning and external click determination of the "AI model" drop-down.
-      const PetConfigSection = makePetConfigSection({ h, useState, useEffect, useRef, useCallback, t }, ctx);
+      const PetConfigSection = makePetConfigSection({ h, useState, useEffect, useRef, useCallback, t }, ctx, chatT);
       ctx.slots.inject('settings.section', function* () {
         yield ctx.slots.register(
           { name: 'settings.section', id: 'pet-config', order: 30, label: () => t('nav'), inject: () => ({ t }) },

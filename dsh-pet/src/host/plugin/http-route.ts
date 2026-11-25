@@ -129,7 +129,12 @@ export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHan
           const dsh = typeof connection?.requestRejection === 'function';
           const hasToken = dsh && req.headers['x-dsh-pet-token'] !== undefined;
           const management = pathname === ROUTE_SEGMENT + '/access-token';
+          const robotCredential = pathname === ROUTE_SEGMENT + '/robot/credential';
           const rejection = dsh ? connection!.requestRejection(req) : undefined;
+          if (robotCredential && (!dsh || hasToken || rejection !== undefined)) {
+            sendJson(res, rejection ?? 403, { error: 'dsh_access_denied' });
+            return;
+          }
           if (management) {
             if (!dsh || rejection !== undefined || !access) {
               sendJson(res, rejection ?? 403, { error: 'dsh_access_denied' });
@@ -145,7 +150,7 @@ export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHan
           // The management entry point only accepts JSON; cross-site forms cannot trigger downloads, model calls, or process start and stop.
           if (
             req.method === 'POST' &&
-            [ROUTE_SEGMENT + '/powercontext/setup', ROUTE_SEGMENT + '/robot'].includes(pathname)
+            (robotCredential || [ROUTE_SEGMENT + '/powercontext/setup', ROUTE_SEGMENT + '/robot'].includes(pathname))
           ) {
             if (
               req.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'application/json' ||

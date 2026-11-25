@@ -5,6 +5,18 @@ export const robotZh = {
   robotSelect: '请选择（保存地址后检查连接）',
   robotTitle: 'Astra Pro 2.0 机器人',
   robotXiaozhiTitle: '小智机器人',
+  robotSettingsTitle: '机器人设置',
+  robotSettingsLocation: '在「设置 → 桌宠配置 → 机器人设置」编辑连接和动作映射。',
+  robotLinkedPet: '联动桌宠',
+  robotXiaozhiAddress: '小智设备 OpenAPI 地址',
+  robotXiaozhiAddressHint:
+    '填写设备后端的 HTTP(S) 地址，路径以 /api/open/v1 结尾。xiaozhi.me 的 wss MCP 接入点用于让小智调用外部工具。',
+  robotXiaozhiToken: '小智设备 API 令牌',
+  robotXiaozhiTokenSave: '保存设备令牌',
+  robotXiaozhiTokenSaved: '设备令牌已保存。可以检查连接。',
+  robotXiaozhiTokenFailed: '设备令牌保存失败。请确认地址已保存，再试一次。',
+  robotXiaozhiTokenRequired: '请为已保存的小智 OpenAPI 地址填写设备 API 令牌。',
+  robotXiaozhiTokenHint: '先保存地址，再填写或更换该地址的设备令牌。桌宠聊天使用 Harness 的模型配置。',
   robotProvider: '机器人类型',
   robotXiaozhiQuickStart:
     '在宿主环境配置小智自建服务的 OpenAPI 地址和令牌。填入设备 ID，启用并保存，再检查连接。官方云的 wss MCP 接入点用于让小智调用外部工具。',
@@ -17,7 +29,7 @@ export const robotZh = {
   robotXiaozhiDirectHint: '默认逐次确认。开启直接执行后，明确的聊天动作请求将串行下发已保存的动作映射。',
   robotXiaozhiEmpty: '暂无小智动作。检查连接后，在高级设置中把已发现的设备工具映射为动作。',
   robotXiaozhiConnected: '已发现小智设备工具',
-  robotXiaozhiSetupError: '请在宿主设置小智自建服务的 OpenAPI 地址和 API 令牌。',
+  robotXiaozhiSetupError: '请在机器人设置中保存小智自建服务的 OpenAPI 地址和 API 令牌。',
   robotXiaozhiAddressError: '小智 OpenAPI 地址须使用 HTTP(S)，以 /api/open/v1 结尾。',
   robotXiaozhiAuthError: '小智自建服务拒绝了 API 令牌。',
   robotXiaozhiUnavailable: '找不到此小智设备或设备工具。请确认设备在线，并检查设备 ID。',
@@ -94,6 +106,20 @@ export const robotZh = {
 /** Keys required by every robot control translation. */
 export type RobotKey = keyof typeof robotZh;
 
+const xiaozhiErrors = new Map<string, RobotKey>([
+  ['xiaozhi_setup_required', 'robotXiaozhiSetupError'],
+  ['xiaozhi_token_required', 'robotXiaozhiTokenRequired'],
+  ['xiaozhi_invalid_url', 'robotXiaozhiAddressError'],
+  ['xiaozhi_auth_failed', 'robotXiaozhiAuthError'],
+  ['xiaozhi_device_unavailable', 'robotXiaozhiUnavailable'],
+]);
+
+/** Localize recognized connection errors while preserving other controller result codes. */
+export function robotConnectionError(error: string | undefined, t: (key: RobotKey) => string): string | undefined {
+  const key = error && xiaozhiErrors.get(error);
+  return key ? t(key) : error;
+}
+
 /** English fallback for host languages without robot-specific translations. */
 export const robotEn: Record<RobotKey, string> = {
   robotProgram: 'Teach program',
@@ -101,6 +127,19 @@ export const robotEn: Record<RobotKey, string> = {
   robotSelect: 'Select (save endpoint and check connection first)',
   robotTitle: 'Astra Pro 2.0 robot',
   robotXiaozhiTitle: 'XiaoZhi robot',
+  robotSettingsTitle: 'Robot settings',
+  robotSettingsLocation: 'Edit the connection and action mappings under Settings → Pet configuration → Robot settings.',
+  robotLinkedPet: 'Linked pet',
+  robotXiaozhiAddress: 'XiaoZhi device OpenAPI URL',
+  robotXiaozhiAddressHint:
+    'Enter the HTTP(S) device backend URL ending in /api/open/v1. XiaoZhi uses the xiaozhi.me wss MCP endpoint to call external tools.',
+  robotXiaozhiToken: 'XiaoZhi device API token',
+  robotXiaozhiTokenSave: 'Save device token',
+  robotXiaozhiTokenSaved: 'Device token saved. You can check the connection.',
+  robotXiaozhiTokenFailed: 'Could not save the device token. Verify the saved URL and try again.',
+  robotXiaozhiTokenRequired: 'Save the device API token for the configured XiaoZhi OpenAPI URL.',
+  robotXiaozhiTokenHint:
+    'Save the URL before adding or replacing its device token. Pet chat uses the model configured in Harness.',
   robotProvider: 'Robot type',
   robotXiaozhiQuickStart:
     'Set the self-hosted XiaoZhi OpenAPI URL and token in the host environment. Enter the device ID, enable the connection, save, and check the connection. The official cloud’s wss MCP endpoint lets XiaoZhi call external tools.',
@@ -115,7 +154,7 @@ export const robotEn: Record<RobotKey, string> = {
   robotXiaozhiEmpty:
     'No XiaoZhi actions yet. Check the connection and map a discovered device tool in advanced settings.',
   robotXiaozhiConnected: 'XiaoZhi device tools discovered',
-  robotXiaozhiSetupError: 'Set the self-hosted XiaoZhi OpenAPI URL and API token in the host environment.',
+  robotXiaozhiSetupError: 'Save the self-hosted XiaoZhi OpenAPI URL and API token in robot settings.',
   robotXiaozhiAddressError: 'Use an HTTP(S) URL ending in /api/open/v1 for the XiaoZhi OpenAPI.',
   robotXiaozhiAuthError: 'The self-hosted XiaoZhi server refused the API token.',
   robotXiaozhiUnavailable:

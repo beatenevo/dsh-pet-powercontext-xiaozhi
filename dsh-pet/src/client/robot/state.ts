@@ -17,7 +17,7 @@ export function robotRequestId(): string {
 }
 
 /** Keep failed requests visible while independent polling discovers their actual receipts. */
-export function useRobotState(rt: RobotRuntime) {
+export function useRobotState(rt: Pick<RobotRuntime, 'useState' | 'useRef' | 'useEffect'>) {
   const { useState, useRef, useEffect } = rt;
   const [snapshot, setSnapshot] = useState<RobotSnapshot | null>(null);
   const [error, setError] = useState('');

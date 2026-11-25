@@ -67,6 +67,17 @@ test('DSH sessions rotate persistent API credentials without disconnecting exist
     assert.equal((await fetch(base + '/state', { headers: { ...session, ...api('A'.repeat(43)) } })).status, 403);
     assert.equal((await fetch(base + '/state', { headers: api('B'.repeat(43)) })).status, 200);
     assert.equal((await fetch(base + '/state', { headers: session })).status, 200);
+    const saveRobotToken = (headers: Record<string, string>) =>
+      fetch(base + '/robot/credential', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...headers },
+        body: '{}',
+      });
+    assert.equal((await saveRobotToken({})).status, 401);
+    assert.equal((await saveRobotToken(api('B'.repeat(43)))).status, 401);
+    assert.equal((await saveRobotToken({ ...session, ...api('B'.repeat(43)) })).status, 403);
+    assert.equal((await saveRobotToken({ ...session, 'sec-fetch-site': 'cross-site' })).status, 415);
+    assert.equal((await saveRobotToken(session)).status, 200);
     assert.equal((await trustedDesktopRequest()).status, 200);
     const status = await (await fetch(base + '/access-token', { headers: session })).text();
     assert.equal(status.includes('B'.repeat(43)), false);
@@ -76,7 +87,7 @@ test('DSH sessions rotate persistent API credentials without disconnecting exist
     writeFileSync(join(dir, 'blocked'), 'not a directory');
     assert.throws(() => failing.rotate('C'.repeat(43)));
     assert.equal(failing.configured, false);
-    assert.equal(calls, 4);
+    assert.equal(calls, 5);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

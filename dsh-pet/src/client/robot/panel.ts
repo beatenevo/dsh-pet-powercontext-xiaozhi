@@ -1,17 +1,10 @@
 /** Robot speech status, confirmed chat proposals, and manual physical controls. */
 import { makeRobotSettings } from './settings.ts';
 import { robotRequestId, useRobotState, type RobotRuntime } from './state.ts';
-import type { RobotKey } from './locales.ts';
-
-const xiaozhiErrors = new Map<string, RobotKey>([
-  ['xiaozhi_setup_required', 'robotXiaozhiSetupError'],
-  ['xiaozhi_invalid_url', 'robotXiaozhiAddressError'],
-  ['xiaozhi_auth_failed', 'robotXiaozhiAuthError'],
-  ['xiaozhi_device_unavailable', 'robotXiaozhiUnavailable'],
-]);
+import { robotConnectionError, type RobotKey } from './locales.ts';
 
 /** Create one control panel shared by DSH and standalone chat. */
-export function makeRobotPanel(rt: RobotRuntime) {
+export function makeRobotPanel(rt: RobotRuntime, settingsInChat = true) {
   const { h, t, useState } = rt;
   const Settings = makeRobotSettings(rt);
   return function RobotPanel(props: { petId: string }) {
@@ -47,7 +40,7 @@ export function makeRobotPanel(rt: RobotRuntime) {
       : undefined;
     const action = status?.config.actions.find((item) => item.key === selected) ?? status?.config.actions[0];
     const blocked = !status || pending || status.busy || status.stopping;
-    const statusError = status?.error && xiaozhiErrors.get(status.error);
+    const statusError = robotConnectionError(status?.error, t);
     const button = (label: RobotKey, body: unknown, disabled = false, danger = false) =>
       h('button', {
         type: 'button',
@@ -232,7 +225,7 @@ export function makeRobotPanel(rt: RobotRuntime) {
               ],
             }),
             error ? h('p', { role: 'alert', children: `${t('robotRequestError')} (${error})` }) : null,
-            status?.error ? h('p', { role: 'alert', children: statusError ? t(statusError) : status.error }) : null,
+            statusError ? h('p', { role: 'alert', children: statusError }) : null,
             status?.telemetry ? h('p', { children: status.telemetry.description }) : null,
             status?.stopResult
               ? h('div', {
@@ -248,7 +241,7 @@ export function makeRobotPanel(rt: RobotRuntime) {
                   ],
                 })
               : null,
-            status
+            settingsInChat && status
               ? h(Settings, {
                   key: status.session,
                   config: { ...status.config, petId: props.petId || status.config.petId },
@@ -256,7 +249,9 @@ export function makeRobotPanel(rt: RobotRuntime) {
                   disabled: blocked || status.checking,
                   save: (config: unknown) => send({ action: 'configure', config }),
                 })
-              : null,
+              : settingsInChat
+                ? null
+                : h('p', { className: 'pet-robot-note', children: t('robotSettingsLocation') }),
             h('details', {
               children: [
                 h('summary', { children: t('robotHistory') }),

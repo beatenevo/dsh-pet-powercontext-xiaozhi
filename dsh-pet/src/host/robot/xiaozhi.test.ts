@@ -10,6 +10,7 @@ import { PollStateStore } from '../state.ts';
 import { defaultRobotConfig } from './config.ts';
 import { createRobotService } from './service.ts';
 import { runRobotWorker } from './worker.ts';
+import { xiaozhiTokenRef } from './xiaozhi-connection.ts';
 import type { RobotConfig } from '../../shared/robot.ts';
 
 const deviceId = '9007199254740993123';
@@ -148,4 +149,44 @@ test('XiaoZhi rejects invalid arguments before dispatch and keeps a device tool 
   const failed = await runRobotWorker(config, { ...call, arguments: { arm: 'right' } });
   assert.equal(failed.code, 'execution_unknown');
   assert.equal(requests.filter(({ method }) => method === 'POST').length, 1);
+});
+
+test('a saved token stays private and is used only for its saved XiaoZhi endpoint', async (t) => {
+  const requests = await mockManager(t);
+  const root = mkdtempSync(join(tmpdir(), 'xiaozhi-settings-'));
+  const credentials = new Map<string, string>();
+  const service = createRobotService({
+    userRoot: root,
+    state: new PollStateStore(),
+    xiaozhiTokens: {
+      read: async (url) => credentials.get(xiaozhiTokenRef(url)),
+      write: async (url, token) => {
+        credentials.set(xiaozhiTokenRef(url), token);
+      },
+    },
+  });
+  t.after(async () => {
+    await service.dispose();
+    rmSync(root, { force: true, recursive: true });
+  });
+  const apiUrl = process.env.DSH_PET_XIAOZHI_OPENAPI_URL!;
+  const saveAddress = (apiUrl: string) =>
+    service.submit({
+      action: 'configure',
+      config: {
+        ...config,
+        xiaozhi: { deviceId, apiUrl },
+      },
+    });
+  const { session } = await saveAddress(apiUrl.replace(/\/$/, ''));
+  assert.equal((await service.submit({ action: 'check' })).error, 'xiaozhi_token_required');
+  await service.setXiaozhiToken(session, 'private-test-value');
+  assert.equal((await service.submit({ action: 'check' })).connected, true);
+  assert.equal(requests[0]?.token, 'private-test-value');
+  assert.equal(JSON.stringify(service.snapshot()).includes('private-test-value'), false);
+  await saveAddress(apiUrl.replace(apiRoot, '/another/api/open/v1/'));
+  await assert.rejects(service.setXiaozhiToken(session, 'stale-value'), /robot_session_changed/);
+  assert.equal((await service.submit({ action: 'check' })).error, 'xiaozhi_token_required');
+  assert.equal(requests.length, 1);
+  await assert.rejects(saveAddress('wss://api.xiaozhi.me/mcp/?token=example'));
 });

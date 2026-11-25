@@ -20,6 +20,7 @@ import { readRobotJournal, writeRobotJournal, type RobotReceipt } from './journa
 import { runRobotWorker, type RobotRunner, type RobotCall } from './worker.ts';
 import type { PetObservability } from '../observability/service.ts';
 import type { PollStateStore } from '../state.ts';
+import { parseXiaozhiApiUrl, type XiaozhiTokenStore } from './xiaozhi-connection.ts';
 
 /** Pet feedback is best-effort and never changes the recorded physical command result. */
 export interface RobotFeedback {
@@ -32,6 +33,7 @@ export interface RobotFeedback {
 export interface RobotService {
   snapshot(): RobotSnapshot;
   submit(input: unknown): Promise<RobotSnapshot>;
+  setXiaozhiToken(session: string, token: string): Promise<void>;
   beginChat(petId: string): RobotChatContext | undefined;
   prepareChat(petId: string): Promise<RobotChatContext | undefined>;
   completeChat(context: RobotChatContext, reply: { text: string; actionKey?: string }): void;
@@ -44,10 +46,12 @@ export function createRobotService(options: {
   state: PollStateStore;
   observability?: PetObservability;
   run?: RobotRunner;
+  xiaozhiTokens?: XiaozhiTokenStore;
   feedback?: (event: RobotFeedback) => Promise<void>;
   now?: () => number;
 }): RobotService {
-  const transport = options.run ?? runRobotWorker;
+  const transport: RobotRunner =
+    options.run ?? ((config, call, signal) => runRobotWorker(config, call, signal, options.xiaozhiTokens?.read));
   const run: RobotRunner = (config, call, signal) => {
     if (!options.observability || call.operation === 'status') return transport(config, call, signal);
     return options.observability.run(`robot.${call.operation}`, async () => {
@@ -81,6 +85,7 @@ export function createRobotService(options: {
   let disposed = false;
   let active: { receipt: RobotReceipt; abort: AbortController } | undefined;
   let checking = false;
+  let writingToken = false;
   let stopping = false;
   let checkedAt = 0;
   let connected = false;
@@ -112,6 +117,18 @@ export function createRobotService(options: {
     chatActions = [];
     pendingAction = undefined;
   };
+  const invalidateConnection = (): void => {
+    cancelChat();
+    cancelSpeech();
+    chatSpeech = undefined;
+    session = randomUUID();
+    armed = connected = false;
+    telemetry = undefined;
+    catalog = undefined;
+    stopResult = undefined;
+    previousStatus = undefined;
+    error = '';
+  };
   const currentChat = (context: RobotChatContext): boolean =>
     !disposed && config.enabled && context.session === session && context.id === chatContext?.id;
   const notify = (event: RobotFeedback): void => {
@@ -124,7 +141,7 @@ export function createRobotService(options: {
     config: structuredClone(config),
     armed,
     busy: !!active,
-    checking,
+    checking: checking || writingToken,
     stopping,
     checkedAt,
     connected: connected && now() - checkedAt < 15_000,
@@ -156,7 +173,7 @@ export function createRobotService(options: {
     }
   };
   const check = (): Promise<void> => {
-    if (!config.enabled || stopping || disposed || storageError) return Promise.resolve();
+    if (!config.enabled || stopping || disposed || storageError || writingToken) return Promise.resolve();
     if (statusOperation) return statusOperation;
     checking = true;
     const abort = new AbortController();
@@ -273,7 +290,7 @@ export function createRobotService(options: {
       if (existing.fingerprint !== fingerprint) throw new Error('robot_request_conflict');
       return Promise.resolve();
     }
-    if (active || stopping) throw new Error('robot_busy');
+    if (active || stopping || writingToken) throw new Error('robot_busy');
     if (!config.enabled || !snapshot().connected) throw new Error('robot_not_connected');
     if (request.action === 'execute' && !armed) throw new Error('robot_not_armed');
     if (
@@ -365,7 +382,7 @@ export function createRobotService(options: {
     notify({ petId: config.petId, text: stopResult.message });
   };
   const drainSpeech = async (): Promise<void> => {
-    if (speechDraining || active || stopping || disposed || storageError) return;
+    if (speechDraining || active || stopping || disposed || storageError || writingToken) return;
     speechDraining = true;
     const epoch = speechEpoch;
     try {
@@ -418,7 +435,16 @@ export function createRobotService(options: {
   const unsubscribe = options.state.onPetWrite((petId, leaf, data) => {
     if (leaf !== 'say' || !data || typeof data !== 'object' || !('text' in data) || typeof data.text !== 'string')
       return;
-    if (disposed || storageError || !config.enabled || !config.chatSpeech || config.petId !== petId || stopping) return;
+    if (
+      disposed ||
+      storageError ||
+      writingToken ||
+      !config.enabled ||
+      !config.chatSpeech ||
+      config.petId !== petId ||
+      stopping
+    )
+      return;
     // Mirrored robot speech must not be sent back to the robot's speaker.
     if ('source' in data && data.source === 'robot-input') return;
     const text = data.text.trim();
@@ -511,6 +537,7 @@ export function createRobotService(options: {
       speechQueue.length ||
       active ||
       stopping ||
+      writingToken ||
       disposed ||
       storageError
     )
@@ -536,7 +563,7 @@ export function createRobotService(options: {
   return {
     snapshot,
     beginChat(petId) {
-      if (disposed || storageError || !config.enabled || config.petId !== petId) return;
+      if (disposed || storageError || writingToken || !config.enabled || config.petId !== petId) return;
       cancelChat();
       armed = false;
       chatCompleted = false;
@@ -600,6 +627,22 @@ export function createRobotService(options: {
         };
       void dispatchDirectAction();
     },
+    async setXiaozhiToken(expectedSession, token) {
+      if (disposed || expectedSession !== session) throw new Error('robot_session_changed');
+      if (storageError) throw new Error('robot_storage_unavailable');
+      if (active || checking || stopping || writingToken) throw new Error('robot_busy');
+      if (!config.xiaozhi?.apiUrl) throw new Error('robot_xiaozhi_address_required');
+      if (!options.xiaozhiTokens) throw new Error('robot_credential_unavailable');
+      writingToken = true;
+      try {
+        await options.xiaozhiTokens.write(parseXiaozhiApiUrl(config.xiaozhi.apiUrl), token);
+      } catch {
+        throw new Error('robot_credential_save_failed');
+      } finally {
+        writingToken = false;
+      }
+      if (!disposed) invalidateConnection();
+    },
     async submit(input) {
       const request = robotRequestSchema.parse(input);
       if (disposed) throw new Error('robot_disposed');
@@ -613,6 +656,7 @@ export function createRobotService(options: {
         return snapshot();
       }
       if (storageError) throw new Error('robot_storage_unavailable');
+      if (writingToken) throw new Error('robot_busy');
       if ('session' in request && request.session !== session) throw new Error('robot_session_changed');
       if (request.action === 'confirm-chat-action') await confirmChatAction(request.id);
       else if (request.action === 'dismiss-chat-action') {
@@ -623,16 +667,7 @@ export function createRobotService(options: {
         mkdirSync(options.userRoot, { recursive: true, mode: 0o700 });
         writePrivateJson(configFile, request.config);
         config = request.config;
-        cancelChat();
-        cancelSpeech();
-        chatSpeech = undefined;
-        session = randomUUID();
-        armed = connected = false;
-        telemetry = undefined;
-        catalog = undefined;
-        stopResult = undefined;
-        previousStatus = undefined;
-        error = '';
+        invalidateConnection();
       } else if (request.action === 'check') await check();
       else if (request.action === 'arm') {
         if (!snapshot().connected) await check();

@@ -2,6 +2,7 @@
 import type { RobotAction, RobotCatalog, RobotConfig, RobotResult } from '../../shared/robot.ts';
 import { runRobotWorker as runAstra } from './mcp.ts';
 import { runXiaozhi } from './xiaozhi.ts';
+import type { XiaozhiTokenStore } from './xiaozhi-connection.ts';
 
 /** 宿主允许的高层操作。 */
 export interface RobotCall {
@@ -19,5 +20,11 @@ export interface RobotCall {
 export type RobotRunner = (config: RobotConfig, call: RobotCall, signal?: AbortSignal) => Promise<RobotResult>;
 
 /** Dispatch the existing robot service operations to the selected adapter. */
-export const runRobotWorker: RobotRunner = (config, call, signal) =>
-  config.xiaozhi ? runXiaozhi(config, call, signal) : runAstra(config, call, signal);
+export function runRobotWorker(
+  config: RobotConfig,
+  call: RobotCall,
+  signal?: AbortSignal,
+  readToken?: XiaozhiTokenStore['read'],
+): Promise<RobotResult> {
+  return config.xiaozhi ? runXiaozhi(config, call, signal, readToken) : runAstra(config, call, signal);
+}

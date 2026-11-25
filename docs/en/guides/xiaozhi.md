@@ -1,15 +1,17 @@
 # XiaoZhi robot and pet chat
 
-Open **Pet chat → XiaoZhi robot** in DeepSeek Harness. The same panel is available in the standalone app. A bound device can speak new pet utterances and run mapped device actions from chat.
+In DeepSeek Harness, use **Settings → Pet configuration → Robot settings** for the connection and action mappings. Open **Pet chat → XiaoZhi robot** in the sidebar to operate the device. A bound device can speak new pet utterances and run mapped device actions from chat.
 
 Unless a chat model is set for the pet, replies use the default model in Harness with its configured sign-in or API key. The XiaoZhi API token authorizes device OpenAPI requests. The backend's TTS reads the pet's reply directly without running it through the XiaoZhi chat model.
 
 ## Connect a self-hosted XiaoZhi service
 
 1. Connect the device to the self-hosted service and configure server-side TTS. Create an API token in its management console and copy the numeric device record `id` from its device list. The plugin uses the Go backend's device tool discovery, tool call, and speech push endpoints. [Reference backend revision](https://github.com/hackers365/xiaozhi-esp32-server-golang/tree/d2eafd5eaf9454d5f7d40d30f8cf5ca4d3e2ee65)
-2. Set `DSH_PET_XIAOZHI_OPENAPI_URL` (such as `https://xiaozhi.example.com/api/open/v1`) and `DSH_PET_XIAOZHI_API_TOKEN` in the host process environment. Restart the host after changing them.
-3. Select **XiaoZhi robot** in **Robot connection**, enter the device ID, enable the connection, and save. Select **Check connection** to discover the device's MCP tools.
-4. Enter a sentence in **Manual controls** to test speech. Turn on **Speak all pet messages through the robot** to queue new replies, whispers and sleep talk for one-way playback on the device.
+2. Select **XiaoZhi robot** in **Robot settings**. Enter the device OpenAPI URL (such as `https://xiaozhi.example.com/api/open/v1`) and the device ID, enable the connection, and save.
+3. Enter the device API token and choose **Save device token**, then select **Check connection** to discover the device's MCP tools. Harness stores the token in its credential provider, scoped to the saved URL. Enter a token for a new URL after changing the address.
+4. In Pet chat, enter a sentence under **Manual controls** to test speech. Turn on **Speak all pet messages through the robot** in Robot settings to queue new replies, whispers and sleep talk for one-way playback on the device.
+
+In standalone mode, set `DSH_PET_XIAOZHI_OPENAPI_URL` and `DSH_PET_XIAOZHI_API_TOKEN` in the host environment. Robot connection settings are in the standalone pet chat panel.
 
 ## Map a device action
 

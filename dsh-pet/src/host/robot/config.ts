@@ -1,6 +1,7 @@
 /** Validate operator configuration and persist it outside the installed package. */
 import { z } from 'zod';
 import type { RobotConfig } from '../../shared/robot.ts';
+import { parseXiaozhiApiUrl } from './xiaozhi-connection.ts';
 
 const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/);
 const address = z
@@ -30,6 +31,19 @@ export const robotConfigSchema = z
           .string()
           .trim()
           .regex(/^(?:[1-9]\d{0,19})?$/),
+        apiUrl: z
+          .string()
+          .trim()
+          .min(1)
+          .max(2048)
+          .refine((value) => {
+            try {
+              return Boolean(parseXiaozhiApiUrl(value));
+            } catch {
+              return false;
+            }
+          }, 'Expected the HTTP(S) XiaoZhi OpenAPI root')
+          .optional(),
       })
       .optional(),
     version: z.literal(2),
@@ -52,7 +66,7 @@ export const robotConfigSchema = z
     (config) => !config.enabled || !!(config.xiaozhi ? config.xiaozhi.deviceId : config.address),
     'A robot address or XiaoZhi device ID is required',
   )
-  .refine((config) => !config.xiaozhi || !config.address, 'XiaoZhi uses the host OpenAPI URL')
+  .refine((config) => !config.xiaozhi || !config.address, 'XiaoZhi uses its own OpenAPI address')
   .refine(
     (config) => config.actions.every((action) => !!config.xiaozhi === (action.tool === 'xiaozhiMcp')),
     'Actions must match the configured robot type',
@@ -119,3 +133,14 @@ export const robotRequestSchema = z.discriminatedUnion('action', [
 
 /** Validated operation accepted by the controller. */
 export type RobotRequest = z.infer<typeof robotRequestSchema>;
+
+/** Write-only device token for the saved robot session. */
+export const xiaozhiTokenRequestSchema = z.strictObject({
+  session: z.string().uuid(),
+  token: z
+    .string()
+    .trim()
+    .min(1)
+    .max(4096)
+    .regex(/^[\x21-\x7e]+$/),
+});

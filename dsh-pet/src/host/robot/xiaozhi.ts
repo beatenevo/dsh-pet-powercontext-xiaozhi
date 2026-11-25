@@ -8,6 +8,7 @@ import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { RobotCatalog, RobotResult } from '../../shared/robot.ts';
 import type { RobotRunner } from './worker.ts';
+import { parseXiaozhiApiUrl, type XiaozhiTokenStore } from './xiaozhi-connection.ts';
 
 const validator = new AjvJsonSchemaValidator();
 const object = z.record(z.string(), z.unknown());
@@ -23,25 +24,17 @@ const speechResponse = z.object({ success: z.literal(true) });
 const toolResponse = z.object({ data: z.object({ result: z.string() }) });
 const deviceToolName = /^[a-zA-Z0-9_.-]+$/;
 
-function readConnection() {
-  const token = process.env.DSH_PET_XIAOZHI_API_TOKEN?.trim();
-  const address = process.env.DSH_PET_XIAOZHI_OPENAPI_URL?.trim();
-  if (!token || !address) throw new Error('xiaozhi_setup_required');
+async function readConnection(configuredUrl: string | undefined, readToken?: XiaozhiTokenStore['read']) {
+  const address = configuredUrl ?? process.env.DSH_PET_XIAOZHI_OPENAPI_URL?.trim();
+  if (!address) throw new Error('xiaozhi_setup_required');
   let base: URL;
   try {
-    base = new URL(address.endsWith('/') ? address : address + '/');
+    base = parseXiaozhiApiUrl(address);
   } catch {
     throw new Error('xiaozhi_invalid_url');
   }
-  if (
-    !['http:', 'https:'].includes(base.protocol) ||
-    !base.pathname.endsWith('/api/open/v1/') ||
-    base.username ||
-    base.password ||
-    base.search ||
-    base.hash
-  )
-    throw new Error('xiaozhi_invalid_url');
+  const token = configuredUrl ? await readToken?.(base) : process.env.DSH_PET_XIAOZHI_API_TOKEN?.trim();
+  if (!token) throw new Error(configuredUrl ? 'xiaozhi_token_required' : 'xiaozhi_setup_required');
   return { base, token };
 }
 
@@ -84,6 +77,7 @@ function failed(reason: string, sent: boolean): RobotResult {
   const messages: Record<string, string> = {
     xiaozhi_setup_required: 'Set DSH_PET_XIAOZHI_OPENAPI_URL and DSH_PET_XIAOZHI_API_TOKEN in the host environment.',
     xiaozhi_invalid_url: 'The XiaoZhi OpenAPI URL must be HTTP(S) and end in /api/open/v1.',
+    xiaozhi_token_required: 'Save the XiaoZhi API token for the configured URL.',
     xiaozhi_auth_failed: 'The XiaoZhi server refused the API token.',
     xiaozhi_device_unavailable:
       'The XiaoZhi device or its MCP tool list is unavailable. Check that the device is online.',
@@ -104,7 +98,12 @@ function failed(reason: string, sent: boolean): RobotResult {
 }
 
 /** Execute one request through the configured XiaoZhi backend. */
-export const runXiaozhi: RobotRunner = async (config, call, signal) => {
+export async function runXiaozhi(
+  config: Parameters<RobotRunner>[0],
+  call: Parameters<RobotRunner>[1],
+  signal?: AbortSignal,
+  readToken?: XiaozhiTokenStore['read'],
+): Promise<RobotResult> {
   if (call.operation === 'stop')
     return { ok: false, code: 'stop_unsupported', message: 'Local wait cancelled. Check the XiaoZhi device on site.' };
   const deadline = AbortSignal.timeout(config.timeoutSeconds * 1000);
@@ -112,7 +111,7 @@ export const runXiaozhi: RobotRunner = async (config, call, signal) => {
   let sent = false;
   try {
     abort.throwIfAborted();
-    const { base, token } = readConnection();
+    const { base, token } = await readConnection(config.xiaozhi?.apiUrl, readToken);
     const api = createApi(base, token, abort);
     const deviceId = config.xiaozhi!.deviceId;
     const devicePath = 'devices/' + encodeURIComponent(deviceId);
@@ -171,4 +170,4 @@ export const runXiaozhi: RobotRunner = async (config, call, signal) => {
           : '';
     return failed(reason, sent);
   }
-};
+}

@@ -1,16 +1,23 @@
 /** Optional robot control contract; all operations are explicit operator requests. */
 import { ZodError } from 'zod';
 import { readAllConfig } from '../config.ts';
-import { robotRequestSchema } from '../robot/config.ts';
+import { robotRequestSchema, xiaozhiTokenRequestSchema } from '../robot/config.ts';
 import type { RouteHandler } from './types.ts';
 import { failResult, invalidJson, methodNotAllowed, okResult } from './result.ts';
 
 /** Read cached status or submit one validated control operation. */
 export const handleRobotRoutes: RouteHandler = async (deps, { rest, method, body }) => {
-  if (rest !== 'robot') return;
+  const credential = rest === 'robot/credential';
+  if (rest !== 'robot' && !credential) return;
+  if (credential && method !== 'POST') return methodNotAllowed();
   if (method !== 'GET' && method !== 'POST') return methodNotAllowed();
   if (!deps.robot) return failResult('unsupported', 'robot_unavailable');
   try {
+    if (credential) {
+      const { session, token } = xiaozhiTokenRequestSchema.parse(JSON.parse(body ?? 'null'));
+      await deps.robot.setXiaozhiToken(session, token);
+      return okResult({ ok: true });
+    }
     if (method === 'POST') {
       const request = robotRequestSchema.parse(JSON.parse(body ?? 'null'));
       const petId =

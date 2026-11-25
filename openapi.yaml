@@ -416,6 +416,36 @@ paths:
           description: Standalone authentication or cross-site request rejected
         "415":
           description: JSON required or cross-site browser request rejected
+  /dsh-pet-7340/robot/credential:
+    post:
+      tags: [Robot]
+      operationId: saveXiaozhiCredential
+      summary: Save a write-only XiaoZhi device API token for the current robot session
+      description: Requires a same-site authenticated DSH session. The token is scoped to the saved OpenAPI URL.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [session, token]
+              properties:
+                session: { type: string, format: uuid }
+                token: { type: string, minLength: 1, maxLength: 4096, writeOnly: true }
+      responses:
+        "200":
+          description: Credential stored or business failure. Inspect ok.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { type: object, required: [ok], properties: { ok: { const: true } } }
+                  - $ref: "#/components/schemas/FailureResponse"
+        "403":
+          description: DSH session access required
+        "415":
+          description: JSON required or cross-site browser request rejected
   /dsh-pet-7340/state:
     get:
       tags: [State]
@@ -4032,12 +4062,17 @@ components:
           type: object
           additionalProperties: false
           required: [deviceId]
-          description: Selects the host-configured XiaoZhi ESP32 Go OpenAPI adapter.
+          description: Selects the XiaoZhi ESP32 Go OpenAPI adapter.
           properties:
             deviceId:
               type: string
               pattern: '^(?:[1-9]\d{0,19})?$'
               description: Device record ID. An empty string is accepted while disabled.
+            apiUrl:
+              type: string
+              format: uri
+              maxLength: 2048
+              description: HTTP(S) device OpenAPI root ending in /api/open/v1. Omit to use the host environment.
         version:
           const: 2
           description: MCP configuration version. Legacy SDK configuration is disabled and must be replaced.

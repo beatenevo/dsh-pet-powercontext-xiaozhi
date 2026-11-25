@@ -91,7 +91,7 @@ export function registerPetChatTab(
     return () => {};
   }
   const disposeCss = injectPanelCss();
-  const Panel = makePetChatPanel({ ...rt, readSessionId: () => activeDshSession((name) => ctx.get?.(name)) });
+  const Panel = makePetChatPanel({ ...rt, readSessionId: () => activeDshSession((name) => ctx.get?.(name)) }, false);
   /** The icon of the guide page card: plugin logo; the position given by the frame is only about 16 px, which is filled with CSS. */
   const GuideIcon = () => rt.h('img', { className: 'pet-chat-guide-icon', src: LOGO_URL, alt: '', loading: 'lazy' });
 

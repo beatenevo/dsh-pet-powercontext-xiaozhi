@@ -22,8 +22,8 @@ export interface RobotConfig {
   /** Execute chat-selected actions without per-action clicks; defaults to false. */
   directExecution: boolean;
   address: string;
-  /** Selects the host-configured XiaoZhi OpenAPI and an exact device ID. */
-  xiaozhi?: { deviceId: string };
+  /** Selects an exact device ID and optionally overrides the host's XiaoZhi OpenAPI address. */
+  xiaozhi?: { deviceId: string; apiUrl?: string };
   /** MCP 配置版本；旧 SDK 配置迁移时禁用。 */
   version: 2;
   /** Maximum RPC duration in seconds; expired movement requests remain uncertain. */

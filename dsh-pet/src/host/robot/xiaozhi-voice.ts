@@ -32,6 +32,24 @@ const chatSchema = z.object({
   stream: z.boolean().optional(),
 });
 
+/** 读取小智 Go 为本轮命中声纹附加的身份提示。 */
+function readSpeakerPrompt(messages: z.infer<typeof chatSchema>['messages']): string | undefined {
+  const system = messages[0];
+  if (system.role !== 'system' || typeof system.content !== 'string') return;
+  // 小智 Go 将管理员配置的声纹 Prompt 放在系统消息里，后面可能附加记忆和知识库配置。
+  const [promptAndKnowledge] = system.content.split('\n历史关联信息: \n', 1);
+  const [promptSection] = promptAndKnowledge.split('\n知识库检索规则（工具: search_knowledge）:\n', 1);
+  const marker = '\n基于声纹识别到对话人信息: \n';
+  const start = promptSection.lastIndexOf(marker);
+  if (start !== -1)
+    return (
+      promptSection
+        .slice(start + marker.length)
+        .trim()
+        .slice(0, 2000) || undefined
+    );
+}
+
 function wavFrom(chunks: Buffer[], size: number): Buffer {
   const header = Buffer.alloc(44);
   header.write('RIFF');
@@ -75,7 +93,7 @@ function sendReply(response: ServerResponse, text: string, stream: boolean): voi
 export function startXiaozhiVoiceBridge(options: {
   config: z.infer<typeof xiaozhiVoiceConfigSchema>;
   hear: (audio: Buffer, signal: AbortSignal) => Promise<HearResult>;
-  chat: (text: string) => Promise<{ ok: boolean; text?: string }>;
+  chat: (text: string, speakerPrompt?: string) => Promise<{ ok: boolean; text?: string }>;
   report: (message: string) => void;
 }): () => void {
   const expected = Buffer.from('Bearer ' + options.config.token);
@@ -94,12 +112,13 @@ export function startXiaozhiVoiceBridge(options: {
       chatting = true;
       void (async () => {
         const parsed = chatSchema.parse(JSON.parse(await readBody(request, 256 * 1024)));
+        const speakerPrompt = readSpeakerPrompt(parsed.messages);
         const text = parsed.messages.reverse().find(({ role }) => role === 'user')?.content;
         if (typeof text !== 'string' || !text.trim() || text.length > 2000) {
           response.writeHead(400).end();
           return;
         }
-        const reply = await options.chat(text.trim());
+        const reply = await options.chat(text.trim(), speakerPrompt);
         sendReply(response, reply.ok ? (reply.text ?? '') : '我现在无法回复，请检查桌宠的模型设置。', !!parsed.stream);
       })()
         .catch(() => {

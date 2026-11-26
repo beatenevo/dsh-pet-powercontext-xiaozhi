@@ -8,7 +8,7 @@
  * @module dsh-pet/src/host/plugin/chat-memory
  */
 import { join } from 'node:path';
-import { generateChat, type ChatMemoryMessage } from '../chat.ts';
+import { generateChat, type ChatGenerateResult, type ChatMemoryMessage } from '../chat.ts';
 import { chatActionNames } from '../chat-action.ts';
 import { mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -556,7 +556,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     text: string,
     image?: PetImageRef,
     sessionId?: string,
-    fromXiaozhiVoice = false,
+    xiaozhiVoice?: { speakerPrompt?: string },
   ): Promise<
     | { ok: true; text: string; image?: string }
     | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
@@ -565,7 +565,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       'chat',
       async () => {
         deps.observability?.content('user', text);
-        const robotChat = await deps.robot?.prepareChat(petId, fromXiaozhiVoice);
+        const robotChat = await deps.robot?.prepareChat(petId, xiaozhiVoice ? text : undefined);
         // Query optional weather outside the journal lock so it does not block other conversations.
         const env = await environmentForPrompt();
         return withMemoryLock(async () => {
@@ -687,21 +687,26 @@ export function createChatMemory(deps: ChatMemoryInput) {
                   userText: text,
                 });
           // Model: chatModel of the entry configuration takes precedence (leave blank = not specified); failure on the generation side will fallback to the model of the current conversation and try again.
-          const generated = await generateChat({
-            observability: deps.observability,
-            ctx,
-            system: patch?.system ?? system,
-            history: patch?.history ?? list,
-            recalledContext,
-            userText: patch?.userText ?? text,
-            pool,
-            actions,
-            robotActions: robotChat?.actions,
-            robotDirectExecution: robotChat?.directExecution,
-            robotCapabilities: robotChat?.capabilities,
-            preferred: configuredModel(found.conf, 'chatModel'),
-            image,
-          });
+          const directVoiceAction = robotChat?.directVoiceAction;
+          const generated: ChatGenerateResult = directVoiceAction
+            ? { ok: true, text: `好，我这就${directVoiceAction.name}。`, robotAction: directVoiceAction.key }
+            : await generateChat({
+                observability: deps.observability,
+                ctx,
+                system: xiaozhiVoice?.speakerPrompt
+                  ? `${patch?.system ?? system}\n\n[本轮小智声纹识别]\n${xiaozhiVoice.speakerPrompt}`
+                  : (patch?.system ?? system),
+                history: patch?.history ?? list,
+                recalledContext,
+                userText: patch?.userText ?? text,
+                pool,
+                actions,
+                robotActions: robotChat?.actions,
+                robotDirectExecution: robotChat?.directExecution,
+                robotCapabilities: robotChat?.capabilities,
+                preferred: configuredModel(found.conf, 'chatModel'),
+                image,
+              });
           if (!generated.ok) return generated;
           deps.observability?.content('assistant', generated.text);
           const now = Date.now();
@@ -761,7 +766,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
               ...(generated.image ? { image: generated.image } : {}),
               // Explicitly turn off the whisper animation when taking action: the bubble is played, but the action of the just playback request is not blocked.
               ...(generated.action !== undefined ? { anim: false } : {}),
-              ...(fromXiaozhiVoice ? { source: 'robot-input' } : replyVoiceTo ? { voiceTo: replyVoiceTo } : {}),
+              ...(xiaozhiVoice ? { source: 'robot-input' } : replyVoiceTo ? { voiceTo: replyVoiceTo } : {}),
             });
           }
           // The same text is brought out with the return value (the leaves are written as written, not one of the two)

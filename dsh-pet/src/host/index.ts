@@ -203,10 +203,10 @@ export function apply(ctx: any): void {
         startXiaozhiVoiceBridge({
           config,
           hear: (audio, signal) => deps.speech.hear({ audio: audio.toString('base64') }, signal),
-          chat: (text) => {
+          chat: (text, speakerPrompt) => {
             const { config } = robot.snapshot();
             return config.enabled && config.xiaozhi
-              ? chatWithPet(config.petId, text, undefined, undefined, true)
+              ? chatWithPet(config.petId, text, undefined, undefined, { speakerPrompt })
               : Promise.resolve({ ok: false });
           },
           report: (message) => log.warn(message),

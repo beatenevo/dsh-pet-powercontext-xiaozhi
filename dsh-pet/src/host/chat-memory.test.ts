@@ -442,6 +442,22 @@ describe('createChatMemory——Dialogue action linkage', () => {
 });
 
 describe('createChatMemory —— prompt word injection (pictures/actions are independent)', () => {
+  test('小智声纹提示只进入当前语音轮的模型请求', async () => {
+    const ws = tempWorkspace();
+    const captured: Record<string, unknown>[] = [];
+    try {
+      const memory = createMemory('在的', ws, undefined, undefined, captured);
+      const speakerPrompt = '当前说话人是小明。';
+      await memory.chatWithPet('main', '你认出我了吗？', undefined, undefined, { speakerPrompt });
+      await memory.chatWithPet('main', '你好。', undefined, undefined, {});
+      assert.match(JSON.stringify(captured[0].system), /当前说话人是小明。/);
+      assert.doesNotMatch(JSON.stringify(captured[1].system), /当前说话人是小明。/);
+      assert.equal(readMessages(ws.userRoot)[0].content, '你认出我了吗？');
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
   test('Both switches are on: user The text contains both a picture list and an action list.', async () => {
     const ws = tempWorkspace({ chatImageEnabled: true, memes: { 可爱: '卖萌立绘' } });
     mkdirSync(ws.memeDir, { recursive: true });

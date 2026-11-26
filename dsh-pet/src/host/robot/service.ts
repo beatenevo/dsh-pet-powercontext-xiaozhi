@@ -14,7 +14,7 @@ import type {
   RobotResult,
   RobotSnapshot,
 } from '../../shared/robot.ts';
-import type { RobotChatContext } from './chat.ts';
+import { matchXiaozhiVoiceAction, type RobotChatContext } from './chat.ts';
 import { defaultRobotConfig, robotConfigSchema, robotRequestSchema, type RobotRequest } from './config.ts';
 import { readRobotJournal, writeRobotJournal, type RobotReceipt } from './journal.ts';
 import { runRobotWorker, type RobotRunner, type RobotCall } from './worker.ts';
@@ -35,7 +35,7 @@ export interface RobotService {
   submit(input: unknown): Promise<RobotSnapshot>;
   setXiaozhiToken(session: string, token: string): Promise<void>;
   beginChat(petId: string, requireConfirmation?: boolean): RobotChatContext | undefined;
-  prepareChat(petId: string, requireConfirmation?: boolean): Promise<RobotChatContext | undefined>;
+  prepareChat(petId: string, xiaozhiVoiceText?: string): Promise<RobotChatContext | undefined>;
   completeChat(context: RobotChatContext, reply: { text: string; actionKey?: string }): void;
   dispose(): Promise<void>;
 }
@@ -577,9 +577,11 @@ export function createRobotService(options: {
       };
       return structuredClone(chatContext);
     },
-    async prepareChat(petId, requireConfirmation) {
-      const context = this.beginChat(petId, requireConfirmation);
+    async prepareChat(petId, xiaozhiVoiceText) {
+      const directVoice = xiaozhiVoiceText !== undefined && config.xiaozhi && config.directExecution;
+      const context = this.beginChat(petId, xiaozhiVoiceText !== undefined && !directVoice);
       if (!context) return;
+      const voiceAction = directVoice ? matchXiaozhiVoiceAction(xiaozhiVoiceText, chatActions) : undefined;
       if (!snapshot().connected && !active && !stopping) await check();
       if (!currentChat(context)) return;
       const connected = snapshot().connected;
@@ -587,7 +589,20 @@ export function createRobotService(options: {
         const targets = new Set(connected ? catalog?.xiaozhiTools?.map(({ name }) => name) : []);
         chatActions = chatActions.filter(({ target }) => targets.has(target));
       }
-      if (config.chatActions && context.directExecution && connected && catalog?.tools?.includes('startTeachProgram')) {
+      let voiceCommandNames: string[] | undefined;
+      if (directVoice) {
+        voiceCommandNames = chatActions.map(({ name }) => name);
+        chatActions = chatActions.filter(({ key }) => key === voiceAction?.key);
+        if (chatActions[0]) {
+          const { key, name } = chatActions[0];
+          context.directVoiceAction = { key, name };
+        }
+      } else if (
+        config.chatActions &&
+        context.directExecution &&
+        connected &&
+        catalog?.tools?.includes('startTeachProgram')
+      ) {
         for (const program of catalog.programs) {
           if (chatActions.some((action) => action.tool === 'startTeachProgram' && action.target === program.id))
             continue;
@@ -609,6 +624,7 @@ export function createRobotService(options: {
         ...(config.xiaozhi ? { provider: 'xiaozhi' as const } : {}),
         catalog: observedCatalog,
         mappings: chatActions.map(({ key, tool, target }) => ({ key, tool, target })),
+        ...(voiceCommandNames ? { voiceCommandNames } : {}),
         error: error || undefined,
       };
       return context;

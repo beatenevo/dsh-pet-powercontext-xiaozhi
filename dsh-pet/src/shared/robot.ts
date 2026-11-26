@@ -78,6 +78,8 @@ export interface RobotPendingAction {
   key: string;
   name: string;
   expiresAt: number;
+  /** 这一轮可直接执行时为 true，设备麦克风转写仍需确认。 */
+  directExecution?: boolean;
 }
 
 /** Delivery status for pet speech, separate from text generation success; chatSpeech is the retained wire name. */

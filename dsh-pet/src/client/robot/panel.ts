@@ -13,8 +13,8 @@ export function makeRobotPanel(rt: RobotRuntime, settingsInChat = true) {
     const [text, setText] = useState('');
     const xiaozhi = !!status?.config.xiaozhi || !status?.config.address;
     const direct = status?.config.directExecution && status.config.chatActions;
-    const proposalTitle = direct ? 'robotDirectActionPending' : 'robotProposalTitle';
     const proposal = status?.pendingAction?.petId === props.petId ? status.pendingAction : undefined;
+    const proposalTitle = proposal?.directExecution ? 'robotDirectActionPending' : 'robotProposalTitle';
     const speech = status?.chatSpeech?.petId === props.petId ? status.chatSpeech : undefined;
     const speechKey: RobotKey | undefined = speech
       ? {
@@ -109,14 +109,14 @@ export function makeRobotPanel(rt: RobotRuntime, settingsInChat = true) {
                             h('p', {
                               className: 'pet-robot-note',
                               children: t(
-                                direct
+                                proposal.directExecution
                                   ? xiaozhi
                                     ? 'robotXiaozhiDirectHint'
                                     : 'robotDirectExecutionHint'
                                   : 'robotProposalHint',
                               ),
                             }),
-                            direct
+                            proposal.directExecution
                               ? null
                               : button(
                                   'robotConfirmProposal',

@@ -556,6 +556,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     text: string,
     image?: PetImageRef,
     sessionId?: string,
+    fromXiaozhiVoice = false,
   ): Promise<
     | { ok: true; text: string; image?: string }
     | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
@@ -564,7 +565,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       'chat',
       async () => {
         deps.observability?.content('user', text);
-        const robotChat = await deps.robot?.prepareChat(petId);
+        const robotChat = await deps.robot?.prepareChat(petId, fromXiaozhiVoice);
         // Query optional weather outside the journal lock so it does not block other conversations.
         const env = await environmentForPrompt();
         return withMemoryLock(async () => {
@@ -760,7 +761,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
               ...(generated.image ? { image: generated.image } : {}),
               // Explicitly turn off the whisper animation when taking action: the bubble is played, but the action of the just playback request is not blocked.
               ...(generated.action !== undefined ? { anim: false } : {}),
-              ...(replyVoiceTo ? { voiceTo: replyVoiceTo } : {}),
+              ...(fromXiaozhiVoice ? { source: 'robot-input' } : replyVoiceTo ? { voiceTo: replyVoiceTo } : {}),
             });
           }
           // The same text is brought out with the return value (the leaves are written as written, not one of the two)

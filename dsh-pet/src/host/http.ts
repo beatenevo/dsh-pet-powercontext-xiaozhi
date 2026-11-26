@@ -239,11 +239,12 @@ export const MAX_BODY_BYTES = 10 * 1024 * 1024;
  * otherwise the processor will always hang and the memory will only increase but not decrease.
  *
  * @param req - Request object.
+ * @param limit - 请求体字节上限，缺省使用插件全局上限。
  * @returns request body text.
  * When @throws { Error } exceeds {@link MAX_BODY_BYTES} , it takes `code: 'body-too-large'` ; when the connection is
  * disconnected early, it takes `code: 'client-aborted'` .
  */
-export function readBody(req: IncomingMessage): Promise<string> {
+export function readBody(req: IncomingMessage, limit = MAX_BODY_BYTES): Promise<string> {
   return new Promise((resolve2, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
@@ -261,7 +262,7 @@ export function readBody(req: IncomingMessage): Promise<string> {
     };
     const onData = (chunk: Buffer): void => {
       size += chunk.length;
-      if (size > MAX_BODY_BYTES) {
+      if (size > limit) {
         settle(() => reject(Object.assign(new Error('request body too large'), { code: 'body-too-large' })));
         req.destroy();
         return;

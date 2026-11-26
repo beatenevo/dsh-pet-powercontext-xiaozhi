@@ -10,6 +10,8 @@ export interface RobotChatCapabilities {
   chatActions: boolean;
   catalog?: RobotCatalog;
   mappings: Pick<RobotAction, 'key' | 'tool' | 'target'>[];
+  /** 可直接说出的动作名称。空数组表示当前没有可用的语音动作。 */
+  voiceCommandNames?: string[];
   error?: string;
 }
 
@@ -20,19 +22,34 @@ export interface RobotChatContext {
   petId: string;
   actions: RobotChatAction[];
   directExecution: boolean;
-  /** 本轮语音明确授权的跳舞动作。 */
+  /** 本轮语音明确授权的单个动作。 */
   directVoiceAction?: RobotChatAction;
   capabilities?: RobotChatCapabilities;
 }
 
-/** 判断真机的原始转写是否是一条单独的跳舞指令。 */
-export function isXiaozhiDanceCommand(text: string): boolean {
+function normalizeXiaozhiCommand(text: string): string {
   const command = text
     .normalize('NFKC')
     .trim()
-    .replace(/^(?:你好[,、\s]*)?(?:小智|大肥鱼)[,、:\s]*/u, '')
-    .replace(/[。.!\s]+$/u, '');
-  return /^(?:请)?(?:你)?(?:给我|帮我|为我)?(?:来)?跳(?:一?[支个段]|一下)?舞(?:给我看|吧|一下)?$/u.test(command);
+    .replace(/^(?:你好[,、。\s]*)?(?:小智|大肥鱼)[,、。:\s]*/u, '')
+    .replace(/[。.!\s]+$/u, '')
+    .replace(/^(?:请\s*)?(?:你\s*)?(?:给我|帮我|为我)?\s*/u, '')
+    .replace(/(?:吧|一下|给我看)+$/u, '');
+  if (/^(?:来)?跳(?:一?[支个段]|一下)?舞$/u.test(command)) return '跳舞';
+
+  const handCommand = command.replace(/^把(左手|右手|双手|两只手|两手)(举起|抬起|放下)(?:来)?$/u, '$2$1');
+  const raise = /^(?:举起|抬起|举|抬)(?:一下)?(左手|右手|双手|两只手|两手)$/u.exec(handCommand);
+  if (raise) return '举起' + raise[1].replace(/两只?手/u, '双手');
+  const lower = /^(?:放下|放低)(?:一下)?(左手|右手|双手|两只手|两手)$/u.exec(handCommand);
+  return lower ? '放下' + lower[1].replace(/两只?手/u, '双手') : command;
+}
+
+/** 将真机原始转写匹配到唯一的已配置动作。 */
+export function matchXiaozhiVoiceAction(text: string, actions: readonly RobotAction[]): RobotAction | undefined {
+  const command = normalizeXiaozhiCommand(text);
+  if (!command || /[?？「」『』“”"\n]/u.test(command)) return;
+  const matches = actions.filter(({ name }) => normalizeXiaozhiCommand(name) === command);
+  if (matches.length === 1) return matches[0];
 }
 
 /** Keep physical proposals independent from desktop animation tags. */
@@ -55,7 +72,15 @@ export function robotActionInstruction(
           'If chatActions is false, ask the operator to enable chat actions. If direct execution is enabled and no matching action is available, explain that the robot service must expose the program and startTeachProgram. Otherwise explain how to add a mapping or enable direct execution in the robot panel. ') +
       'Never substitute a desktop pet animation or image for a physical robot action. Never claim a physical action was dispatched or completed: only the host can report dispatch after this reply. '
     : '';
-  if (!actions.length) return discovery;
+  if (!actions.length) {
+    return capabilities?.voiceCommandNames?.length
+      ? discovery +
+          'For a movement request that did not match, ask the user to name one configured action in a short command. ' +
+          'Available voice commands: ' +
+          JSON.stringify(capabilities.voiceCommandNames) +
+          '. '
+      : discovery;
+  }
   return (
     discovery +
     ('\n\n[Robot action proposal]\n' +

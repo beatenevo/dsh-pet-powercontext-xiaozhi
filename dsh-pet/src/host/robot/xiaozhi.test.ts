@@ -137,42 +137,65 @@ test('XiaoZhi sends the pet utterance verbatim and waits for confirmation before
   assert.equal(JSON.stringify(service.snapshot()).includes('test-token'), false);
 });
 
-test('XiaoZhi dispatches an explicit voice dance once through the configured mapping', async (t) => {
+test('XiaoZhi dispatches each unambiguous voice action once through its configured mapping', async (t) => {
   const requests = await mockManager(t);
-  const root = mkdtempSync(join(tmpdir(), 'xiaozhi-dance-'));
+  const root = mkdtempSync(join(tmpdir(), 'xiaozhi-voice-action-'));
   const service = createRobotService({ userRoot: root, state: new PollStateStore() });
   t.after(async () => {
     await service.dispose();
     rmSync(root, { force: true, recursive: true });
   });
-  const dance = { ...config.actions[0], key: 'dance', name: '跳舞' };
-  const direct = { ...config, directExecution: true, actions: [...config.actions, dance] };
+  const commands = [
+    ['dance', '跳舞', '小智，给我跳支舞吧。', 'left'],
+    ['raise-both', '举起双手', '你好小智，把两只手抬起来。', 'right'],
+    ['raise-right', '举起右手', '小智，举起右手。', 'right'],
+    ['raise-left', '举起左手', '帮我抬一下左手。', 'left'],
+    ['lower-both', '放下双手', '把双手放下来。', 'right'],
+    ['lower-right', '放下右手', '放下右手！', 'right'],
+    ['lower-left', '放下左手', '请把左手放下。', 'left'],
+    ['wave', '挥手', '大肥鱼，挥手吧。', 'left'],
+  ];
+  const mappings = commands.map(([key, name, , arm]) => ({ ...config.actions[0], key, name, arguments: { arm } }));
+  const direct = { ...config, directExecution: true, actions: mappings };
   await service.submit({ action: 'configure', config: direct });
 
-  const voice = await service.prepareChat('main', '小智，给我跳支舞吧。');
-  assert.ok(voice);
-  assert.equal(voice.directExecution, true);
-  assert.deepEqual(voice.actions, [{ key: 'dance', name: '跳舞' }]);
-  assert.deepEqual(voice.directVoiceAction, voice.actions[0]);
-  const reply = { text: '好，我这就跳舞。', actionKey: dance.key };
-  service.completeChat(voice, reply);
-  service.completeChat(voice, reply);
-  await waitFor(() => service.snapshot().commands.some(({ state }) => state === 'reported-success'));
-  assert.equal(service.snapshot().pendingAction, undefined);
-
-  for (const text of ['举起手。', '你会跳舞吗？', '先别跳舞。', '说一遍「跳舞」。']) {
-    const chat = await service.prepareChat('main', text);
-    assert.ok(chat);
-    assert.equal(chat.directExecution, false);
-    assert.equal(chat.directVoiceAction, undefined);
-    service.completeChat(chat, reply);
-    assert.equal(service.snapshot().pendingAction?.directExecution, undefined);
+  for (const [index, [key, name, text]] of commands.entries()) {
+    const voice = await service.prepareChat('main', text);
+    assert.ok(voice);
+    assert.deepEqual(voice.actions, [{ key, name }]);
+    assert.deepEqual(voice.directVoiceAction, voice.actions[0]);
+    const reply = { text: '好的。', actionKey: key };
+    service.completeChat(voice, reply);
+    service.completeChat(voice, reply);
+    await waitFor(() => service.snapshot().commands.filter(({ state }) => state === 'reported-success').length > index);
+    assert.equal(service.snapshot().pendingAction, undefined);
   }
 
+  for (const text of ['抬手。', '你会跳舞吗？', '先别跳舞。', '说一遍「跳舞」。', '举起左手，再放下右手。']) {
+    const chat = await service.prepareChat('main', text);
+    assert.ok(chat);
+    assert.deepEqual(chat.actions, []);
+    assert.equal(chat.directVoiceAction, undefined);
+    service.completeChat(chat, { text: '好的。', actionKey: 'dance' });
+    assert.equal(service.snapshot().pendingAction, undefined);
+  }
+
+  await service.submit({
+    action: 'configure',
+    config: { ...direct, actions: [...mappings, { ...mappings[1], key: 'duplicate', name: '抬起双手' }] },
+  });
+  assert.equal((await service.prepareChat('main', '举起双手。'))?.directVoiceAction, undefined);
+
   await service.submit({ action: 'configure', config: { ...direct, directExecution: false } });
-  const manual = await service.prepareChat('main', '跳舞。');
-  assert.equal(manual?.directVoiceAction, undefined);
-  assert.equal(requests.filter(({ path }) => path.endsWith('/mcp-call')).length, 1);
+  const manual = await service.prepareChat('main', '举起左手。');
+  assert.ok(manual);
+  assert.equal(manual.directVoiceAction, undefined);
+  service.completeChat(manual, { text: '等你确认。', actionKey: 'raise-left' });
+  assert.equal(service.snapshot().pendingAction?.key, 'raise-left');
+  assert.deepEqual(
+    requests.filter(({ path }) => path.endsWith('/mcp-call')).map(({ body }) => body),
+    commands.map(([, , , arm]) => ({ tool_name: toolName, arguments: { arm } })),
+  );
 });
 
 test('XiaoZhi rejects invalid arguments before dispatch and keeps a device tool error uncertain', async (t) => {

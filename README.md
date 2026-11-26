@@ -1,4 +1,4 @@
-# README is coming soon
+# dsh-pet-powercontext
 
 **A desktop companion that can chat, react to your work, and remember what matters to you.**
 
@@ -8,147 +8,11 @@ Drag the pet beside your work, give it a personality, and talk to it. Run it ins
 
 Built on [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet).
 
-This fork connects DeepSeek Harness Desktop to a XiaoZhi robot for shared chat, speech, and mapped movements. [小智桌面机器人完整教程](#小智桌面机器人完整教程)
+This fork builds on [ob-labs/dsh-pet-powercontext](https://github.com/ob-labs/dsh-pet-powercontext) and retains its existing features. The optional XiaoZhi adapter lets the on-screen pet and a physical robot share a conversation in DeepSeek Harness Desktop. [XiaoZhi setup guide](#connect-a-xiaozhi-desktop-robot)
 
 Optional: [Astra Pro 2.0 MCP integration](docs/en/guides/robot.md) supports catalog discovery, teach programs, area movement and speech without client-side Python/SDK.
 
 Optional: [AI Vision observability](docs/en/guides/observability.md) adds optional traces, input/output previews and links to the platform’s existing memory views. [Token comparison](docs/en/guides/token-comparison.md) compares answers and measured usage across three context strategies. These features are included in the v0.3.0 release package.
-
-## 小智桌面机器人完整教程
-
-在 DeepSeek Harness 桌面版给大肥鱼发消息，可以让真机念出回复，也可以让它做已映射的动作。直接对真机讲话时，语音转写和回复也进入同一份桌宠对话。以下步骤以 Apple Silicon Mac、Otto DIY ESP32-S3 固件 v2.5.3 和小智 Go v0.6.5 为例。
-
-### 安装 fork 的桌面插件
-
-准备 DeepSeek Harness 桌面版、Node.js 24 和 pnpm。若已启用上游 `dsh-pet` 插件，先停用它。保留 `$DSH_HOME/dsh-pet/` 可保留现有配置和记忆，`DSH_HOME` 默认是 `~/.dsh`。
-
-完全退出桌面版，在终端安装这个 fork 的构建包。下面的 `add` 命令也可用于更新同名插件。
-
-```sh
-git clone --branch xiaozhi-robot https://github.com/beatenevo/dsh-pet-powercontext-xiaozhi.git
-cd dsh-pet-powercontext-xiaozhi/dsh-pet
-pnpm install --frozen-lockfile --ignore-scripts
-mkdir -p "$PWD/../../xiaozhi-plugin-build"
-npm pack --pack-destination "$PWD/../../xiaozhi-plugin-build"
-dsh plugin --profile desktop add "$PWD/../../xiaozhi-plugin-build/dsh-pet-powercontext-0.3.2.tgz"
-```
-
-如果终端找不到 `dsh`，macOS 桌面版可使用 `/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh`。重启 Harness 后打开「设置 → 桌宠配置」，在右侧栏的「桌宠对话」发一条消息确认能回复。桌宠未单独指定聊天模型时，沿用 Harness 当前选中的模型和对应的登录凭据或 API Key。
-
-### 启动小智 Go 并绑定真机
-
-1. 下载并解压与主机架构匹配的小智 Go v0.6.5 发布包，保留同目录的配置、模型和动态库。在解压目录启动服务。首次使用时打开 `http://127.0.0.1:8080/setup` 创建管理员，之后在 `http://127.0.0.1:8080/login` 登录。发布包的 README 包含开机启动说明。 [小智 Go v0.6.5 发布包](https://github.com/hackers365/xiaozhi-esp32-server-golang/releases/tag/v0.6.5)
-
-   ```sh
-   ./xiaozhi_server -c main_config.yaml -manager-enable=true -manager-config manager.json
-   ```
-
-2. 在本机后台创建智能体，例如「桌宠联动」。首次部署可用「配置向导 → OTA 配置」里的 MQTT/UDP 选项一起保存三个服务的配置。也可以在「服务配置 → OTA 配置」手动填写。以 `192.168.1.20` 为 Mac 的局域网 IP 示例，WebSocket 地址填 `ws://192.168.1.20:8989/xiaozhi/v1/`。使用 MQTT/UDP 常驻连接时，启用本机 MQTT 服务，在 OTA 中下发端点 `192.168.1.20:2883`，让 OTA 和 MQTT 服务使用同一签名密钥，并在 UDP 配置中将对外主机设为 `192.168.1.20`、端口设为 `8990`。若后台区分测试和生产配置，给设备实际使用的一项填写地址。
-3. 让 Mac 和小智连到同一可互访的 Wi-Fi。在设备配网页填入 OTA 地址 `http://192.168.1.20:8989/xiaozhi/ota/`，保存后重启。设备显示六位绑定码后，到「智能体管理 → 设备列表 → 绑定设备」录入代码，并关联「桌宠联动」。已绑定的设备可在设备列表核对在线状态和归属。 [设备配网与绑定](https://docs.xiaozhi.me/zh/getting-started/wifi-and-binding.html)
-4. 确认固件提供所需的 MCP 动作和主动播报。本文的动作与播报实测使用 Otto DIY ESP32-S3 v2.5.3。其他板型按各自固件的工具列表配置。若小智日志出现 `Unknown message type: notify`，请查板型对应的固件说明，确认支持 `notify` 再测试桌宠主动播报。 [Otto 固件下载与烧录说明](https://ottodiy.tech/docs/downloads)
-
-配网页的 OTA 地址用于设备获取连接信息。后台仪表板显示「暂无 OTA 配置」时，到「服务配置 → OTA 配置」查看是否已保存。换 Wi-Fi 或热点以后，先确保设备和 Mac 能互访，再核对 Mac 的局域网 IP。IP 变动时更新 OTA、WebSocket、MQTT 和 UDP 的相关地址。先保留 Go 数据目录和原有绑定，设备连不上新地址时再进入配网页更新。日常联动通过 Wi-Fi，需要小智 Go 与 Harness 桌面版同时运行。设备可以独立供电，USB 数据线用于刷机或读取串口日志。
-
-### 在桌宠里连接设备并测试播报
-
-1. 在本机 Go 后台创建 OpenAPI Token，可直接打开 `http://127.0.0.1:8080/user/api-tokens`。在设备列表记下绑定设备的数字 `ID`。
-2. 在 Harness 的「设置 → 桌宠配置 → 机器人设置」选择「小智机器人」，填入 **小智设备 OpenAPI 地址** `http://127.0.0.1:8080/api/open/v1` 和数字设备 ID，开启「启用机器人连接」并保存。填入上一步创建的 Token，点击「保存设备令牌」，再点击「检查连接」。设备当前发布的工具会显示在工具列表里。
-3. 在 Go 后台「AI 配置 → TTS 配置」创建并测试一个启用的 TTS 配置，例如 Edge TTS 的 `zh-CN-XiaoxiaoNeural`，设为默认。再到桌宠对话的「小智机器人 → 手动控制」输入一句测试文本并点「让机器人播报」，从真机扬声器确认有声。打开「机器人播报桌宠发言」后，新的回复、碎碎念和梦话会交给小智播报。
-
-`xiaozhi.me` 的 `wss://api.xiaozhi.me/mcp/` 接入点用于让官方云上的小智调用外部工具。这里的桌宠通过本机 Go 的 OpenAPI 调用设备和发起播报，令牌由本机 Go 管理。 [小智 MCP 接入说明](https://docs.xiaozhi.me/zh/mcp/quickstart.html)
-
-### 映射跳舞和举放双手
-
-在机器人设置的「高级设置」中添加动作，选择检查连接时发现的工具，再填动作名称和固定 JSON 参数。下面是实测设备的 `self_otto_action` 映射。其他固件请以工具列表中的名称和参数类型为准。
-
-| 动作名   | 固定参数 JSON                                         |
-| -------- | ----------------------------------------------------- |
-| 跳舞     | `{"action":"radio_calisthenics"}`                     |
-| 举起双手 | `{"action":"hands_up","direction":0,"speed":700}`     |
-| 放下双手 | `{"action":"hands_down","direction":0,"speed":1000}`  |
-| 举起左手 | `{"action":"hands_up","direction":1,"speed":1000}`    |
-| 举起右手 | `{"action":"hands_up","direction":-1,"speed":1000}`   |
-| 放下左手 | `{"action":"hands_down","direction":1,"speed":1000}`  |
-| 放下右手 | `{"action":"hands_down","direction":-1,"speed":1000}` |
-
-保存后开启「允许对话触发机器人动作」。默认需要点击当轮的确认按钮。想让明确指令直接执行时，再开启「直接执行模式（无需逐次确认）」。在桌宠对话输入「举起双手」即可先验证一次。完成下面的语音桥配置后，也可以直接对小智说「给我跳支舞吧」「举起左手」或「放下右手」。真机语音每轮匹配一个动作。遇到「抬手」这类没指定哪只手的说法，可以改说一个完整的映射名称，等这次做完再说下一条。
-
-### 让真机麦克风接入同一份桌宠对话
-
-1. 在桌宠配置中选好「语音识别」服务。先用桌宠聊天框的录音按钮测一段语音，确认能转成文字。识别服务沿用该配置，所需凭据取决于你选择的识别服务。
-2. 在 Harness 主机创建本地桥配置。以下命令适用于首次配置，会生成独立的 64 字符十六进制令牌，并将权限设为仅当前用户可读写。已有 `xiaozhi-voice.json` 时直接使用原来的端口和令牌。保存后完全退出并重启 Harness。
-
-   ```sh
-   voice_dir="${DSH_HOME:-$HOME/.dsh}/dsh-pet"
-   mkdir -p "$voice_dir"
-   (
-     umask 077
-     set -C
-     printf '{"port":9096,"token":"%s"}\n' "$(openssl rand -hex 32)" > "$voice_dir/xiaozhi-voice.json"
-   )
-   ```
-
-3. 在同一台 Mac 的 Go 后台设置以下配置并启用。对只绑定一个智能体的安装，可以设为默认并让「桌宠联动」继承。语音桥只监听回环地址 `127.0.0.1`，机器人仍通过局域网连 Go。
-
-   | 后台页面   | 配置值                                                                                                                              |
-   | ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-   | VAD 配置   | 使用 `ten_vad`                                                                                                                      |
-   | ASR 配置   | FunASR，主机 `127.0.0.1`，端口 `9096`，模式 `offline`，采样率 `16000`，块大小 `[5, 10, 5]`，块间隔 `10`，关闭自动结束，超时 `75` 秒 |
-   | LLM 配置   | OpenAI，基础 URL `http://127.0.0.1:9096/v1`，模型 `dsh-pet`，API 密钥填桥配置文件中的 `token`                                       |
-   | 智能体编辑 | 「桌宠联动」使用上述 LLM 和已测试的 TTS，关闭实时对话模式，使用普通转写对话                                                         |
-
-4. 唤醒小智并对它说一句话，再看 Harness 桌宠对话里是否出现转写和回复。小智 Go 负责播报这轮回复。LLM 配置里的 OpenAI 选项用于连接本地桥，真正生成回复的是 Harness 里选中的聊天模型。桥令牌、设备 OpenAPI Token 和模型服务凭据分别填在各自的配置中。
-
-### 开启声纹并验证昵称播报
-
-1. 完整联动使用本仓库的小智 Go v0.6.5 补丁。补丁会把同一轮的声纹识别结果交给对话，并在 macOS 上为 Edge 普通话合成未返回音频的情况提供系统音色备用。构建步骤见下方。 [小智 Go 补丁](patches/xiaozhi-go/v0.6.5-speaker-audio.patch)
-2. 在小智 Go 的 `asr_server.json` 将 `server.host` 设为 `127.0.0.1`，端口设为 `9000`，设置 `speaker.enabled=true` 和 `recognition.enabled=false`，保留安装包自带的声纹模型路径和存储设置。将 `manager.json` 的 `speaker_service.url` 设为 `http://127.0.0.1:9000`，并在后台「服务配置 → 声纹识别配置」填同一地址并启用。启动时追加下面的两个 ASR 参数。如果已构建补丁版，将命令开头的 `./xiaozhi_server` 换成 `./xiaozhi_server-patched`。在本机访问 `http://127.0.0.1:9000/health` 检查服务状态。
-
-   ```sh
-   ./xiaozhi_server -c main_config.yaml -manager-enable=true -manager-config manager.json \
-     -asr-enable=true -asr-config asr_server.json
-   ```
-
-3. 在浏览器登录本机后台后直接打开 `http://127.0.0.1:8080/user/speakers`。创建声纹组，关联「桌宠联动」。可以对真机说一段 5–10 秒的清晰语音，再点「管理声纹 → 上传新样本 → 从历史记录选择」，试听并选自己的录音。也可以录制或上传 WAV。历史录音来源需要 Go 的历史记录功能保存用户音频。
-4. 「描述」可以填备注，例如「本人声纹」。「Prompt」可以写「当前说话人是小明，昵称是『小明』。对方询问身份时，用这个昵称称呼他。你是大肥鱼，用第一人称回答。」想统一音色时，声纹组的 TTS 配置和音色可以留空，随智能体设置。若已给声纹组指定音色，识别命中后会优先用这个音色。
-5. 用另一段录音点击「验证」，再对真机说「听得出我是谁吗？用我的昵称打个招呼」。检查桌宠文字是否包含昵称，并听真机读完。Go 的后台验证阈值与对话实时阈值分别配置，实测环境分别采用 `0.6` 和 `0.4`。保留「声纹聊天限制 → 关闭」时，未命中声纹的语音也能正常对话。
-
-<details>
-<summary>构建并安装带声纹和播报补丁的小智 Go</summary>
-
-在终端进入本 fork 的根目录。准备 Go 1.24.11 和 Node.js。参照 v0.6.5 发布流程准备 libopus、`pkg-config`、ONNX Runtime 头文件和匹配的 sherpa-onnx 动态库，并在当前终端设置 `PKG_CONFIG_PATH`、`C_INCLUDE_PATH` 和 `CGO_LDFLAGS`，分别指向 opus 的 pkg-config 目录、ONNX Runtime 头文件目录和 sherpa-onnx 库目录（`-L` 参数）。然后应用补丁并构建。 [Go v0.6.5 macOS 构建环境](https://github.com/hackers365/xiaozhi-esp32-server-golang/blob/v0.6.5/.github/workflows/build-release.yml)
-
-```sh
-fork_root="$PWD"
-git clone --recurse-submodules --branch v0.6.5 \
-  https://github.com/hackers365/xiaozhi-esp32-server-golang.git ../xiaozhi-go-v0.6.5-src
-cd ../xiaozhi-go-v0.6.5-src
-git apply --check "$fork_root/patches/xiaozhi-go/v0.6.5-speaker-audio.patch"
-git apply "$fork_root/patches/xiaozhi-go/v0.6.5-speaker-audio.patch"
-(cd manager/frontend && npm ci && npm run build)
-mkdir -p manager/backend/static/dist
-cp -R manager/frontend/dist/. manager/backend/static/dist/
-CGO_ENABLED=1 go build -tags 'nolibopusfile asr_server manager embed_ui' \
-  -ldflags '-s -w -extldflags=-Wl,-headerpad_max_install_names' \
-  -o xiaozhi_server-patched ./cmd/server
-/bin/bash build/macos/fix_rpath.sh ./xiaozhi_server-patched
-codesign --force --sign - ./xiaozhi_server-patched
-```
-
-将新二进制放进原发布包目录，与原来的 `xiaozhi_server` 并列。退出正在运行的 Go，改用新二进制启动，继续使用原发布包的配置、动态库和 `data/` 目录。若使用 `launchd`，同步更新启动程序路径。启动后先确认后台和声纹服务可访问，再让真机重新建立对话。
-
-</details>
-
-### 常见问题与实测记录
-
-- **检查连接失败**。先确认 Go 正在运行、设备已绑定且在线，再核对 OpenAPI 地址、数字设备 ID 和在该地址保存的令牌。
-- **桌宠有回复，真机没声音**。优先检查 Go 的 TTS 测试和设备音量，再核对固件是否支持主动播报 `notify`，以及设备能否访问 Go 发出的局域网音频地址。如果地址推导错误，可在 `main_config.yaml` 将 `notify.public_url` 设为设备可达的地址，例如 `http://192.168.1.20:8989`。用本仓库补丁时，Edge 合成故障会尝试由 macOS 普通话音色接管，该轮听起来会有音色变化。
-- **小智麦克风能打开，桌宠没有转写**。先用桌宠录音按钮测试识别服务，再核对 `xiaozhi-voice.json`、FunASR 的端口与离线模式。若有转写但没有正常回复，核对 Go LLM 的回环地址和桥令牌。
-- **识别到了声纹，回复里没有昵称**。检查声纹组是否关联当前智能体、是否填写 Prompt，以及 Go 是否运行带本仓库补丁的版本。后台没显示「声纹管理」时，登录后可直接打开 `/user/speakers`。
-- **两种音色或想换音色**。智能体默认 TTS、声纹组覆盖项和 macOS 备用音色都可能影响听感。继续使用 Edge 小晓时，可清空声纹组的 TTS 覆盖以继承智能体。若选择「湾湾小何」，本机 Go 的豆包 WebSocket 配置需要开通该音色的火山引擎应用和访问令牌，测试通过后再切换。 [火山引擎音色列表](https://www.volcengine.com/docs/6561/1257544)
-- **动作超时或断线**。先观察真机和动作回执，确认设备状态后再下达下一条指令。取消等待只能结束本机等待，设备需能提供停止工具才能由插件请求停止。
-
-在上述 macOS 和 Otto 组合上，已实测桌宠回复由小智播报、真机语音进入同一份桌宠对话、声纹命中后念出昵称，以及真机直接执行跳舞、举起双手和放下双手。左右手分别举放已通过自动化测试。
 
 ## See it in use
 
@@ -288,6 +152,141 @@ Memory is optional and disabled by default. Managed setup starts with four recen
 - Only pet dialogue is captured. This integration does not add memory to DSH coding-agent sessions or automatically import old chats.
 
 [Enable, verify and manage memory](docs/en/guides/memory.md)
+
+## Connect a XiaoZhi desktop robot
+
+The pet and XiaoZhi are two ways to talk to the same companion. Type in Pet chat to hear the reply on the robot, or speak into the robot and see the transcript and reply in that same chat. You can also ask it to perform an action that you've mapped to a tool on the device. The setup below uses DeepSeek Harness Desktop on an Apple Silicon Mac, XiaoZhi Go v0.6.5, and an Otto DIY ESP32-S3 running its v2.5.3 firmware. XiaoZhi Go runs locally and handles the device connection and speech playback. Harness handles pet chat and uses its current model and sign-in or API key unless you configure a separate model for the pet.
+
+### Install the fork in Harness Desktop
+
+The standard installation steps above refer to the upstream package. For XiaoZhi support, build and install this fork with Node.js 24.9+ and pnpm. Disable any existing upstream pet plugin and quit Harness Desktop before installing. Keep the existing pet data directory at `$DSH_HOME/dsh-pet/` to retain settings and memory. The default DSH home is `~/.dsh`.
+
+```sh
+git clone https://github.com/beatenevo/dsh-pet-powercontext-xiaozhi.git
+cd dsh-pet-powercontext-xiaozhi/dsh-pet
+pnpm install --frozen-lockfile --ignore-scripts
+mkdir -p ../xiaozhi-plugin-build
+npm pack --pack-destination ../xiaozhi-plugin-build
+dsh plugin --profile desktop add "$PWD/../xiaozhi-plugin-build/dsh-pet-powercontext-0.3.2.tgz"
+```
+
+If `dsh` is unavailable in the terminal, use `/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh` on macOS. Reopen Harness, go to **Settings → Pet configuration**, and send a message in sidebar **Pet chat** to check the model connection.
+
+### Start XiaoZhi Go and pair the device
+
+1. Download the v0.6.5 archive for your host architecture and extract it with its configuration, models, and libraries. Start the server from the extracted directory. Create an admin at `http://127.0.0.1:8080/setup` on first launch, then sign in at `http://127.0.0.1:8080/login`. The release README covers startup at login. [XiaoZhi Go v0.6.5 release](https://github.com/hackers365/xiaozhi-esp32-server-golang/releases/tag/v0.6.5)
+
+   ```sh
+   ./xiaozhi_server -c main_config.yaml -manager-enable=true -manager-config manager.json
+   ```
+
+2. Create an agent in the Go console, for example **Desktop Pet**. Under **Service configuration → OTA configuration**, use your host's LAN address for WebSocket, for example `ws://192.168.1.20:8989/xiaozhi/v1/`. To keep the device connected while idle over MQTT/UDP, use the setup wizard's MQTT/UDP option or enable MQTT and publish `192.168.1.20:2883` in OTA. Use the same signing key in the OTA and MQTT settings and set the UDP public host to `192.168.1.20` and port to `8990`. If the console separates test and production settings, configure the profile the device uses.
+3. Connect the host and robot to Wi-Fi on the same reachable network. Replace the example IP with your host's LAN IP in the device provisioning page's OTA URL, `http://192.168.1.20:8989/xiaozhi/ota/`. Save and reboot. Enter the six-digit code in **Agent management → Devices → Bind device**, assign the agent, and check that the device is online. [Wi-Fi provisioning and pairing](https://docs.xiaozhi.me/en/getting-started/wifi-and-binding.html)
+4. Use firmware that exposes the MCP tools for your device and supports push speech (`notify`). The examples below use Otto DIY ESP32-S3 v2.5.3. Use the tool catalog exposed by your own firmware to configure other boards. [Otto firmware and flashing instructions](https://ottodiy.tech/docs/downloads)
+
+Keep Harness Desktop and XiaoZhi Go running for everyday use. The robot can use its own power supply and communicate over Wi-Fi. When changing networks, keep the Go data directory and pairing, check reachability, and update LAN addresses in OTA, WebSocket, MQTT, and UDP if the host IP changes. Update the device's provisioning URL if it can no longer reach OTA.
+
+### Connect Pet chat and test speech
+
+1. Open `http://127.0.0.1:8080/user/api-tokens` and create a device OpenAPI token. Copy the numeric device record ID from the Go device list.
+2. In **Settings → Pet configuration → Robot settings**, select **XiaoZhi robot**. Set **XiaoZhi device OpenAPI URL** to `http://127.0.0.1:8080/api/open/v1`, enter the device ID, enable the connection, and save. Choose **Save device token**, then **Check connection** to discover the device tools.
+3. In the Go console under **AI configuration → TTS configuration**, enable, test, and set a default TTS configuration. Edge TTS with `zh-CN-XiaoxiaoNeural` is one option. In **Pet chat → XiaoZhi robot → Manual controls**, enter a sentence and choose **Speak through robot**. After hearing it on the robot, enable **Speak all pet messages through the robot** to play new replies, whispers, and sleep talk.
+
+Pet chat uses the local Go OpenAPI to invoke device tools and push speech. The `xiaozhi.me` WebSocket MCP endpoint lets the official cloud agent call external tools. [XiaoZhi MCP quickstart](https://docs.xiaozhi.me/en/mcp/quickstart.html)
+
+### Map a dance and arm movements
+
+In **Robot settings → Advanced**, add a name for each action, choose a discovered tool, and enter its fixed JSON arguments. These examples use the Otto device tool `self_otto_action`. Use the tool names and argument types reported by your own device.
+
+| Action name           | Fixed JSON arguments                                  |
+| --------------------- | ----------------------------------------------------- |
+| Dance                 | `{"action":"radio_calisthenics"}`                     |
+| Raise both hands      | `{"action":"hands_up","direction":0,"speed":700}`     |
+| Lower both hands      | `{"action":"hands_down","direction":0,"speed":1000}`  |
+| Raise your left hand  | `{"action":"hands_up","direction":1,"speed":1000}`    |
+| Raise your right hand | `{"action":"hands_up","direction":-1,"speed":1000}`   |
+| Lower your left hand  | `{"action":"hands_down","direction":1,"speed":1000}`  |
+| Lower your right hand | `{"action":"hands_down","direction":-1,"speed":1000}` |
+
+Save and enable **Allow robot actions from chat**. Actions require confirmation by default. With **Direct execution mode** enabled, explicit requests dispatch the saved mappings in order. First try a mapped phrase in Pet chat. After setting up the voice bridge, you can also say it to XiaoZhi. A robot voice turn matches one action at a time. Use the full action name for an ambiguous request such as “raise a hand.”
+
+### Add the robot microphone to Pet chat
+
+1. Set up **Speech recognition** in Pet configuration and check transcription with the Pet chat recording button. The voice bridge uses the same recognition service and its configured credentials.
+2. Run the following on the Harness host for a first-time setup. It creates a private `xiaozhi-voice.json` with a random bridge token. If the file already exists, keep its port and token. Quit and restart Harness Desktop after creating it.
+
+   ```sh
+   voice_dir="${DSH_HOME:-$HOME/.dsh}/dsh-pet"
+   mkdir -p "$voice_dir"
+   (
+     umask 077
+     set -C
+     printf '{"port":9096,"token":"%s"}\n' "$(openssl rand -hex 32)" > "$voice_dir/xiaozhi-voice.json"
+   )
+   ```
+
+3. Configure the following in XiaoZhi Go on the same host. For a single-agent installation, you can set these as defaults and let your agent inherit them. The bridge listens on loopback and the robot continues to reach Go over the LAN.
+
+   | Console page      | Settings                                                                                                                                                                |
+   | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | VAD configuration | Use `ten_vad`.                                                                                                                                                          |
+   | ASR configuration | FunASR, host `127.0.0.1`, port `9096`, mode `offline`, sample rate `16000`, chunk size `[5, 10, 5]`, chunk interval `10`, automatic end disabled, timeout `75` seconds. |
+   | LLM configuration | OpenAI, base URL `http://127.0.0.1:9096/v1`, model `dsh-pet`, API key set to the bridge file's `token`.                                                                 |
+   | Agent settings    | Select the bridge LLM and your tested TTS, disable real-time conversation mode, and use the standard transcription dialogue.                                            |
+
+4. Wake XiaoZhi and say a sentence. Check that the transcript and response appear in Pet chat and listen for the response through the robot. Go's OpenAI-compatible LLM entry forwards this turn to Harness. The bridge token, device OpenAPI token, and model credentials belong to their respective settings.
+
+### Set up voiceprint recognition and nickname greetings
+
+1. Install the fork's Go v0.6.5 patch using the build steps below. It passes voiceprint recognition to the corresponding dialogue turn and adds a macOS Mandarin fallback for Edge Mandarin synthesis that returns no audio. [Go patch](patches/xiaozhi-go/v0.6.5-speaker-audio.patch)
+2. In Go's `asr_server.json`, set `server.host` to `127.0.0.1` and the port to `9000`, enable `speaker.enabled`, and set `recognition.enabled=false`. Keep the packaged voiceprint model paths and storage settings. Set `speaker_service.url` in `manager.json` to `http://127.0.0.1:9000`, then enable **Service configuration → Voiceprint recognition** with the same URL. Restart with the following command and check `http://127.0.0.1:9000/health`.
+
+   ```sh
+   ./xiaozhi_server-patched -c main_config.yaml -manager-enable=true -manager-config manager.json \
+     -asr-enable=true -asr-config asr_server.json
+   ```
+
+3. Sign in and visit `http://127.0.0.1:8080/user/speakers`. Create a voiceprint group and assign it to your agent. Record or upload a clean 5–10 second WAV sample. If Go is configured to save user audio, you can also select a sample from conversation history.
+4. Add a description for your own reference. For the group's Prompt, try “The speaker's nickname is Ming. Use that nickname when asked to identify the speaker. Reply in the first person as the pet.” Leave the group's TTS configuration and voice blank to inherit the agent's voice.
+5. Verify against a different sample, then ask the robot to greet you by nickname. Check the text in Pet chat and listen for the same nickname on the robot. Console verification and live conversations have separate thresholds. The tested setup used `0.6` and `0.4` respectively. Leave voiceprint chat restrictions off to allow conversations when no match is found.
+
+<details>
+<summary>Build XiaoZhi Go with the voiceprint and speech patch</summary>
+
+Run from the root of this fork. Prepare Go 1.24.11, Node.js, libopus, `pkg-config`, ONNX Runtime headers, and matching sherpa-onnx libraries. Set `PKG_CONFIG_PATH` for opus, `C_INCLUDE_PATH` for the ONNX Runtime headers, and `CGO_LDFLAGS` with a `-L` path to the sherpa-onnx libraries. [macOS build workflow](https://github.com/hackers365/xiaozhi-esp32-server-golang/blob/v0.6.5/.github/workflows/build-release.yml)
+
+```sh
+fork_root="$PWD"
+git clone --recurse-submodules --branch v0.6.5 \
+  https://github.com/hackers365/xiaozhi-esp32-server-golang.git ../xiaozhi-go-v0.6.5-src
+cd ../xiaozhi-go-v0.6.5-src
+git apply --check "$fork_root/patches/xiaozhi-go/v0.6.5-speaker-audio.patch"
+git apply "$fork_root/patches/xiaozhi-go/v0.6.5-speaker-audio.patch"
+(cd manager/frontend && npm ci && npm run build)
+mkdir -p manager/backend/static/dist
+cp -R manager/frontend/dist/. manager/backend/static/dist/
+CGO_ENABLED=1 go build -tags 'nolibopusfile asr_server manager embed_ui' \
+  -ldflags '-s -w -extldflags=-Wl,-headerpad_max_install_names' \
+  -o xiaozhi_server-patched ./cmd/server
+/bin/bash build/macos/fix_rpath.sh ./xiaozhi_server-patched
+codesign --force --sign - ./xiaozhi_server-patched
+```
+
+Put `xiaozhi_server-patched` next to the original binary in the release directory. Stop Go and start the patched binary with the existing configuration, libraries, and `data/` directory. If you use `launchd`, update its program path. Check the console and voiceprint service before reconnecting the robot.
+
+</details>
+
+### Troubleshooting
+
+- **No OTA configuration on the dashboard.** Open **Service configuration → OTA configuration** and check that you saved the profile the device uses.
+- **Connection check fails.** Check that Go is running and the paired robot is online. Verify the OpenAPI URL, numeric device ID, and token saved for that URL.
+- **Pet chat replies but the robot is silent.** Test Go's TTS and check the robot's volume, `notify` firmware support, and whether the device can reach the LAN audio URL. The device log message `Unknown message type: notify` indicates missing firmware support. If Go advertises the wrong address, set `notify.public_url` in `main_config.yaml` to a device-reachable address such as `http://192.168.1.20:8989`.
+- **The robot switches voices.** In Go, check the agent's TTS and the speaker group's TTS configuration and voice. A matched group's TTS can override the agent's settings. Clear the group overrides to inherit the agent's voice. The macOS patch can also use the system's Tingting voice for a turn when Edge Mandarin synthesis returns no audio. To use 湾湾小何, the Go Doubao WebSocket TTS configuration needs a Volcengine application and token with access to that voice. [Volcengine voice catalog](https://www.volcengine.com/docs/6561/1257544)
+- **The microphone opens but nothing is transcribed.** Test the Pet chat recorder first, then verify the bridge file and the FunASR port and mode. If text appears without a reply, check Go's loopback LLM URL and bridge token.
+- **Recognition succeeds but the nickname is missing.** Check that your speaker group is linked to the current agent, that its Prompt contains the nickname, and that Go is running the patched binary.
+- **An action times out or the device disconnects.** Check the robot and action receipt before sending another command. Cancel affects the local wait. Stopping the robot from the plugin requires a stop tool on the device.
+
+The macOS and Otto setup above was tested with pet speech on the robot, voice input through the robot in the shared chat, a voiceprint greeting with the correct nickname, and direct voice commands to dance, raise both hands, and lower both hands. Single-hand raise and lower mappings were covered by automated tests.
 
 ## Documentation and development
 

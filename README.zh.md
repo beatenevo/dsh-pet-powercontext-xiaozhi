@@ -8,6 +8,8 @@
 
 本项目基于 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)。
 
+本 fork 支持小智真机与 DeepSeek Harness 桌宠共享对话、播报、语音动作和声纹识别。 [小智桌面机器人完整教程](README.md#小智桌面机器人完整教程)
+
 可选功能：[Astra Pro 2.0 MCP 接入](docs/zh/guides/robot.md)支持目录发现、示教程序、区域移动和语音播报，无需客户端 Python/SDK。
 
 可选功能：[AI Vision 可观测性](docs/zh/guides/observability.md)提供可选的链路采集和输入输出预览，以及平台已有记忆视图的查看入口。[Token 对照](docs/zh/guides/token-comparison.md)可以比较三种上下文策略的回答与实测用量。这些功能已包含在 v0.3.0 发布包中。

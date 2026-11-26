@@ -1,7 +1,7 @@
 /** Model output can propose only configured keys and never leaks control tags into speech. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractRobotAction, robotActionInstruction } from './chat.ts';
+import { extractRobotAction, formatXiaozhiActionReply, robotActionInstruction } from './chat.ts';
 
 const actions = [{ key: 'greet', name: 'Greeting' }];
 
@@ -36,6 +36,16 @@ test('XiaoZhi describes its own actions in both execution modes', () => {
   assert.match(robotActionInstruction(actions, true, capabilities), /我这就举起双手/);
   assert.match(robotActionInstruction(actions, false, capabilities), /等你确认，我就举起双手/);
   assert.match(robotActionInstruction([], true, capabilities), /you cannot do that action here yet/);
+});
+
+test('XiaoZhi speaks its matched action in first person even when the model delegates it', () => {
+  assert.equal(formatXiaozhiActionReply('好呀，这就让机器人跳支舞，试试看～', '跳舞', true), '好，我这就跳舞。');
+  assert.equal(
+    formatXiaozhiActionReply('欢迎回来！好，这就把双手放下来，让机器人试试～', '放下双手', false),
+    '欢迎回来！等你确认，我就放下双手。',
+  );
+  assert.equal(formatXiaozhiActionReply('好，我这就举起右手～', '举起右手', true), '好，我这就举起右手～');
+  assert.equal(formatXiaozhiActionReply('', '举起右手', true), '');
 });
 
 test('empty action mappings still explain discovered MCP tools and distinguish pet animations', () => {

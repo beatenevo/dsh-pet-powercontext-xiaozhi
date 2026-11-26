@@ -76,3 +76,20 @@ export function extractRobotAction(text: string, actions: readonly RobotChatActi
   });
   return { text: tagged ? clean.replace(/\n{2,}/g, '\n').trim() : text, ...(key ? { key } : {}) };
 }
+
+/** 用第一人称呈现已匹配的小智动作，保留回复中独立于动作的句子。 */
+export function formatXiaozhiActionReply(text: string, action: string, directExecution: boolean): string {
+  const acknowledgment = directExecution ? `好，我这就${action}。` : `等你确认，我就${action}。`;
+  const delegatedAction =
+    /(?:让|叫|请|交给|通知|指挥|安排|控制)\s*(?:实体|桌面|这台)?\s*(?:小智|机器人)|(?:小智|机器人)\s*(?:来|会|要|将|马上|试着|帮你|替你)|(?:let|ask|have|tell|get)\s+(?:the\s+robot|xiaozhi)\b|(?:the\s+robot|xiaozhi)\s+will\b/i;
+  const sentences = text.match(/[^。！？!?…～\n]+[。！？!?…～\n]*|[。！？!?…～\n]+/g) ?? [];
+  let replaced = false;
+  return sentences
+    .map((sentence) => {
+      if (!delegatedAction.test(sentence)) return sentence;
+      if (replaced) return '';
+      replaced = true;
+      return (sentence.match(/^\s*/)?.[0] ?? '') + acknowledgment + (sentence.match(/\s*$/)?.[0] ?? '');
+    })
+    .join('');
+}

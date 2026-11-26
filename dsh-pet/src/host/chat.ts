@@ -24,6 +24,7 @@ import { recalledContextText } from './memory-context.ts';
 import type { PetObservability } from './observability/service.ts';
 import {
   extractRobotAction,
+  formatXiaozhiActionReply,
   robotActionInstruction,
   type RobotChatAction,
   type RobotChatCapabilities,
@@ -329,9 +330,13 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
   const picked: { text: string; image?: string } = wantImage
     ? extractChatImage(acted.text, pool)
     : { text: acted.text };
+  const xiaozhiAction =
+    once.robotCapabilities?.provider === 'xiaozhi' && once.robotActions.find(({ key }) => key === robot.key);
   return {
     ok: true,
-    text: picked.text,
+    text: xiaozhiAction
+      ? formatXiaozhiActionReply(picked.text, xiaozhiAction.name, once.robotDirectExecution)
+      : picked.text,
     ...(picked.image ? { image: picked.image } : {}),
     ...(acted.action ? { action: acted.action } : {}),
     ...(robot.key ? { robotAction: robot.key } : {}),

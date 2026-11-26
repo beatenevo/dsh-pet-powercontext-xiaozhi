@@ -1,4 +1,4 @@
-# dsh-pet-powercontext
+# README is coming soon
 
 **A desktop companion that can chat, react to your work, and remember what matters to you.**
 

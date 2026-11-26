@@ -1,0 +1,550 @@
+diff --git a/internal/app/server/chat/asr.go b/internal/app/server/chat/asr.go
+index e0afc6c..f55225e 100644
+--- a/internal/app/server/chat/asr.go
++++ b/internal/app/server/chat/asr.go
+@@ -374,7 +374,7 @@ func (a *ASRManager) ProcessVadAudio(ctx context.Context) {
+ 						if !a.session.speakerManager.IsActive() {
+ 							sampleRate := audioFormat.SampleRate
+ 							agentId := a.session.clientState.AgentID
+-							if err := a.session.speakerManager.StartStreaming(ctx, sampleRate, agentId); err != nil {
++							if err := a.session.startSpeakerRecognition(ctx, sampleRate, agentId); err != nil {
+ 								log.Warnf("启动声纹识别流失败: %v", err)
+ 							} else {
+ 								speakerInterruptTriggered.Store(false)
+@@ -809,7 +809,10 @@ func (a *ASRManager) StartAsrRecognitionLoop(
+ 				state.OnVoiceSilence()
+ 
+ 				// 获取暂存的声纹结果（带超时）
+-				speakerResult := a.getSpeakerResult()
++				var speakerResult *speaker.IdentifyResult
++				if a.session != nil {
++					speakerResult = a.session.getSpeakerResult()
++				}
+ 				speakerInterrupted := false
+ 				if a.session != nil {
+ 					speakerInterrupted = a.session.ConsumeTurnSpeakerInterrupted()
+@@ -1072,40 +1075,6 @@ func trimFirstSpeechAudio(allData []float32, currentFrameSamples, sampleRate, ch
+ 	return audio
+ }
+ 
+-// getSpeakerResult 获取暂存的声纹结果（带超时）
+-func (a *ASRManager) getSpeakerResult() *speaker.IdentifyResult {
+-	if a.session == nil || a.session.speakerManager == nil {
+-		return nil
+-	}
+-
+-	// 本轮声纹流式识别未激活（整轮无语音/启动失败/上一轮已 finish），
+-	// 异步回调不会发送就绪信号，直接返回避免无谓的 200ms 等待。
+-	if !a.session.speakerManager.IsActive() {
+-		return nil
+-	}
+-
+-	log.Debugf("speakerManager: %+v, IsActive: %+v", a.session.speakerManager, a.session.speakerManager.IsActive())
+-
+-	timeout := time.NewTimer(200 * time.Millisecond)
+-	defer timeout.Stop()
+-
+-	var speakerResult *speaker.IdentifyResult
+-	select {
+-	case <-a.session.speakerResultReady:
+-		a.session.speakerResultMu.RLock()
+-		speakerResult = a.session.pendingSpeakerResult
+-		a.session.speakerResultMu.RUnlock()
+-	case <-timeout.C:
+-		// 超时后读取当前结果（可能为 nil）
+-		a.session.speakerResultMu.RLock()
+-		speakerResult = a.session.pendingSpeakerResult
+-		a.session.speakerResultMu.RUnlock()
+-		log.Debugf("获取声纹识别结果超时，使用当前结果")
+-	}
+-	log.Debugf("获取声纹识别结果: %+v", speakerResult)
+-	return speakerResult
+-}
+-
+ // addAsrResultToQueue 添加ASR结果到队列（迁移到 ASRManager 中处理）
+ func (a *ASRManager) addAsrResultToQueue(text string, speakerResult *speaker.IdentifyResult) error {
+ 	if a.session == nil {
+diff --git a/internal/app/server/chat/chat_goodbye_retention_test.go b/internal/app/server/chat/chat_goodbye_retention_test.go
+index 471f2b0..b0744f2 100644
+--- a/internal/app/server/chat/chat_goodbye_retention_test.go
++++ b/internal/app/server/chat/chat_goodbye_retention_test.go
+@@ -81,8 +81,8 @@ func TestHandleGoodByeMessageRetainsSessionAndResetsSilentState(t *testing.T) {
+ 	manager.clientState.SetListenPhase(ListenPhaseListening)
+ 	manager.clientState.SessionCtx.Get(manager.clientState.Ctx)
+ 	manager.clientState.AfterAsrSessionCtx.Get(manager.clientState.Ctx)
+-	session.pendingSpeakerResult = &speaker.IdentifyResult{Identified: true, SpeakerName: "tester"}
+-	session.speakerResultReady <- struct{}{}
++	session.speakerTurn = &speakerRecognitionTurn{result: make(chan *speaker.IdentifyResult, 1)}
++	session.speakerTurn.result <- &speaker.IdentifyResult{Identified: true, SpeakerName: "tester"}
+ 
+ 	if err := manager.HandleGoodByeMessage(&ClientMessage{
+ 		Type:     MessageTypeGoodBye,
+@@ -115,15 +115,10 @@ func TestHandleGoodByeMessageRetainsSessionAndResetsSilentState(t *testing.T) {
+ 	if manager.clientState.IsWelcomeSpeaking || manager.clientState.IsWelcomePlaying {
+ 		t.Fatal("expected goodbye to clear welcome speaking flags")
+ 	}
+-	if session.pendingSpeakerResult != nil {
++	if session.speakerTurn != nil {
+ 		t.Fatal("expected goodbye to clear pending speaker result")
+ 	}
+ 	select {
+-	case <-session.speakerResultReady:
+-		t.Fatal("expected goodbye to drain speaker result ready signal")
+-	default:
+-	}
+-	select {
+ 	case <-pending.done:
+ 		if pending.Err() == nil || !strings.Contains(pending.Err().Error(), "goodbye") {
+ 			t.Fatalf("expected pending speak request to be finished with goodbye error, got %v", pending.Err())
+diff --git a/internal/app/server/chat/session.go b/internal/app/server/chat/session.go
+index ec91d89..94ae207 100644
+--- a/internal/app/server/chat/session.go
++++ b/internal/app/server/chat/session.go
+@@ -76,10 +76,8 @@ type ChatSession struct {
+ 
+ 	chatTextQueue *util.Queue[AsrResponseChannelItem]
+ 
+-	// 声纹识别结果暂存（带锁保护）
+-	speakerResultMu        sync.RWMutex
+-	pendingSpeakerResult   *speaker.IdentifyResult
+-	speakerResultReady     chan struct{} // 仅用于通知就绪，不传数据
++	speakerTurnMu          sync.Mutex
++	speakerTurn            *speakerRecognitionTurn
+ 	turnSpeakerInterrupted atomic.Bool
+ 
+ 	vadLoopStarted              bool
+@@ -123,12 +121,11 @@ func WithChatSessionCloseHandler(handler func(session *ChatSession, reason strin
+ 
+ func NewChatSession(clientState *ClientState, serverTransport *ServerTransport, hookHub *chathooks.Hub, transformRegistry *streamtransform.Registry, opts ...ChatSessionOption) *ChatSession {
+ 	s := &ChatSession{
+-		clientState:        clientState,
+-		serverTransport:    serverTransport,
+-		chatTextQueue:      util.NewQueue[AsrResponseChannelItem](10),
+-		speakerResultReady: make(chan struct{}, 1), // 缓冲为1，避免阻塞
+-		openClawStreams:    make(map[string]chan llm_common.LLMResponseStruct),
+-		hookHub:            hookHub,
++		clientState:     clientState,
++		serverTransport: serverTransport,
++		chatTextQueue:   util.NewQueue[AsrResponseChannelItem](10),
++		openClawStreams: make(map[string]chan llm_common.LLMResponseStruct),
++		hookHub:         hookHub,
+ 	}
+ 	for _, opt := range opts {
+ 		opt(s)
+@@ -167,76 +164,7 @@ func NewChatSession(clientState *ClientState, serverTransport *ServerTransport,
+ 				s.speakerManager = NewSpeakerManager(provider)
+ 				log.Debugf("设备 %s 启用声纹识别", clientState.DeviceID)
+ 
+-				// 设置异步获取声纹结果的回调
+-				clientState.OnVoiceSilenceSpeakerCallback = func(ctx context.Context) {
+-					log.Debugf("[声纹识别] OnVoiceSilenceSpeakerCallback 被调用, deviceID: %s", clientState.DeviceID)
+-
+-					// 异步获取声纹结果
+-					go func() {
+-						log.Debugf("[声纹识别] 开始异步获取声纹识别结果, deviceID: %s", clientState.DeviceID)
+-
+-						// 检查 speakerManager 是否激活
+-						if !s.speakerManager.IsActive() {
+-							//log.Warnf("[声纹识别] speakerManager 未激活，无法获取识别结果")
+-							return
+-						}
+-						// 清空之前的结果
+-						s.speakerResultMu.Lock()
+-						oldResult := s.pendingSpeakerResult
+-						s.pendingSpeakerResult = nil
+-						s.speakerResultMu.Unlock()
+-						if oldResult != nil {
+-							log.Debugf("[声纹识别] 清空之前的识别结果: identified=%v, speaker_id=%s", oldResult.Identified, oldResult.SpeakerID)
+-						}
+-
+-						// 清空就绪通知（非阻塞）
+-						select {
+-						case <-s.speakerResultReady:
+-							log.Debugf("[声纹识别] 清空就绪通知通道")
+-						default:
+-							log.Debugf("[声纹识别] 就绪通知通道已为空")
+-						}
+-
+-						result, err := s.speakerManager.FinishAndIdentify(ctx)
+-						if err != nil {
+-							log.Warnf("[声纹识别] 获取声纹识别结果失败: %v, deviceID: %s", err, clientState.DeviceID)
+-							// 声纹识别失败不影响主流程，存储 nil 结果
+-							s.speakerResultMu.Lock()
+-							s.pendingSpeakerResult = nil
+-							s.speakerResultMu.Unlock()
+-							log.Debugf("[声纹识别] 已存储 nil 结果（识别失败）")
+-						} else if result != nil && result.Identified {
+-							log.Infof("[声纹识别] 识别到说话人: %s (置信度: %.4f, 阈值: %.4f), deviceID: %s",
+-								result.SpeakerName, result.Confidence, result.Threshold, clientState.DeviceID)
+-							log.Debugf("[声纹识别] 识别结果详情: speaker_id=%s, speaker_name=%s, confidence=%.4f, threshold=%.4f",
+-								result.SpeakerID, result.SpeakerName, result.Confidence, result.Threshold)
+-							s.speakerResultMu.Lock()
+-							s.pendingSpeakerResult = result
+-							s.speakerResultMu.Unlock()
+-							log.Debugf("[声纹识别] 已存储识别结果（已识别）")
+-						} else {
+-							// 未识别到说话人，也存储结果
+-							if result != nil {
+-								log.Debugf("[声纹识别] 未识别到说话人: identified=%v, confidence=%.4f, threshold=%.4f, deviceID: %s",
+-									result.Identified, result.Confidence, result.Threshold, clientState.DeviceID)
+-							} else {
+-								log.Debugf("[声纹识别] 识别结果为 nil, deviceID: %s", clientState.DeviceID)
+-							}
+-							s.speakerResultMu.Lock()
+-							s.pendingSpeakerResult = result
+-							s.speakerResultMu.Unlock()
+-							log.Debugf("[声纹识别] 已存储识别结果（未识别）")
+-						}
+-
+-						// 通知结果就绪
+-						select {
+-						case s.speakerResultReady <- struct{}{}:
+-							log.Debugf("[声纹识别] 已发送结果就绪通知, deviceID: %s", clientState.DeviceID)
+-						default:
+-							log.Warnf("[声纹识别] 结果就绪通知通道已满，无法发送通知, deviceID: %s", clientState.DeviceID)
+-						}
+-					}()
+-				}
++				clientState.OnVoiceSilenceSpeakerCallback = s.finishSpeakerRecognition
+ 			}
+ 		}
+ 	}
+@@ -1022,24 +950,6 @@ func (s *ChatSession) clearOpenClawStreams() {
+ 	s.openClawStreamMu.Unlock()
+ }
+ 
+-func (s *ChatSession) clearPendingSpeakerResult() {
+-	if s == nil {
+-		return
+-	}
+-
+-	s.speakerResultMu.Lock()
+-	s.pendingSpeakerResult = nil
+-	s.speakerResultMu.Unlock()
+-
+-	for {
+-		select {
+-		case <-s.speakerResultReady:
+-		default:
+-			return
+-		}
+-	}
+-}
+-
+ func (s *ChatSession) InjectOpenClawResponse(event openclaw.ResponseDelivery) error {
+ 	correlationID := strings.TrimSpace(event.CorrelationID)
+ 	text := strings.TrimSpace(event.Text)
+diff --git a/internal/app/server/chat/speaker.go b/internal/app/server/chat/speaker.go
+index 3dc1cf9..bca3739 100644
+--- a/internal/app/server/chat/speaker.go
++++ b/internal/app/server/chat/speaker.go
+@@ -2,8 +2,11 @@ package chat
+ 
+ import (
+ 	"context"
++	"sync"
++	"time"
+ 
+ 	"xiaozhi-esp32-server-golang/internal/domain/speaker"
++	log "xiaozhi-esp32-server-golang/logger"
+ )
+ 
+ // SpeakerManager 声纹识别管理器（包装 SpeakerProvider）
+@@ -59,3 +62,68 @@ func (sm *SpeakerManager) PeekAndIdentify(ctx context.Context, requestID string)
+ 	}
+ 	return peekProvider.PeekAndIdentify(ctx, requestID)
+ }
++
++// speakerRecognitionTurn 绑定一次流式录音和它的识别结果。
++type speakerRecognitionTurn struct {
++	finish sync.Once
++	result chan *speaker.IdentifyResult
++}
++
++func (s *ChatSession) startSpeakerRecognition(ctx context.Context, sampleRate int, agentID string) error {
++	s.speakerTurnMu.Lock()
++	defer s.speakerTurnMu.Unlock()
++
++	if err := s.speakerManager.StartStreaming(ctx, sampleRate, agentID); err != nil {
++		return err
++	}
++	s.speakerTurn = &speakerRecognitionTurn{result: make(chan *speaker.IdentifyResult, 1)}
++	return nil
++}
++
++func (s *ChatSession) finishSpeakerRecognition(ctx context.Context) {
++	s.speakerTurnMu.Lock()
++	defer s.speakerTurnMu.Unlock()
++
++	turn := s.speakerTurn
++	if turn == nil {
++		return
++	}
++
++	turn.finish.Do(func() {
++		go func() {
++			result, err := s.speakerManager.FinishAndIdentify(ctx)
++			if err != nil {
++				log.Warnf("获取声纹识别结果失败: %v", err)
++			} else if result != nil && result.Identified {
++				log.Infof("声纹识别完成，置信度: %.4f，阈值: %.4f", result.Confidence, result.Threshold)
++			}
++			turn.result <- result
++		}()
++	})
++}
++
++func (s *ChatSession) getSpeakerResult() *speaker.IdentifyResult {
++	s.speakerTurnMu.Lock()
++	turn := s.speakerTurn
++	s.speakerTurn = nil
++	s.speakerTurnMu.Unlock()
++	if turn == nil {
++		return nil
++	}
++
++	// 流结束后，声纹结果仍属于本轮。等待结果时不再检查流的激活状态。
++	timer := time.NewTimer(200 * time.Millisecond)
++	defer timer.Stop()
++	select {
++	case result := <-turn.result:
++		return result
++	case <-timer.C:
++		return nil
++	}
++}
++
++func (s *ChatSession) clearPendingSpeakerResult() {
++	s.speakerTurnMu.Lock()
++	s.speakerTurn = nil
++	s.speakerTurnMu.Unlock()
++}
+diff --git a/internal/app/server/chat/speaker_result_test.go b/internal/app/server/chat/speaker_result_test.go
+new file mode 100644
+index 0000000..e7f3d62
+--- /dev/null
++++ b/internal/app/server/chat/speaker_result_test.go
+@@ -0,0 +1,21 @@
++package chat
++
++import (
++	"testing"
++
++	"xiaozhi-esp32-server-golang/internal/domain/speaker"
++)
++
++func TestCompletedSpeakerStreamStillSuppliesCurrentTurnResult(t *testing.T) {
++	turn := &speakerRecognitionTurn{result: make(chan *speaker.IdentifyResult, 1)}
++	session := &ChatSession{speakerTurn: turn}
++	match := &speaker.IdentifyResult{Identified: true, SpeakerName: "tester"}
++	turn.result <- match
++
++	if got := session.getSpeakerResult(); got != match {
++		t.Fatalf("current turn result: got %v, want %v", got, match)
++	}
++	if got := session.getSpeakerResult(); got != nil {
++		t.Fatalf("the next turn inherited %v", got)
++	}
++}
+diff --git a/internal/domain/tts/edge/edge.go b/internal/domain/tts/edge/edge.go
+index b614729..a32b3b1 100644
+--- a/internal/domain/tts/edge/edge.go
++++ b/internal/domain/tts/edge/edge.go
+@@ -5,6 +5,8 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"os"
++	"runtime"
++	"strings"
+ 	"time"
+ 
+ 	"xiaozhi-esp32-server-golang/internal/util"
+@@ -119,6 +121,54 @@ func (p *EdgeTTSProvider) TextToSpeech(ctx context.Context, text string, sampleR
+ 
+ // TextToSpeechStream 流式合成，返回Opus帧chan
+ func (p *EdgeTTSProvider) TextToSpeechStream(ctx context.Context, text string, sampleRate int, channels int, frameDuration int) (chan []byte, error) {
++	stream, err := p.streamEdge(ctx, text, frameDuration)
++	if runtime.GOOS != "darwin" || !strings.HasPrefix(p.Voice, "zh-CN-") {
++		return stream, err
++	}
++	output := make(chan []byte, 100)
++	go func() {
++		defer close(output)
++		if err == nil && forwardSpeechFrames(ctx, stream, output) {
++			return
++		}
++		if ctx.Err() != nil {
++			return
++		}
++		fallback, err := macMandarinSpeech(ctx, text, sampleRate, frameDuration)
++		if err != nil {
++			if ctx.Err() == nil {
++				log.Warnf("本地普通话合成失败: %v", err)
++			}
++			return
++		}
++		if forwardSpeechFrames(ctx, fallback, output) {
++			log.Info("本地普通话已生成备用播报音频")
++		}
++	}()
++	return output, nil
++}
++
++func forwardSpeechFrames(ctx context.Context, input <-chan []byte, output chan<- []byte) bool {
++	sent := false
++	for {
++		select {
++		case <-ctx.Done():
++			return sent
++		case frame, open := <-input:
++			if !open {
++				return sent
++			}
++			select {
++			case <-ctx.Done():
++				return sent
++			case output <- frame:
++				sent = true
++			}
++		}
++	}
++}
++
++func (p *EdgeTTSProvider) streamEdge(ctx context.Context, text string, frameDuration int) (chan []byte, error) {
+ 	startTs := time.Now().UnixMilli()
+ 	comm, err := communicate.NewCommunicate(
+ 		text,
+diff --git a/internal/domain/tts/edge/mac_speech.go b/internal/domain/tts/edge/mac_speech.go
+new file mode 100644
+index 0000000..5924224
+--- /dev/null
++++ b/internal/domain/tts/edge/mac_speech.go
+@@ -0,0 +1,72 @@
++package edge
++
++import (
++	"bytes"
++	"context"
++	"encoding/binary"
++	"fmt"
++	"io"
++	"os"
++	"os/exec"
++	"path/filepath"
++	"strconv"
++	"time"
++
++	"github.com/go-audio/wav"
++	"github.com/gopxl/beep"
++	"xiaozhi-esp32-server-golang/internal/util"
++	log "xiaozhi-esp32-server-golang/logger"
++)
++
++// macMandarinSpeech 用系统普通话音色生成设备需要的 Opus 帧。
++func macMandarinSpeech(ctx context.Context, text string, sampleRate, frameDuration int) (<-chan []byte, error) {
++	if sampleRate <= 0 {
++		sampleRate = 16000
++	}
++	synthesisCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
++	defer cancel()
++
++	dir, err := os.MkdirTemp("", "xiaozhi-speech-")
++	if err != nil {
++		return nil, err
++	}
++	defer os.RemoveAll(dir)
++
++	input := filepath.Join(dir, "input.txt")
++	if err := os.WriteFile(input, []byte(text), 0600); err != nil {
++		return nil, err
++	}
++	output := filepath.Join(dir, "speech.wav")
++	cmd := exec.CommandContext(synthesisCtx, "/usr/bin/say", "-v", "Tingting", "-f", input, "-o", output,
++		"--file-format=WAVE", "--data-format=LEI16@"+strconv.Itoa(sampleRate))
++	if err := cmd.Run(); err != nil {
++		return nil, fmt.Errorf("say: %w", err)
++	}
++
++	file, err := os.Open(output)
++	if err != nil {
++		return nil, err
++	}
++	defer file.Close()
++	pcm, err := wav.NewDecoder(file).FullPCMBuffer()
++	if err != nil {
++		return nil, err
++	}
++
++	raw := make([]byte, len(pcm.Data)*2)
++	for i, sample := range pcm.Data {
++		binary.LittleEndian.PutUint16(raw[2*i:], uint16(int16(sample)))
++	}
++	frames := make(chan []byte, 100)
++	decoder, err := util.CreateAudioDecoderWithSampleRate(ctx, io.NopCloser(bytes.NewReader(raw)), frames, frameDuration, "pcm", sampleRate)
++	if err != nil {
++		return nil, err
++	}
++	decoder.WithFormat(beep.Format{SampleRate: beep.SampleRate(pcm.Format.SampleRate), NumChannels: pcm.Format.NumChannels, Precision: 2})
++	go func() {
++		if err := decoder.Run(time.Now().UnixMilli()); err != nil && ctx.Err() == nil {
++			log.Warnf("本地普通话音频编码失败: %v", err)
++		}
++	}()
++	return frames, nil
++}
+diff --git a/internal/domain/tts/edge/mac_speech_test.go b/internal/domain/tts/edge/mac_speech_test.go
+new file mode 100644
+index 0000000..0bd6e51
+--- /dev/null
++++ b/internal/domain/tts/edge/mac_speech_test.go
+@@ -0,0 +1,50 @@
++package edge
++
++import (
++	"context"
++	"os/exec"
++	"runtime"
++	"strings"
++	"testing"
++	"time"
++
++	"gopkg.in/hraban/opus.v2"
++)
++
++func TestMacMandarinSpeechProducesDeviceFrames(t *testing.T) {
++	if runtime.GOOS != "darwin" {
++		t.Skip("requires macOS speech synthesis")
++	}
++	voices, err := exec.Command("/usr/bin/say", "-v", "?").Output()
++	if err != nil || !strings.Contains(string(voices), "Tingting") {
++		t.Skip("requires the Tingting voice")
++	}
++	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
++	defer cancel()
++	const rate = 24000
++	const frameSamples = rate * 60 / 1000
++	frames, err := macMandarinSpeech(ctx, "语音播报测试。", rate, 60)
++	if err != nil {
++		t.Fatal(err)
++	}
++	decoder, err := opus.NewDecoder(rate, 1)
++	if err != nil {
++		t.Fatal(err)
++	}
++	pcm := make([]int16, frameSamples)
++	count := 0
++	audible := false
++	for frame := range frames {
++		n, err := decoder.Decode(frame, pcm)
++		if err != nil || n != frameSamples {
++			t.Fatalf("invalid device frame: %d samples, %v", n, err)
++		}
++		for _, sample := range pcm[:n] {
++			audible = audible || sample > 300 || sample < -300
++		}
++		count++
++	}
++	if count == 0 || !audible {
++		t.Fatalf("expected audible Opus speech, generated %d frames", count)
++	}
++}

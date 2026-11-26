@@ -34,8 +34,8 @@ export interface RobotService {
   snapshot(): RobotSnapshot;
   submit(input: unknown): Promise<RobotSnapshot>;
   setXiaozhiToken(session: string, token: string): Promise<void>;
-  beginChat(petId: string): RobotChatContext | undefined;
-  prepareChat(petId: string): Promise<RobotChatContext | undefined>;
+  beginChat(petId: string, requireConfirmation?: boolean): RobotChatContext | undefined;
+  prepareChat(petId: string, requireConfirmation?: boolean): Promise<RobotChatContext | undefined>;
   completeChat(context: RobotChatContext, reply: { text: string; actionKey?: string }): void;
   dispose(): Promise<void>;
 }
@@ -530,7 +530,7 @@ export function createRobotService(options: {
     const proposal = pendingAction;
     if (
       !proposal ||
-      !config.directExecution ||
+      !chatContext?.directExecution ||
       !config.chatActions ||
       directDispatching ||
       speechDraining ||
@@ -562,7 +562,7 @@ export function createRobotService(options: {
   };
   return {
     snapshot,
-    beginChat(petId) {
+    beginChat(petId, requireConfirmation = false) {
       if (disposed || storageError || writingToken || !config.enabled || config.petId !== petId) return;
       cancelChat();
       armed = false;
@@ -573,12 +573,12 @@ export function createRobotService(options: {
         session,
         petId,
         actions: config.chatActions ? config.actions.map(({ key, name }) => ({ key, name })) : [],
-        directExecution: config.directExecution,
+        directExecution: config.directExecution && !requireConfirmation,
       };
       return structuredClone(chatContext);
     },
-    async prepareChat(petId) {
-      const context = this.beginChat(petId);
+    async prepareChat(petId, requireConfirmation) {
+      const context = this.beginChat(petId, requireConfirmation);
       if (!context) return;
       if (!snapshot().connected && !active && !stopping) await check();
       if (!currentChat(context)) return;
@@ -587,7 +587,7 @@ export function createRobotService(options: {
         const targets = new Set(connected ? catalog?.xiaozhiTools?.map(({ name }) => name) : []);
         chatActions = chatActions.filter(({ target }) => targets.has(target));
       }
-      if (config.chatActions && config.directExecution && connected && catalog?.tools?.includes('startTeachProgram')) {
+      if (config.chatActions && context.directExecution && connected && catalog?.tools?.includes('startTeachProgram')) {
         for (const program of catalog.programs) {
           if (chatActions.some((action) => action.tool === 'startTeachProgram' && action.target === program.id))
             continue;
@@ -624,6 +624,7 @@ export function createRobotService(options: {
           key: action.key,
           name: action.name,
           expiresAt: now() + 120_000,
+          ...(context.directExecution ? { directExecution: true } : {}),
         };
       void dispatchDirectAction();
     },

@@ -118,6 +118,7 @@ export default defineConfig([
       /^@anthropic-ai\/sdk$/,
       // Speech synthesis: import at runtime, but the application product does not have node_modules and must be inline (with its ws).
       /^@andresaya\/edge-tts$/,
+      /^ws$/,
       // 桌面归档不携带 node_modules，观测、机器人及记忆安装依赖必须内联。
       /^@opentelemetry\//,
       /^@modelcontextprotocol\/sdk(?:\/|$)/,

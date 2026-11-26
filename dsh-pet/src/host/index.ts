@@ -35,6 +35,8 @@ import { ensureEdgeProvider } from './voice/builtin-edge.ts';
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
 import { createVoiceService } from './voice/speak.ts';
 import { createHearService } from './voice/hear.ts';
+import { startXiaozhiVoiceBridge, xiaozhiVoiceConfigSchema } from './robot/xiaozhi-voice.ts';
+import { readPrivateJson } from '../standalone/ai-storage.ts';
 import { TODO_FILE_NAME, TodoStore } from './todo/store.ts';
 import { join } from 'node:path';
 import type { PetRouteDeps } from './routes/types.ts';
@@ -193,6 +195,27 @@ export function apply(ctx: any): void {
     }),
   };
   const httpRoute = createHttpRoute(deps);
+  try {
+    const saved = readPrivateJson(join(userRoot, 'xiaozhi-voice.json'));
+    if (saved !== undefined) {
+      const config = xiaozhiVoiceConfigSchema.parse(saved);
+      ctx.effect(() =>
+        startXiaozhiVoiceBridge({
+          config,
+          hear: (audio, signal) => deps.speech.hear({ audio: audio.toString('base64') }, signal),
+          chat: (text) => {
+            const { config } = robot.snapshot();
+            return config.enabled && config.xiaozhi
+              ? chatWithPet(config.petId, text, undefined, undefined, true)
+              : Promise.resolve({ ok: false });
+          },
+          report: (message) => log.warn(message),
+        }),
+      );
+    }
+  } catch {
+    log.warn('无法读取小智语音桥配置。');
+  }
   const connection = setup.optionalService('connection') as { requestRejection?: unknown } | undefined;
   const access =
     typeof connection?.requestRejection === 'function'

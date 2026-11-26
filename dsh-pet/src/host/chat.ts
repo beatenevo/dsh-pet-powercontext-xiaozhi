@@ -24,6 +24,7 @@ import { recalledContextText } from './memory-context.ts';
 import type { PetObservability } from './observability/service.ts';
 import {
   extractRobotAction,
+  formatXiaozhiActionReply,
   robotActionInstruction,
   type RobotChatAction,
   type RobotChatCapabilities,
@@ -284,7 +285,13 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
         source: { kind: 'user' },
       }),
     ],
-    system,
+    system:
+      once.robotCapabilities?.provider === 'xiaozhi'
+        ? system +
+          '\n\nYou are one character with two forms: the desktop pet and your physical XiaoZhi body. ' +
+          'Use first person for your own speech and movements, even if earlier chat messages used different wording. ' +
+          'Refer to XiaoZhi by name when discussing its technical setup.'
+        : system,
     // No explicit limit maxTokens: The same reason as whisper - the inference model counts thinking into the budget,
     // and the explicit small upper limit will truncate the text; if dsh-llm is not passed by the adapter
     // defaultMaxTokens fallback, the short reply output of the dialogue is still short.
@@ -323,9 +330,13 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
   const picked: { text: string; image?: string } = wantImage
     ? extractChatImage(acted.text, pool)
     : { text: acted.text };
+  const xiaozhiAction =
+    once.robotCapabilities?.provider === 'xiaozhi' && once.robotActions.find(({ key }) => key === robot.key);
   return {
     ok: true,
-    text: picked.text,
+    text: xiaozhiAction
+      ? formatXiaozhiActionReply(picked.text, xiaozhiAction.name, once.robotDirectExecution)
+      : picked.text,
     ...(picked.image ? { image: picked.image } : {}),
     ...(acted.action ? { action: acted.action } : {}),
     ...(robot.key ? { robotAction: robot.key } : {}),

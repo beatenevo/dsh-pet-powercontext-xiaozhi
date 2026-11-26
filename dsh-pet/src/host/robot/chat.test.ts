@@ -31,6 +31,13 @@ test('direct mode describes an attempted dispatch without claiming physical comp
   assert.doesNotMatch(prompt, /say it awaits on-site confirmation/);
 });
 
+test('XiaoZhi describes its own actions in both execution modes', () => {
+  const capabilities = { provider: 'xiaozhi' as const, connected: true, chatActions: true, mappings: [] };
+  assert.match(robotActionInstruction(actions, true, capabilities), /我这就举起双手/);
+  assert.match(robotActionInstruction(actions, false, capabilities), /等你确认，我就举起双手/);
+  assert.match(robotActionInstruction([], true, capabilities), /you cannot do that action here yet/);
+});
+
 test('empty action mappings still explain discovered MCP tools and distinguish pet animations', () => {
   const prompt = robotActionInstruction([], true, {
     connected: true,

@@ -284,7 +284,13 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
         source: { kind: 'user' },
       }),
     ],
-    system,
+    system:
+      once.robotCapabilities?.provider === 'xiaozhi'
+        ? system +
+          '\n\nYou are one character with two forms: the desktop pet and your physical XiaoZhi body. ' +
+          'Use first person for your own speech and movements, even if earlier chat messages used different wording. ' +
+          'Refer to XiaoZhi by name when discussing its technical setup.'
+        : system,
     // No explicit limit maxTokens: The same reason as whisper - the inference model counts thinking into the budget,
     // and the explicit small upper limit will truncate the text; if dsh-llm is not passed by the adapter
     // defaultMaxTokens fallback, the short reply output of the dialogue is still short.

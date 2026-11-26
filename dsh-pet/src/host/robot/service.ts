@@ -14,7 +14,7 @@ import type {
   RobotResult,
   RobotSnapshot,
 } from '../../shared/robot.ts';
-import type { RobotChatContext } from './chat.ts';
+import { isXiaozhiDanceCommand, type RobotChatContext } from './chat.ts';
 import { defaultRobotConfig, robotConfigSchema, robotRequestSchema, type RobotRequest } from './config.ts';
 import { readRobotJournal, writeRobotJournal, type RobotReceipt } from './journal.ts';
 import { runRobotWorker, type RobotRunner, type RobotCall } from './worker.ts';
@@ -35,7 +35,7 @@ export interface RobotService {
   submit(input: unknown): Promise<RobotSnapshot>;
   setXiaozhiToken(session: string, token: string): Promise<void>;
   beginChat(petId: string, requireConfirmation?: boolean): RobotChatContext | undefined;
-  prepareChat(petId: string, requireConfirmation?: boolean): Promise<RobotChatContext | undefined>;
+  prepareChat(petId: string, xiaozhiVoiceText?: string): Promise<RobotChatContext | undefined>;
   completeChat(context: RobotChatContext, reply: { text: string; actionKey?: string }): void;
   dispose(): Promise<void>;
 }
@@ -577,8 +577,16 @@ export function createRobotService(options: {
       };
       return structuredClone(chatContext);
     },
-    async prepareChat(petId, requireConfirmation) {
-      const context = this.beginChat(petId, requireConfirmation);
+    async prepareChat(petId, xiaozhiVoiceText) {
+      const voiceActions =
+        xiaozhiVoiceText !== undefined &&
+        config.xiaozhi &&
+        config.chatActions &&
+        isXiaozhiDanceCommand(xiaozhiVoiceText)
+          ? config.actions.filter(({ name, tool }) => name.trim() === '跳舞' && tool === 'xiaozhiMcp')
+          : [];
+      const voiceDance = voiceActions.length === 1 ? voiceActions[0] : undefined;
+      const context = this.beginChat(petId, xiaozhiVoiceText !== undefined && !voiceDance);
       if (!context) return;
       if (!snapshot().connected && !active && !stopping) await check();
       if (!currentChat(context)) return;
@@ -587,7 +595,15 @@ export function createRobotService(options: {
         const targets = new Set(connected ? catalog?.xiaozhiTools?.map(({ name }) => name) : []);
         chatActions = chatActions.filter(({ target }) => targets.has(target));
       }
-      if (config.chatActions && context.directExecution && connected && catalog?.tools?.includes('startTeachProgram')) {
+      if (voiceDance && context.directExecution) {
+        chatActions = chatActions.filter(({ key }) => key === voiceDance.key);
+        if (chatActions.length) context.directVoiceAction = { key: voiceDance.key, name: voiceDance.name };
+      } else if (
+        config.chatActions &&
+        context.directExecution &&
+        connected &&
+        catalog?.tools?.includes('startTeachProgram')
+      ) {
         for (const program of catalog.programs) {
           if (chatActions.some((action) => action.tool === 'startTeachProgram' && action.target === program.id))
             continue;

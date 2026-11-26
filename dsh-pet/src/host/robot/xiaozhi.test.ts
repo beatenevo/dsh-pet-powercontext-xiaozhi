@@ -137,6 +137,44 @@ test('XiaoZhi sends the pet utterance verbatim and waits for confirmation before
   assert.equal(JSON.stringify(service.snapshot()).includes('test-token'), false);
 });
 
+test('XiaoZhi dispatches an explicit voice dance once through the configured mapping', async (t) => {
+  const requests = await mockManager(t);
+  const root = mkdtempSync(join(tmpdir(), 'xiaozhi-dance-'));
+  const service = createRobotService({ userRoot: root, state: new PollStateStore() });
+  t.after(async () => {
+    await service.dispose();
+    rmSync(root, { force: true, recursive: true });
+  });
+  const dance = { ...config.actions[0], key: 'dance', name: '跳舞' };
+  const direct = { ...config, directExecution: true, actions: [...config.actions, dance] };
+  await service.submit({ action: 'configure', config: direct });
+
+  const voice = await service.prepareChat('main', '小智，给我跳支舞吧。');
+  assert.ok(voice);
+  assert.equal(voice.directExecution, true);
+  assert.deepEqual(voice.actions, [{ key: 'dance', name: '跳舞' }]);
+  assert.deepEqual(voice.directVoiceAction, voice.actions[0]);
+  const reply = { text: '好，我这就跳舞。', actionKey: dance.key };
+  service.completeChat(voice, reply);
+  service.completeChat(voice, reply);
+  await waitFor(() => service.snapshot().commands.some(({ state }) => state === 'reported-success'));
+  assert.equal(service.snapshot().pendingAction, undefined);
+
+  for (const text of ['举起手。', '你会跳舞吗？', '先别跳舞。', '说一遍「跳舞」。']) {
+    const chat = await service.prepareChat('main', text);
+    assert.ok(chat);
+    assert.equal(chat.directExecution, false);
+    assert.equal(chat.directVoiceAction, undefined);
+    service.completeChat(chat, reply);
+    assert.equal(service.snapshot().pendingAction?.directExecution, undefined);
+  }
+
+  await service.submit({ action: 'configure', config: { ...direct, directExecution: false } });
+  const manual = await service.prepareChat('main', '跳舞。');
+  assert.equal(manual?.directVoiceAction, undefined);
+  assert.equal(requests.filter(({ path }) => path.endsWith('/mcp-call')).length, 1);
+});
+
 test('XiaoZhi rejects invalid arguments before dispatch and keeps a device tool error uncertain', async (t) => {
   const requests = await mockManager(t, { isError: true });
   const call = { operation: 'execute', tool: 'xiaozhiMcp', target: toolName } as const;

@@ -20,7 +20,19 @@ export interface RobotChatContext {
   petId: string;
   actions: RobotChatAction[];
   directExecution: boolean;
+  /** 本轮语音明确授权的跳舞动作。 */
+  directVoiceAction?: RobotChatAction;
   capabilities?: RobotChatCapabilities;
+}
+
+/** 判断真机的原始转写是否是一条单独的跳舞指令。 */
+export function isXiaozhiDanceCommand(text: string): boolean {
+  const command = text
+    .normalize('NFKC')
+    .trim()
+    .replace(/^(?:你好[,、\s]*)?(?:小智|大肥鱼)[,、:\s]*/u, '')
+    .replace(/[。.!\s]+$/u, '');
+  return /^(?:请)?(?:你)?(?:给我|帮我|为我)?(?:来)?跳(?:一?[支个段]|一下)?舞(?:给我看|吧|一下)?$/u.test(command);
 }
 
 /** Keep physical proposals independent from desktop animation tags. */

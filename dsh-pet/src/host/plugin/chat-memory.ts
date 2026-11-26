@@ -556,7 +556,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     text: string,
     image?: PetImageRef,
     sessionId?: string,
-    fromXiaozhiVoice = false,
+    xiaozhiVoice?: { speakerPrompt?: string },
   ): Promise<
     | { ok: true; text: string; image?: string }
     | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
@@ -565,7 +565,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       'chat',
       async () => {
         deps.observability?.content('user', text);
-        const robotChat = await deps.robot?.prepareChat(petId, fromXiaozhiVoice);
+        const robotChat = await deps.robot?.prepareChat(petId, !!xiaozhiVoice);
         // Query optional weather outside the journal lock so it does not block other conversations.
         const env = await environmentForPrompt();
         return withMemoryLock(async () => {
@@ -690,7 +690,9 @@ export function createChatMemory(deps: ChatMemoryInput) {
           const generated = await generateChat({
             observability: deps.observability,
             ctx,
-            system: patch?.system ?? system,
+            system: xiaozhiVoice?.speakerPrompt
+              ? `${patch?.system ?? system}\n\n[本轮小智声纹识别]\n${xiaozhiVoice.speakerPrompt}`
+              : (patch?.system ?? system),
             history: patch?.history ?? list,
             recalledContext,
             userText: patch?.userText ?? text,
@@ -761,7 +763,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
               ...(generated.image ? { image: generated.image } : {}),
               // Explicitly turn off the whisper animation when taking action: the bubble is played, but the action of the just playback request is not blocked.
               ...(generated.action !== undefined ? { anim: false } : {}),
-              ...(fromXiaozhiVoice ? { source: 'robot-input' } : replyVoiceTo ? { voiceTo: replyVoiceTo } : {}),
+              ...(xiaozhiVoice ? { source: 'robot-input' } : replyVoiceTo ? { voiceTo: replyVoiceTo } : {}),
             });
           }
           // The same text is brought out with the return value (the leaves are written as written, not one of the two)
